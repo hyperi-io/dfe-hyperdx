@@ -32,3 +32,13 @@ When updating this repository:
 2. **Merge changes**: Pull and merge changes from the fork into this repository
 3. **Test dashboards**: Verify that pinned dashboards work correctly with the
    updated version
+
+### Running the app for development
+
+```sh
+# From root
+yarn # only necessary the first time or if there have been an update to the dependencies
+yarn dev
+```
+
+Frontend will be available on http://localhost:8080/
