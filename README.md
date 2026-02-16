@@ -41,4 +41,5 @@ yarn # only necessary the first time or if there have been an update to the depe
 yarn dev
 ```
 
-Frontend will be available on http://localhost:8080/
+- Frontend will be available on http://localhost:8080/
+- External API docs will be available on http://localhost:8000/api/v2/docs/
