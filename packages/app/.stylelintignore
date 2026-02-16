@@ -1,0 +1,6 @@
+.next
+.storybook
+node_modules
+coverage
+playwright-report
+styles/app.scss

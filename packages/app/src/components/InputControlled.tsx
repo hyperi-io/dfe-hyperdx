@@ -1,0 +1,155 @@
+import React from 'react';
+import { Control, Controller, FieldValues, Path } from 'react-hook-form';
+import {
+  Checkbox,
+  CheckboxProps,
+  Input,
+  InputProps,
+  PasswordInput,
+  PasswordInputProps,
+  Switch,
+  SwitchProps,
+  TextInput,
+  TextInputProps,
+} from '@mantine/core';
+
+interface InputControlledProps<T extends FieldValues>
+  extends Omit<InputProps, 'name' | 'style'>,
+    Omit<React.InputHTMLAttributes<HTMLInputElement>, 'name' | 'size'> {
+  name: Path<T>;
+  control: Control<T>;
+  rules?: Parameters<Control<T>['register']>[1];
+}
+
+interface PasswordInputControlledProps<T extends FieldValues>
+  extends Omit<PasswordInputProps, 'name' | 'style'>,
+    Omit<React.InputHTMLAttributes<HTMLInputElement>, 'name' | 'size'> {
+  name: Path<T>;
+  control: Control<T>;
+  rules?: Parameters<Control<T>['register']>[1];
+}
+
+interface TextInputControlledProps<T extends FieldValues>
+  extends Omit<TextInputProps, 'name' | 'style'>,
+    Omit<React.InputHTMLAttributes<HTMLInputElement>, 'name' | 'size'> {
+  name: Path<T>;
+  control: Control<T>;
+  rules?: Parameters<Control<T>['register']>[1];
+}
+
+interface CheckboxControlledProps<T extends FieldValues>
+  extends Omit<CheckboxProps, 'name' | 'style'>,
+    Omit<
+      React.InputHTMLAttributes<HTMLInputElement>,
+      'name' | 'size' | 'color'
+    > {
+  name: Path<T>;
+  control: Control<T>;
+  rules?: Parameters<Control<T>['register']>[1];
+}
+
+interface SwitchControlledProps<T extends FieldValues>
+  extends Omit<SwitchProps, 'name' | 'style'>,
+    Omit<
+      React.InputHTMLAttributes<HTMLInputElement>,
+      'name' | 'size' | 'color'
+    > {
+  name: Path<T>;
+  control: Control<T>;
+  rules?: Parameters<Control<T>['register']>[1];
+}
+
+export function TextInputControlled<T extends FieldValues>({
+  name,
+  control,
+  rules,
+  ...props
+}: TextInputControlledProps<T>) {
+  return (
+    <Controller
+      name={name}
+      control={control}
+      rules={rules}
+      render={({ field, fieldState: { error } }) => (
+        <TextInput {...props} {...field} error={error?.message} />
+      )}
+    />
+  );
+}
+
+export function InputControlled<T extends FieldValues>({
+  name,
+  control,
+  rules,
+  ...props
+}: InputControlledProps<T>) {
+  return (
+    <Controller
+      name={name}
+      control={control}
+      rules={rules}
+      render={({ field, fieldState: { error } }) => (
+        <Input {...props} {...field} error={error?.message} />
+      )}
+    />
+  );
+}
+
+export function PasswordInputControlled<T extends FieldValues>({
+  name,
+  control,
+  rules,
+  ...props
+}: PasswordInputControlledProps<T>) {
+  return (
+    <Controller
+      name={name}
+      control={control}
+      rules={rules}
+      render={({ field, fieldState: { error } }) => (
+        <PasswordInput {...props} {...field} error={error?.message} />
+      )}
+    />
+  );
+}
+
+export function CheckBoxControlled<T extends FieldValues>({
+  name,
+  control,
+  rules,
+  ...props
+}: CheckboxControlledProps<T>) {
+  return (
+    <Controller
+      name={name}
+      control={control}
+      rules={rules}
+      render={({ field: { value, ...field }, fieldState: { error } }) => (
+        <Checkbox
+          {...props}
+          {...field}
+          checked={value}
+          error={error?.message}
+        />
+      )}
+    />
+  );
+}
+
+export function SwitchControlled<T extends FieldValues>({
+  name,
+  control,
+  rules,
+  ...props
+}: SwitchControlledProps<T>) {
+  return (
+    <Controller
+      name={name}
+      control={control}
+      rules={rules}
+      render={({ field: { value, ...field }, fieldState: { error } }) => (
+        <Switch {...props} {...field} checked={value} error={error?.message} />
+      )}
+    />
+  );
+}

@@ -1,0 +1,929 @@
+// Port from ChartUtils + source.ts
+import { add as fnsAdd, format as fnsFormat } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
+import { z } from 'zod';
+
+export { default as objectHash } from 'object-hash';
+
+import {
+  ChartConfigWithDateRange,
+  ChartConfigWithOptTimestamp,
+  DashboardFilter,
+  DashboardFilterSchema,
+  DashboardSchema,
+  DashboardTemplateSchema,
+  DashboardWithoutId,
+  QuerySettings,
+  SQLInterval,
+  TileTemplateSchema,
+  TSourceUnion,
+} from '@/types';
+
+import { SkipIndexMetadata } from './metadata';
+
+/** The default maximum number of buckets setting when determining a bucket duration for 'auto' granularity */
+export const DEFAULT_AUTO_GRANULARITY_MAX_BUCKETS = 60;
+
+export const isBrowser: boolean =
+  typeof window !== 'undefined' && typeof window.document !== 'undefined';
+
+export const isNode: boolean =
+  typeof process !== 'undefined' &&
+  process.versions != null &&
+  process.versions.node != null;
+
+export function splitAndTrimCSV(input: string): string[] {
+  return input
+    .split(',')
+    .map(column => column.trim())
+    .filter(column => column.length > 0);
+}
+
+// Replace splitAndTrimCSV, should remove splitAndTrimCSV later
+export function splitAndTrimWithBracket(input: string): string[] {
+  let parenCount: number = 0;
+  let squareCount: number = 0;
+  let inSingleQuote: boolean = false;
+  let inDoubleQuote: boolean = false;
+
+  const res: string[] = [];
+  let cur: string = '';
+  for (const c of input + ',') {
+    if (c === '"' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote;
+      cur += c;
+      continue;
+    }
+
+    if (c === "'" && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote;
+      cur += c;
+      continue;
+    }
+    // Only count brackets when not in quotes
+    if (!inSingleQuote && !inDoubleQuote) {
+      if (c === '(') {
+        parenCount++;
+      } else if (c === ')') {
+        parenCount--;
+      } else if (c === '[') {
+        squareCount++;
+      } else if (c === ']') {
+        squareCount--;
+      }
+    }
+
+    if (
+      c === ',' &&
+      parenCount === 0 &&
+      squareCount === 0 &&
+      !inSingleQuote &&
+      !inDoubleQuote
+    ) {
+      const trimString = cur.trim();
+      if (trimString) res.push(trimString);
+      cur = '';
+    } else {
+      cur += c;
+    }
+  }
+  return res;
+}
+
+// If a user specifies a timestampValueExpression with multiple columns,
+// this will return the first one. We'll want to refine this over time
+export function getFirstTimestampValueExpression(valueExpression: string) {
+  return splitAndTrimWithBracket(valueExpression)[0];
+}
+
+/** Returns true if the given expression is a JSON expression, eg. `col.key.nestedKey` or "json_col"."key" */
+export const isJsonExpression = (expr: string) => {
+  if (!expr.includes('.')) return false;
+
+  let isInDoubleQuote = false;
+  let isInBacktick = false;
+  let isInSingleQuote = false;
+
+  const parts: string[] = [];
+  let current = '';
+  for (const c of expr) {
+    if (c === "'" && !isInDoubleQuote && !isInBacktick) {
+      isInSingleQuote = !isInSingleQuote;
+    } else if (isInSingleQuote) {
+      continue;
+    } else if (c === '"' && !isInBacktick) {
+      isInDoubleQuote = !isInDoubleQuote;
+      current += c;
+    } else if (c === '`' && !isInDoubleQuote) {
+      isInBacktick = !isInBacktick;
+      current += c;
+    } else if (c === '.' && !isInDoubleQuote && !isInBacktick) {
+      parts.push(current);
+      current = '';
+    } else {
+      current += c;
+    }
+  }
+
+  if (!isInDoubleQuote && !isInBacktick) {
+    parts.push(current);
+  }
+
+  if (parts.some(p => p.trim().length === 0)) return false;
+
+  return (
+    parts.filter(
+      p =>
+        p.trim().length > 0 &&
+        isNaN(Number(p)) &&
+        !(p.startsWith("'") && p.endsWith("'")),
+    ).length > 1
+  );
+};
+
+/**
+ * Finds and returns expressions within the given SQL string that represent JSON references (eg. `col.key.nestedKey`)
+ *
+ * Note - This function does not distinguish between json references and `table.column` references - both are returned.
+ */
+export function findJsonExpressions(sql: string) {
+  const expressions: { index: number; expr: string }[] = [];
+
+  let isInDoubleQuote = false;
+  let isInBacktick = false;
+
+  let currentExpr = '';
+  const finishExpression = (expr: string, endIndex: number) => {
+    if (isJsonExpression(expr)) {
+      expressions.push({ index: endIndex - expr.length, expr });
+    }
+    currentExpr = '';
+  };
+
+  let i = 0;
+  let isInJsonTypeSpecifier = false;
+  while (i < sql.length) {
+    const c = sql.charAt(i);
+    if (c === "'" && !isInDoubleQuote && !isInBacktick) {
+      // Skip string literals
+      while (i < sql.length && sql.charAt(i) !== c) {
+        i++;
+      }
+      currentExpr = '';
+    } else if (c === '"' && !isInBacktick) {
+      isInDoubleQuote = !isInDoubleQuote;
+      currentExpr += c;
+    } else if (c === '`' && !isInDoubleQuote) {
+      isInBacktick = !isInBacktick;
+      currentExpr += c;
+    } else if (/[\s{},+*/[\]]/.test(c)) {
+      isInJsonTypeSpecifier = false;
+      finishExpression(currentExpr, i);
+    } else if ('()'.includes(c) && !isInJsonTypeSpecifier) {
+      finishExpression(currentExpr, i);
+    } else if (c === ':') {
+      isInJsonTypeSpecifier = true;
+      currentExpr += c;
+    } else {
+      currentExpr += c;
+    }
+
+    i++;
+  }
+
+  finishExpression(currentExpr, i);
+  return expressions;
+}
+
+/**
+ * Replaces expressions within the given SQL string that represent JSON expressions (eg. `col.key.nestedKey`).
+ * Such expression are replaced with placeholders like `__hdx_json_replacement_0`. The resulting string and a
+ * map of replacements --> original expressions is returned.
+ *
+ * Note - This function does not distinguish between json references and `table.column` references - both are replaced.
+ */
+export function replaceJsonExpressions(sql: string) {
+  const jsonExpressions = findJsonExpressions(sql);
+
+  const replacements = new Map<string, string>();
+  let sqlWithReplacements = sql;
+  let indexOffsetFromInserts = 0;
+  let replacementCounter = 0;
+  for (const { expr, index } of jsonExpressions) {
+    const replacement = `__hdx_json_replacement_${replacementCounter++}`;
+    replacements.set(replacement, expr);
+
+    const effectiveIndex = index + indexOffsetFromInserts;
+    sqlWithReplacements =
+      sqlWithReplacements.slice(0, effectiveIndex) +
+      replacement +
+      sqlWithReplacements.slice(effectiveIndex + expr.length);
+    indexOffsetFromInserts += replacement.length - expr.length;
+  }
+
+  return { sqlWithReplacements, replacements };
+}
+
+/**
+ * To best support Pre-aggregation in Materialized Views, any new
+ * granularities should be multiples of all smaller granularities.
+ * */
+export enum Granularity {
+  FifteenSecond = '15 second',
+  ThirtySecond = '30 second',
+  OneMinute = '1 minute',
+  FiveMinute = '5 minute',
+  TenMinute = '10 minute',
+  FifteenMinute = '15 minute',
+  ThirtyMinute = '30 minute',
+  OneHour = '1 hour',
+  TwoHour = '2 hour',
+  SixHour = '6 hour',
+  TwelveHour = '12 hour',
+  OneDay = '1 day',
+  TwoDay = '2 day',
+  SevenDay = '7 day',
+  ThirtyDay = '30 day',
+}
+
+export function hashCode(str: string) {
+  let hash = 0,
+    i,
+    chr;
+  if (str.length === 0) return hash;
+  for (i = 0; i < str.length; i++) {
+    chr = str.charCodeAt(i);
+    hash = (hash << 5) - hash + chr;
+    hash |= 0; // Convert to 32bit integer
+  }
+  return hash;
+}
+
+export function convertDateRangeToGranularityString(
+  dateRange: [Date, Date],
+  maxNumBuckets: number = DEFAULT_AUTO_GRANULARITY_MAX_BUCKETS,
+): Granularity {
+  const start = dateRange[0].getTime();
+  const end = dateRange[1].getTime();
+  const diffSeconds = Math.floor((end - start) / 1000);
+  const granularitySizeSeconds = Math.ceil(diffSeconds / maxNumBuckets);
+
+  if (granularitySizeSeconds <= 15) {
+    return Granularity.FifteenSecond;
+  } else if (granularitySizeSeconds <= 30) {
+    return Granularity.ThirtySecond;
+  } else if (granularitySizeSeconds <= 60) {
+    return Granularity.OneMinute;
+  } else if (granularitySizeSeconds <= 5 * 60) {
+    return Granularity.FiveMinute;
+  } else if (granularitySizeSeconds <= 15 * 60) {
+    // 10 minute granularity is skipped so that every auto-inferred granularity is a multiple
+    // of all smaller granularities, which makes it more likely that a materialized view can be used.
+    return Granularity.FifteenMinute;
+  } else if (granularitySizeSeconds <= 30 * 60) {
+    return Granularity.ThirtyMinute;
+  } else if (granularitySizeSeconds <= 3600) {
+    return Granularity.OneHour;
+  } else if (granularitySizeSeconds <= 2 * 3600) {
+    return Granularity.TwoHour;
+  } else if (granularitySizeSeconds <= 6 * 3600) {
+    return Granularity.SixHour;
+  } else if (granularitySizeSeconds <= 12 * 3600) {
+    return Granularity.TwelveHour;
+  } else if (granularitySizeSeconds <= 24 * 3600) {
+    return Granularity.OneDay;
+  } else if (granularitySizeSeconds <= 2 * 24 * 3600) {
+    return Granularity.TwoDay;
+  } else if (granularitySizeSeconds <= 7 * 24 * 3600) {
+    return Granularity.SevenDay;
+  } else if (granularitySizeSeconds <= 30 * 24 * 3600) {
+    return Granularity.ThirtyDay;
+  }
+
+  return Granularity.ThirtyDay;
+}
+
+export function convertGranularityToSeconds(granularity: SQLInterval): number {
+  const [num, unit] = granularity.split(' ');
+  const numInt = Number.parseInt(num);
+  switch (unit) {
+    case 'second':
+      return numInt;
+    case 'minute':
+      return numInt * 60;
+    case 'hour':
+      return numInt * 60 * 60;
+    case 'day':
+      return numInt * 60 * 60 * 24;
+    default:
+      return 0;
+  }
+}
+// Note: roundToNearestMinutes is broken in date-fns currently
+// additionally it doesn't support seconds or > 30min
+// so we need to write our own :(
+// see: https://github.com/date-fns/date-fns/pull/3267/files
+export function toStartOfInterval(date: Date, granularity: SQLInterval): Date {
+  const [num, unit] = granularity.split(' ');
+  const numInt = Number.parseInt(num);
+  const roundFn = Math.floor;
+
+  switch (unit) {
+    case 'second':
+      return new Date(
+        Date.UTC(
+          date.getUTCFullYear(),
+          date.getUTCMonth(),
+          date.getUTCDate(),
+          date.getUTCHours(),
+          date.getUTCMinutes(),
+          roundFn(date.getUTCSeconds() / numInt) * numInt,
+        ),
+      );
+    case 'minute':
+      return new Date(
+        Date.UTC(
+          date.getUTCFullYear(),
+          date.getUTCMonth(),
+          date.getUTCDate(),
+          date.getUTCHours(),
+          roundFn(date.getUTCMinutes() / numInt) * numInt,
+        ),
+      );
+    case 'hour':
+      return new Date(
+        Date.UTC(
+          date.getUTCFullYear(),
+          date.getUTCMonth(),
+          date.getUTCDate(),
+          roundFn(date.getUTCHours() / numInt) * numInt,
+        ),
+      );
+    case 'day': {
+      // Clickhouse uses the # of days since unix epoch to round dates
+      // see: https://github.com/ClickHouse/ClickHouse/blob/master/src/Common/DateLUTImpl.h#L1059
+      const daysSinceEpoch = date.getTime() / 1000 / 60 / 60 / 24;
+      const daysSinceEpochRounded = roundFn(daysSinceEpoch / numInt) * numInt;
+
+      return new Date(daysSinceEpochRounded * 1000 * 60 * 60 * 24);
+    }
+    default:
+      return date;
+  }
+}
+
+export function timeBucketByGranularity(
+  start: Date,
+  end: Date,
+  granularity: SQLInterval,
+): Date[] {
+  const buckets: Date[] = [];
+
+  let current = toStartOfInterval(start, granularity);
+  const granularitySeconds = convertGranularityToSeconds(granularity);
+  while (current < end) {
+    buckets.push(current);
+    current = fnsAdd(current, {
+      seconds: granularitySeconds,
+    });
+  }
+
+  return buckets;
+}
+
+export const _useTry = <T>(fn: () => T): [null | Error | unknown, null | T] => {
+  let output: T | null = null;
+  let error: any = null;
+  try {
+    output = fn();
+    return [error, output];
+  } catch (e) {
+    error = e;
+    return [error, output];
+  }
+};
+
+export const parseJSON = <T = any>(json: string) => {
+  const [error, result] = _useTry<T>(() => JSON.parse(json));
+  return result;
+};
+
+// Date formatting
+const TIME_TOKENS = {
+  normal: {
+    '12h': 'MMM d h:mm:ss a',
+    '24h': 'MMM d HH:mm:ss',
+  },
+  short: {
+    '12h': 'MMM d h:mma',
+    '24h': 'MMM d HH:mm',
+  },
+  withMs: {
+    '12h': 'MMM d h:mm:ss.SSS a',
+    '24h': 'MMM d HH:mm:ss.SSS',
+  },
+  withYear: {
+    '12h': 'MMM d yyyy h:mm:ss a',
+    '24h': 'MMM d yyyy HH:mm:ss',
+  },
+  time: {
+    '12h': 'h:mm:ss a',
+    '24h': 'HH:mm:ss',
+  },
+};
+
+export const formatDate = (
+  date: Date,
+  {
+    isUTC = false,
+    format = 'normal',
+    clock = '12h',
+  }: {
+    isUTC?: boolean;
+    format?: 'normal' | 'short' | 'withMs' | 'time' | 'withYear';
+    clock?: '12h' | '24h';
+  },
+) => {
+  const formatStr = TIME_TOKENS[format][clock];
+
+  return isUTC
+    ? formatInTimeZone(date, 'Etc/UTC', formatStr)
+    : fnsFormat(date, formatStr);
+};
+
+type Dashboard = z.infer<typeof DashboardSchema>;
+type DashboardTemplate = z.infer<typeof DashboardTemplateSchema>;
+type TileTemplate = z.infer<typeof TileTemplateSchema>;
+
+export function convertToDashboardTemplate(
+  input: Dashboard,
+  sources: TSourceUnion[],
+): DashboardTemplate {
+  const output: DashboardTemplate = {
+    version: '0.1.0',
+    name: input.name,
+    tiles: [],
+  };
+
+  const convertToTileTemplate = (
+    input: Dashboard['tiles'][0],
+    sources: TSourceUnion[],
+  ): TileTemplate => {
+    const tile = TileTemplateSchema.strip().parse(structuredClone(input));
+    // Extract name from source or default to '' if not found
+    tile.config.source = (
+      sources.find(source => source.id === tile.config.source) ?? { name: '' }
+    ).name;
+    return tile;
+  };
+
+  const convertToFilterTemplate = (
+    input: DashboardFilter,
+    sources: TSourceUnion[],
+  ): DashboardFilter => {
+    const filter = DashboardFilterSchema.strip().parse(structuredClone(input));
+    // Extract name from source or default to '' if not found
+    filter.source =
+      sources.find(source => source.id === input.source)?.name ?? '';
+    return filter;
+  };
+
+  for (const tile of input.tiles) {
+    output.tiles.push(convertToTileTemplate(tile, sources));
+  }
+
+  if (input.filters) {
+    output.filters = [];
+    for (const filter of input.filters ?? []) {
+      output.filters.push(convertToFilterTemplate(filter, sources));
+    }
+  }
+
+  return output;
+}
+
+export function convertToDashboardDocument(
+  input: DashboardTemplate,
+): DashboardWithoutId {
+  const output: DashboardWithoutId = {
+    name: input.name,
+    tiles: [],
+    tags: [],
+  };
+
+  // expecting that input.tiles[0-n].config.source fields are already converted to ids
+  const convertToTileDocument = (
+    input: TileTemplate,
+  ): DashboardWithoutId['tiles'][0] => {
+    return structuredClone(input);
+  };
+
+  // expecting that input.filters[0-n].source fields are already converted to ids
+  const convertToFilterDocument = (input: DashboardFilter): DashboardFilter => {
+    return structuredClone(input);
+  };
+
+  for (const tile of input.tiles) {
+    output.tiles.push(convertToTileDocument(tile));
+  }
+
+  if (input.filters) {
+    output.filters = [];
+    for (const filter of input.filters) {
+      output.filters.push(convertToFilterDocument(filter));
+    }
+  }
+
+  return output;
+}
+
+export const getFirstOrderingItem = (
+  orderBy: ChartConfigWithDateRange['orderBy'],
+) => {
+  if (!orderBy || orderBy.length === 0) return undefined;
+
+  return typeof orderBy === 'string'
+    ? splitAndTrimWithBracket(orderBy)[0]
+    : orderBy[0];
+};
+
+export const removeTrailingDirection = (s: string) => {
+  const upper = s.trim().toUpperCase();
+  if (upper.endsWith('DESC')) {
+    return s.slice(0, upper.lastIndexOf('DESC')).trim();
+  } else if (upper.endsWith('ASC')) {
+    return s.slice(0, upper.lastIndexOf('ASC')).trim();
+  }
+
+  return s;
+};
+
+export const isTimestampExpressionInFirstOrderBy = (
+  config: ChartConfigWithOptTimestamp,
+) => {
+  const firstOrderingItem = getFirstOrderingItem(config.orderBy);
+  if (!firstOrderingItem || config.timestampValueExpression == null)
+    return false;
+
+  const firstOrderingExpression =
+    typeof firstOrderingItem === 'string'
+      ? removeTrailingDirection(firstOrderingItem)
+      : firstOrderingItem.valueExpression;
+
+  const timestampValueExpressions = splitAndTrimWithBracket(
+    config.timestampValueExpression,
+  );
+
+  return timestampValueExpressions.some(tve =>
+    firstOrderingExpression.includes(tve),
+  );
+};
+
+export const isFirstOrderByAscending = (
+  orderBy: ChartConfigWithDateRange['orderBy'],
+): boolean => {
+  const primaryOrderingItem = getFirstOrderingItem(orderBy);
+
+  if (!primaryOrderingItem) return false;
+
+  const isDescending =
+    typeof primaryOrderingItem === 'string'
+      ? primaryOrderingItem.trim().toUpperCase().endsWith('DESC')
+      : primaryOrderingItem.ordering === 'DESC';
+
+  return !isDescending;
+};
+
+/**
+ * Parses a single expression of the form
+ * `toStartOf<Interval>(column[, timezone])` or `toStartOfInterval(column[, interval[, origin[, timezone]]])`.
+ * Returns undefined if the expression is not of this form.
+ */
+export function parseToStartOfFunction(
+  expr: string,
+):
+  | { function: string; columnArgument: string; formattedRemainingArgs: string }
+  | undefined {
+  const parts = splitAndTrimWithBracket(expr);
+  if (parts.length !== 1) return undefined;
+
+  const toStartOfMatches = expr.match(/(toStartOf\w+)\s*\(/);
+
+  if (toStartOfMatches) {
+    const [toStartOfSubstring, toStartOfFunction] = toStartOfMatches;
+
+    const argsStartIndex =
+      expr.indexOf(toStartOfSubstring) + toStartOfSubstring.length;
+    const argsEndIndex = expr.lastIndexOf(')');
+    const args = splitAndTrimWithBracket(
+      expr.substring(argsStartIndex, argsEndIndex),
+    );
+
+    const columnArgument = args[0];
+    if (columnArgument == null) {
+      console.error(`Failed to parse column argument from ${expr}`);
+      return undefined;
+    }
+
+    const formattedRemainingArgs =
+      args.length > 1 ? `, ${args.slice(1).join(', ')}` : '';
+
+    return {
+      function: toStartOfFunction.trim(),
+      columnArgument,
+      formattedRemainingArgs,
+    };
+  }
+}
+
+/**
+ * Returns an optimized timestamp value expression for a table based on its timestampValueExpression and primary key.
+ *
+ * When a table has a sort key like `toStartOfMinute(timestamp), ..., timestamp`, it is more performant
+ * to filter by toStartOfMinute(timestamp) and timestamp, instead of just timestamp.
+ */
+export function optimizeTimestampValueExpression(
+  timestampValueExpression: string,
+  primaryKey: string | undefined,
+) {
+  if (!primaryKey || !timestampValueExpression) return timestampValueExpression;
+
+  const timestampValueExprs = [timestampValueExpression];
+  const primaryKeyExprs = splitAndTrimWithBracket(primaryKey);
+  for (const primaryKeyExpr of primaryKeyExprs) {
+    const toStartOf = parseToStartOfFunction(primaryKeyExpr);
+
+    if (
+      primaryKeyExpr === timestampValueExpression.trim() ||
+      (primaryKeyExpr.startsWith('toUnixTimestamp') &&
+        primaryKeyExpr.includes(timestampValueExpression)) ||
+      (primaryKeyExpr.startsWith('toDateTime') &&
+        primaryKeyExpr.includes(timestampValueExpression))
+    ) {
+      // We only want to add expressions that come before the timestampExpr in the primary key
+      break;
+    } else if (
+      toStartOf &&
+      toStartOf.columnArgument === timestampValueExpression.trim()
+    ) {
+      timestampValueExprs.push(primaryKeyExpr);
+    }
+  }
+
+  return timestampValueExprs.join(', ');
+}
+
+export function getAlignedDateRange(
+  [originalStart, originalEnd]: [Date, Date],
+  granularity: SQLInterval,
+): [Date, Date] {
+  // Round the start time down to the previous interval boundary
+  const alignedStart = toStartOfInterval(originalStart, granularity);
+
+  // Round the end time up to the next interval boundary
+  let alignedEnd = toStartOfInterval(originalEnd, granularity);
+  if (alignedEnd.getTime() < originalEnd.getTime()) {
+    const intervalSeconds = convertGranularityToSeconds(granularity);
+    alignedEnd = fnsAdd(alignedEnd, { seconds: intervalSeconds });
+  }
+
+  return [alignedStart, alignedEnd];
+}
+
+export function isDateRangeEqual(range1: [Date, Date], range2: [Date, Date]) {
+  return (
+    range1[0].getTime() === range2[0].getTime() &&
+    range1[1].getTime() === range2[1].getTime()
+  );
+}
+
+/*
+  This function extracts the SETTINGS clause from the end(!) of the sql string.
+*/
+export function extractSettingsClauseFromEnd(
+  sqlInput: string,
+): [string, string | undefined] {
+  const sql = sqlInput.trim().endsWith(';')
+    ? sqlInput.trim().slice(0, -1)
+    : sqlInput.trim();
+
+  const settingsIndex = sql.toUpperCase().indexOf('SETTINGS');
+
+  if (settingsIndex === -1) {
+    return [sql, undefined] as const;
+  }
+
+  const settingsClause = sql.substring(settingsIndex).trim();
+  const remaining = sql.substring(0, settingsIndex).trim();
+
+  return [remaining, settingsClause] as const;
+}
+
+export function parseToNumber(input: string): number | undefined {
+  const trimmed = input.trim();
+
+  if (trimmed === '') {
+    return undefined;
+  }
+
+  const num = Number(trimmed);
+
+  return Number.isFinite(num) ? num : undefined;
+}
+
+export function joinQuerySettings(
+  querySettings: QuerySettings | undefined,
+): string | undefined {
+  if (!querySettings?.length) {
+    return undefined;
+  }
+
+  const emptyFiltered = querySettings.filter(
+    ({ setting, value }) => setting.length && value.length,
+  );
+
+  const formattedPairs = emptyFiltered.map(
+    ({ setting, value }) =>
+      `${setting} = ${parseToNumber(value) ?? `'${value}'`}`,
+  );
+
+  return formattedPairs.join(', ');
+}
+
+// A discriminated union type for different tokenizers above
+export type TextIndexTokenizer =
+  | { type: 'splitByNonAlpha' }
+  | { type: 'splitByString'; separators: string[] }
+  | { type: 'ngrams'; n: number }
+  | {
+      type: 'sparseGrams';
+      minLength: number;
+      maxLength: number;
+      minCutoffLength?: number;
+    }
+  | { type: 'array' };
+
+/**
+ * Parses the tokenizer and any associated tokenizer parameters from a text index type definition.
+ *
+ * Examples:
+ * - `text(tokenizer = splitByNonAlpha)` -> `{ type: 'splitByNonAlpha' }`
+ * - `text(tokenizer = splitByString([', ', '; ', '\n', '\\']))` -> `{ type: 'splitByString', separators: [', ', '; ', '\n', '\\'] }`
+ * - `text(preprocessor=lower(s), tokenizer=sparseGrams(2, 5, 10))` -> `{ type: 'sparseGrams', minLength: 2, maxLength: 5, minCutoffLength: 10 }`
+ */
+export function parseTokenizerFromTextIndex({
+  typeFull,
+}: SkipIndexMetadata): TextIndexTokenizer | undefined {
+  const textPattern = /^\s*text\s*\((.+)\)\s*$/;
+  const match = typeFull.match(textPattern);
+  if (!match) {
+    console.error(`Invalid text index type ${typeFull}.`);
+    return undefined;
+  }
+
+  const argsString = match[1].trim();
+  const args = splitAndTrimWithBracket(argsString).map(arg => {
+    const [key, value] = arg.split('=').map(s => s.trim());
+    return { key, value };
+  });
+
+  const tokenizerArg = args.find(arg => arg.key === 'tokenizer')?.value;
+  if (!tokenizerArg) {
+    console.error(
+      `Invalid tokenizer argument in index type ${typeFull}: ${tokenizerArg}`,
+      argsString,
+      splitAndTrimWithBracket(argsString),
+    );
+    return undefined;
+  }
+
+  const tokenizerName = tokenizerArg.split('(')[0].trim();
+  const tokenizerArgsString = tokenizerArg
+    .substring(tokenizerArg.indexOf('(') + 1, tokenizerArg.lastIndexOf(')'))
+    .trim();
+
+  switch (tokenizerName) {
+    case 'splitByNonAlpha':
+      return { type: 'splitByNonAlpha' };
+
+    case 'array':
+      return { type: 'array' };
+
+    case 'ngrams': {
+      // Default n is 3
+      if (!tokenizerArgsString) {
+        return { type: 'ngrams', n: 3 };
+      }
+
+      return { type: 'ngrams', n: Number.parseInt(tokenizerArgsString, 10) };
+    }
+
+    case 'sparseGrams': {
+      const args = tokenizerArgsString
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => !!s);
+
+      const tokenizer: TextIndexTokenizer = {
+        type: 'sparseGrams',
+        minLength: 3,
+        maxLength: 10,
+      };
+
+      if (args.length >= 1) tokenizer.minLength = Number.parseInt(args[0], 10);
+      if (args.length >= 2) tokenizer.maxLength = Number.parseInt(args[1], 10);
+      if (args.length >= 3)
+        tokenizer.minCutoffLength = Number.parseInt(args[2], 10);
+
+      return tokenizer;
+    }
+
+    case 'splitByString': {
+      if (!tokenizerArgsString) {
+        // Default separator is space
+        return { type: 'splitByString', separators: [' '] };
+      }
+
+      const unescape = (str: string) => {
+        const escapeCharacters = [
+          { pattern: /\\a/g, replacement: 'a' },
+          { pattern: /\\b/g, replacement: 'b' },
+          { pattern: /\\e/g, replacement: 'e' },
+          { pattern: /\\f/g, replacement: '\f' },
+          { pattern: /\\n/g, replacement: '\n' },
+          { pattern: /\\r/g, replacement: '\r' },
+          { pattern: /\\t/g, replacement: '\t' },
+          { pattern: /\\v/g, replacement: '\v' },
+          { pattern: /\\0/g, replacement: '\0' },
+          { pattern: /\\\\/g, replacement: '\\' },
+          { pattern: /\\'/g, replacement: "'" },
+          { pattern: /\\"/g, replacement: '"' },
+          { pattern: /\\`/g, replacement: '`' },
+          { pattern: /\\\//g, replacement: '/' },
+          { pattern: /\\=/g, replacement: '=' },
+        ];
+
+        for (const { pattern, replacement } of escapeCharacters) {
+          str = str.replace(pattern, replacement);
+        }
+
+        return str;
+      };
+
+      const separatorsString = tokenizerArgsString.match(/\[(.*)\]/);
+      if (!separatorsString) {
+        // If no array is provided, default to space
+        return { type: 'splitByString', separators: [' '] };
+      }
+
+      const arrayContent = separatorsString[1];
+
+      // Split by commas outside of quotes
+      const separators: string[] = [];
+      let current = '';
+      let inQuote = false;
+      let quoteChar = '';
+
+      for (let i = 0; i < arrayContent.length; i++) {
+        const char = arrayContent[i];
+
+        if ((char === "'" || char === '"') && !inQuote) {
+          inQuote = true;
+          quoteChar = char;
+        } else if (char === quoteChar && inQuote) {
+          if (arrayContent[i - 1] !== '\\' || arrayContent[i - 2] === '\\') {
+            inQuote = false;
+            quoteChar = '';
+          }
+        } else if (char === ',' && !inQuote) {
+          const trimmed = current.trim();
+          if (trimmed) {
+            // Remove quotes and unescape characters
+            const value = trimmed.replace(/^['"]|['"]$/g, '');
+            const unescapedValue = unescape(value);
+            separators.push(unescapedValue);
+          }
+
+          current = '';
+          continue;
+        }
+
+        current += char;
+      }
+
+      // Add last separator
+      const trimmed = current.trim();
+      if (trimmed) {
+        const value = trimmed.replace(/^['"]|['"]$/g, '');
+        const unescapedValue = unescape(value);
+        separators.push(unescapedValue);
+      }
+
+      return { type: 'splitByString', separators };
+    }
+
+    default:
+      console.error(`Unknown tokenizer ${tokenizerName} in type ${typeFull}.`);
+      return undefined;
+  }
+}

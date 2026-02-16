@@ -1,0 +1,280 @@
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {
+  Box,
+  Breadcrumbs,
+  Button,
+  Flex,
+  Paper,
+  Text,
+  Tooltip,
+  UnstyledButton,
+} from '@mantine/core';
+import {
+  IconArrowsDiagonal,
+  IconArrowsDiagonalMinimize2,
+} from '@tabler/icons-react';
+
+import { FormatTime } from '@/useFormatTime';
+import { useUserPreferences } from '@/useUserPreferences';
+import { formatDistanceToNowStrictShort } from '@/utils';
+
+import {
+  DBHighlightedAttributesList,
+  HighlightedAttribute,
+} from './DBHighlightedAttributesList';
+import { RowSidePanelContext } from './DBRowSidePanel';
+import LogLevel from './LogLevel';
+
+const isValidDate = (date: Date) => 'getTime' in date && !isNaN(date.getTime());
+
+const MAX_MAIN_CONTENT_LENGTH = 2000;
+
+// Types for breadcrumb navigation
+export type BreadcrumbEntry = {
+  label: string;
+  rowData?: Record<string, any>;
+};
+
+export type BreadcrumbPath = BreadcrumbEntry[];
+
+// Navigation callback type - called when user wants to navigate to a specific level
+export type BreadcrumbNavigationCallback = (targetLevel: number) => void;
+
+function getBodyTextForBreadcrumb(rowData: Record<string, any>): string {
+  const bodyText = (rowData.__hdx_body || '').trim();
+  const BREADCRUMB_TOOLTIP_MAX_LENGTH = 200;
+  const BREADCRUMB_TOOLTIP_TRUNCATED_LENGTH = 197;
+
+  return bodyText.length > BREADCRUMB_TOOLTIP_MAX_LENGTH
+    ? `${bodyText.substring(0, BREADCRUMB_TOOLTIP_TRUNCATED_LENGTH)}...`
+    : bodyText;
+}
+
+function BreadcrumbNavigation({
+  breadcrumbPath,
+  onNavigateToLevel,
+}: {
+  breadcrumbPath: BreadcrumbPath;
+  onNavigateToLevel?: BreadcrumbNavigationCallback;
+}) {
+  const handleBreadcrumbItemClick = useCallback(
+    (clickedIndex: number) => {
+      // Navigate to the clicked breadcrumb level
+      // This will close all panels above this level
+      onNavigateToLevel?.(clickedIndex);
+    },
+    [onNavigateToLevel],
+  );
+
+  const breadcrumbItems = useMemo(() => {
+    if (breadcrumbPath.length === 0) return [];
+
+    const items = [];
+
+    // Add all previous levels from breadcrumbPath
+    breadcrumbPath.forEach((crumb, index) => {
+      const tooltipText = crumb.rowData
+        ? getBodyTextForBreadcrumb(crumb.rowData)
+        : '';
+
+      items.push(
+        <Tooltip
+          key={`crumb-${index}`}
+          label={tooltipText}
+          disabled={!tooltipText}
+          position="bottom"
+          withArrow
+        >
+          <UnstyledButton
+            onClick={() => handleBreadcrumbItemClick(index)}
+            style={{ textDecoration: 'none' }}
+          >
+            <Text size="sm" c="blue" style={{ cursor: 'pointer' }}>
+              {index === 0 ? 'Original Event' : crumb.label}
+            </Text>
+          </UnstyledButton>
+        </Tooltip>,
+      );
+    });
+
+    // Add current level
+    items.push(
+      <Text key="current" size="sm">
+        Selected Event
+      </Text>,
+    );
+
+    return items;
+  }, [breadcrumbPath, handleBreadcrumbItemClick]);
+
+  if (breadcrumbPath.length === 0) return null;
+
+  return (
+    <Box mb="sm" pb="sm" className="border-bottom border-dark">
+      <Breadcrumbs separator="›" separatorMargin="xs">
+        {breadcrumbItems}
+      </Breadcrumbs>
+    </Box>
+  );
+}
+
+export default function DBRowSidePanelHeader({
+  attributes = [],
+  mainContent = '',
+  mainContentHeader,
+  date,
+  severityText,
+  breadcrumbPath = [],
+  onBreadcrumbClick,
+}: {
+  date: Date;
+  mainContent?: string;
+  mainContentHeader?: string;
+  attributes?: HighlightedAttribute[];
+  severityText?: string;
+  breadcrumbPath?: BreadcrumbPath;
+  onBreadcrumbClick?: BreadcrumbNavigationCallback;
+}) {
+  const [bodyExpanded, setBodyExpanded] = React.useState(false);
+  const { onPropertyAddClick, generateSearchUrl } =
+    useContext(RowSidePanelContext);
+
+  const isContentTruncated = mainContent.length > MAX_MAIN_CONTENT_LENGTH;
+  const mainContentDisplayed = React.useMemo(
+    () =>
+      bodyExpanded
+        ? mainContent
+        : mainContent?.slice(0, MAX_MAIN_CONTENT_LENGTH),
+    [bodyExpanded, mainContent],
+  );
+
+  const [headerElement, setHeaderElement] = useState<HTMLDivElement | null>(
+    null,
+  );
+  const [headerHeight, setHeaderHeight] = useState(0);
+  useEffect(() => {
+    if (!headerElement) return;
+
+    const updateHeight = () => {
+      const newHeight = headerElement.offsetHeight;
+      setHeaderHeight(newHeight);
+    };
+    updateHeight();
+
+    // Set up a resize observer to detect height changes
+    const resizeObserver = new ResizeObserver(updateHeight);
+    resizeObserver.observe(headerElement);
+
+    // Clean up the observer on component unmount
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [headerElement]);
+
+  const { userPreferences, setUserPreference } = useUserPreferences();
+  const { expandSidebarHeader } = userPreferences;
+  const maxBoxHeight = 120;
+
+  const _generateSearchUrl = useCallback(
+    (query?: string, queryLanguage?: 'sql' | 'lucene') => {
+      return (
+        generateSearchUrl?.({
+          where: query,
+          whereLanguage: queryLanguage,
+        }) ?? '/'
+      );
+    },
+    [generateSearchUrl],
+  );
+
+  return (
+    <>
+      {/* Breadcrumb navigation */}
+      <BreadcrumbNavigation
+        breadcrumbPath={breadcrumbPath}
+        onNavigateToLevel={onBreadcrumbClick}
+      />
+
+      {/* Event timestamp and severity */}
+      <Flex>
+        {severityText && <LogLevel level={severityText} />}
+        {severityText && isValidDate(date) && (
+          <Text size="xs" mx="xs">
+            &middot;
+          </Text>
+        )}
+        {isValidDate(date) && (
+          <Text size="xs">
+            <FormatTime value={date} /> &middot;{' '}
+            {formatDistanceToNowStrictShort(date)} ago
+          </Text>
+        )}
+      </Flex>
+      {mainContent ? (
+        <Paper
+          p="xs"
+          mt="sm"
+          style={{
+            maxHeight: expandSidebarHeader ? undefined : maxBoxHeight,
+            overflow: 'auto',
+            overflowWrap: 'break-word',
+          }}
+          ref={setHeaderElement}
+        >
+          <Flex justify="space-between" mb="xs">
+            <Text size="xs">{mainContentHeader}</Text>
+            {/* Toggles expanded sidebar header*/}
+            {headerHeight >= maxBoxHeight && (
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                onClick={() =>
+                  setUserPreference({
+                    ...userPreferences,
+                    expandSidebarHeader: !expandSidebarHeader,
+                  })
+                }
+              >
+                {/* TODO: Only show expand button when maxHeight = 120? */}
+                {expandSidebarHeader ? (
+                  <IconArrowsDiagonalMinimize2 size={14} />
+                ) : (
+                  <IconArrowsDiagonal size={14} />
+                )}
+              </Button>
+            )}
+          </Flex>
+          {mainContentDisplayed}
+          {isContentTruncated && (
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              color="gray"
+              onClick={() => {
+                setBodyExpanded(prev => !prev);
+              }}
+            >
+              {bodyExpanded ? 'Collapse' : 'Expand'}
+            </Button>
+          )}
+        </Paper>
+      ) : (
+        <Paper p="xs" mt="sm">
+          <Text size="xs" mb="xs">
+            [Empty]
+          </Text>
+        </Paper>
+      )}
+      <Box mt="xs">
+        <DBHighlightedAttributesList attributes={attributes} />
+      </Box>
+    </>
+  );
+}

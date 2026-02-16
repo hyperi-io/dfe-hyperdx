@@ -1,0 +1,11 @@
+
+# Sentry
+.sentryclirc
+
+# Sentry
+next.config.original.js
+
+public/__ENV.js
+
+# E2E test authentication state
+tests/e2e/.auth/
