@@ -1,0 +1,172 @@
+/* stylelint-disable selector-pseudo-class-no-unknown */
+.filtersPanel {
+  position: relative;
+  min-width: 200px;
+  max-width: 50%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-bg-body);
+  word-break: break-all;
+  flex-shrink: 0;
+  flex-grow: 0;
+  border-right: 1px solid var(--color-border);
+  overflow: hidden;
+  z-index: 3; // higher z-index to be above other elements
+
+  :global {
+    .mantine-TextInput-wrapper {
+      background-color: transparent;
+    }
+
+    .mantine-TextInput-input {
+      height: 20px;
+      min-height: 20px;
+      background-color: transparent;
+      color: var(--color-text-secondary);
+      font-size: var(--mantine-font-size-xs);
+
+      &::placeholder {
+        color: var(--color-text-muted);
+        font-weight: bold;
+      }
+
+      &:focus {
+        border: none;
+        outline: none;
+      }
+    }
+  }
+}
+
+.textButton {
+  user-select: none;
+  flex-shrink: 0;
+
+  &:hover {
+    cursor: pointer;
+    color: var(--color-text-muted) !important;
+  }
+
+  &:active {
+    color: var(--color-text-muted) !important;
+  }
+}
+
+.filterCheckbox {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 13px;
+  padding: 2px 6px;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  border-radius: 4px;
+  position: relative;
+
+  input {
+    opacity: 0.8;
+  }
+
+  .filterActions {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    display: none;
+    z-index: 1;
+    backdrop-filter: blur(4px);
+    border-radius: 4px;
+    align-items: center;
+    padding: 0 4px;
+    gap: 4px;
+    background-color: var(--color-bg-body);
+
+    .textButton {
+      padding: 2px 4px;
+      border-radius: 3px;
+
+      &:hover {
+        background-color: var(--color-bg-muted);
+        color: var(--color-text-secondary);
+      }
+
+      &:active {
+        background-color: var(--color-bg-muted);
+        color: var(--color-text);
+      }
+    }
+  }
+
+  &:hover {
+    input {
+      opacity: 1;
+    }
+
+    background-color: var(--color-bg-surface);
+
+    .filterActions {
+      display: flex;
+    }
+  }
+}
+
+.searchPageContainer {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.chevron {
+  transform: rotate(-90deg);
+
+  &[data-rotate] {
+    transform: rotate(0deg);
+  }
+}
+
+.recentlyMoved {
+  animation: highlight 0.6s ease-out;
+}
+
+@keyframes highlight {
+  0% {
+    background-color: var(--color-bg-highlighted);
+    transform: scale(1.02);
+  }
+
+  50% {
+    background-color: var(--color-bg-highlighted);
+    transform: scale(1.01);
+  }
+
+  100% {
+    background-color: transparent;
+    transform: scale(1);
+  }
+}
+
+.searchStatsContainer {
+  background-color: var(--color-bg-body);
+  padding-inline: var(--mantine-spacing-xs);
+  padding-block: var(--mantine-spacing-xxs);
+  z-index: 3;
+}
+
+.timeChartContainer {
+  background-color: var(--color-bg-body);
+  padding-inline: var(--mantine-spacing-xs);
+  padding-block: var(--mantine-spacing-xxs);
+  height: 120px;
+  z-index: 3;
+}
+
+.searchForm {
+  background: var(--color-bg-body);
+  z-index: 4;
+  padding-bottom: var(--mantine-spacing-xs);
+  border-bottom: 1px solid var(--color-border);
+}

@@ -1,0 +1,99 @@
+import { useState } from 'react';
+import CopyToClipboard from 'react-copy-to-clipboard';
+import { sql } from '@codemirror/lang-sql';
+import { format } from '@hyperdx/common-utils/dist/sqlFormatter';
+import { ChartConfigWithOptDateRange } from '@hyperdx/common-utils/dist/types';
+import { Button, Paper } from '@mantine/core';
+import { IconCheck, IconCopy } from '@tabler/icons-react';
+import CodeMirror from '@uiw/react-codemirror';
+
+import { useRenderedSqlChartConfig } from '@/hooks/useChartConfig';
+
+function tryFormat(data?: string) {
+  try {
+    if (data != null) {
+      return format(data);
+    }
+    return data;
+  } catch {
+    return data;
+  }
+}
+
+function CopyButton({
+  text = '',
+  size = 'md',
+}: {
+  text?: string;
+  size?: 'xs' | 'md';
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const iconSize = size === 'xs' ? 14 : 16;
+  const buttonSize = size === 'xs' ? 'compact-xs' : 'sm';
+
+  return (
+    <CopyToClipboard text={text ?? ''} onCopy={() => setCopied(true)}>
+      <Button
+        variant={copied ? 'light' : 'default'}
+        size={buttonSize}
+        className="position-absolute top-0 end-0"
+      >
+        {copied ? (
+          <IconCheck size={iconSize} className="me-2" />
+        ) : (
+          <IconCopy size={iconSize} className="me-2" />
+        )}
+        {copied ? 'Copied!' : 'Copy'}
+      </Button>
+    </CopyToClipboard>
+  );
+}
+
+export function SQLPreview({
+  data,
+  formatData = true,
+  enableCopy = false,
+  copyButtonSize = 'md',
+}: {
+  data?: string;
+  formatData?: boolean;
+  enableCopy?: boolean;
+  copyButtonSize?: 'xs' | 'md';
+}) {
+  const displayed = formatData ? tryFormat(data) : data;
+
+  return (
+    <div className="position-relative">
+      <CodeMirror
+        indentWithTab={false}
+        value={displayed}
+        theme="dark"
+        basicSetup={{
+          lineNumbers: false,
+          foldGutter: false,
+          highlightActiveLine: false,
+          highlightActiveLineGutter: false,
+        }}
+        extensions={[sql()]}
+        editable={false}
+      />
+      {enableCopy && <CopyButton text={displayed} size={copyButtonSize} />}
+    </div>
+  );
+}
+
+// TODO: Support clicking in to view matched events
+export default function ChartSQLPreview({
+  config,
+}: {
+  config: ChartConfigWithOptDateRange;
+}) {
+  const { data } = useRenderedSqlChartConfig(config);
+
+  return (
+    <Paper flex="auto" shadow="none" radius="sm" style={{ overflow: 'hidden' }}>
+      <SQLPreview data={data} formatData={false} />
+    </Paper>
+  );
+}

@@ -1,0 +1,347 @@
+/* stylelint-disable-file */
+// stylelint adds '}}' to end of file.. not sure why. Disabled for now.
+
+@use '../src/theme/themes/base-tokens';
+
+// Bootstrap utilities only (d-flex, flex-column, m-*, p-*, etc.)
+@use './_bootstrap-utilities';
+
+// Custom utilities (bg-surface, border-dark, etc.)
+@use './_utilities';
+
+.inter {
+  font-family: var(--font-inter), 'Helvetica Neue', sans-serif;
+}
+
+.roboto {
+  font-family: var(--font-roboto), sans-serif;
+}
+
+.roboto-mono {
+  font-family: var(--font-roboto-mono), monospace;
+}
+
+.mono {
+  font-family: var(--font-ibm-plex-mono), monospace;
+}
+
+:root {
+  --mantine-webkit-font-smoothing: inherit;
+  --mantine-moz-font-smoothing: inherit;
+
+  color-scheme: dark;
+
+  --app-font-family: var(--font-inter);
+}
+
+body {
+  font-family: var(--app-font-family);
+  font-size: var(--mantine-font-size-sm);
+}
+
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--color-outline-focus);
+  outline-offset: 2px;
+  border-radius: var(--mantine-radius-xs);
+}
+
+.accordion-button,
+.button,
+.form-control {
+  &:focus {
+    outline: none;
+    box-shadow: none;
+  }
+}
+
+.nav-link.active {
+  font-weight: 500;
+}
+
+/* Custom Components */
+.player-skipping-overlay {
+  position: absolute;
+  z-index: 10;
+  background: rgb(50 50 50 / 40%);
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.replayer-wrapper {
+  position: relative;
+
+  .replayer-mouse {
+    width: 15px;
+    height: 15px;
+    background-color: rgba(#fff, 0.5);
+    border: 2px solid var(--color-border);
+    border-radius: 50%;
+    position: absolute;
+    pointer-events: none; // Make sure the rrweb mouse doesn't obscure elements below it for the inspector
+  }
+
+  .replayer-mouse-tail {
+    position: absolute;
+    pointer-events: none;
+  }
+
+  &.started .replayer-mouse {
+    display: block;
+  }
+}
+
+.shimmer {
+  // animation : shimmer 1.5s infinite;
+  // background: linear-gradient(to right, #d8d8d8 4%, #a5a5a5 25%, #aaadaf 36%);
+  animation: shimmer-animation 3s infinite linear;
+  background: linear-gradient(270deg, #333 4%, #111 25%, #333 36%);
+  background-size: 1000px 100%;
+}
+
+@keyframes shimmer-animation {
+  0% {
+    // background-position: top left;
+    background-position: -1000px 0;
+
+    // background-position: -1000px 0;
+  }
+
+  100% {
+    // background-position: top right;
+    background-position: 1000px 0;
+  }
+}
+
+.spin-animate {
+  animation: spin 0.8s infinite linear;
+}
+
+@keyframes spin {
+  0% {
+    transform: scale(1) rotate(0deg);
+  }
+
+  40% {
+    transform: scale(1) rotate(160deg);
+  }
+
+  60% {
+    transform: scale(1) rotate(200deg);
+  }
+
+  100% {
+    transform: scale(1) rotate(360deg);
+  }
+}
+
+// Just for the price slider
+.PricingSlider {
+  height: 25px;
+
+  .thumb {
+    margin-top: -6px;
+  }
+}
+
+.TimelineView {
+  svg {
+    overflow: visible;
+  }
+}
+
+@keyframes animatedglow {
+  0% {
+    opacity: 0.1;
+  }
+
+  33% {
+    opacity: 0.7;
+  }
+
+  100% {
+    opacity: 0.3;
+  }
+}
+
+.backgroundGlow {
+  filter: blur(125px);
+  grid-area: 1/1/1/1;
+  animation-name: animatedglow;
+  animation-duration: 1.75s;
+  opacity: 0.3;
+  background: linear-gradient(
+    90deg,
+    rgb(80 250 219) 0.39%,
+    rgb(164 42 238 / 80%) 70%
+  );
+}
+
+.ds-table.table-hover {
+  tr.data-row:hover {
+    background-color: var(--color-bg-muted);
+  }
+}
+
+.parent-hover-trigger {
+  .child-hover-trigger {
+    visibility: hidden;
+  }
+
+  &:hover .child-hover-trigger {
+    visibility: visible;
+  }
+}
+
+// React Grid for Dashboarding
+.react-grid-item.react-grid-placeholder {
+  // Override the default placeholder color from red
+  background: var(--color-bg-muted) !important;
+  border: 1px solid var(--color-border) !important;
+  opacity: 0.4 !important;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  border-color: var(--color-text) !important;
+  right: -4px;
+  bottom: -4px;
+  width: 4px;
+  height: 4px;
+  border-right: 2px solid var(--color-text) !important;
+  border-bottom: 2px solid var(--color-text) !important;
+}
+
+// custom overrides for jsontree
+.react-json-tree {
+  & > ul {
+    width: 100%;
+    word-break: break-all;
+  }
+}
+
+// recharts overrides
+.recharts-default-legend {
+  text-align: left !important;
+}
+
+.recharts-legend-item {
+  font-size: 0.75rem;
+}
+
+.recharts-tooltip-cursor {
+  fill: rgb(204 204 204 / 20%) !important;
+}
+
+.effect-pulse {
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 0.7;
+  }
+
+  20% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0.7;
+  }
+}
+
+.dashboard-chart-highlighted {
+  animation: highlightedChart 1.5s forwards;
+  border: 1px solid rgb(255 166 0 / 50%);
+}
+
+@keyframes highlightedChart {
+  0% {
+    background-color: rgb(255 166 0 / 50%);
+  }
+
+  100% {
+    background-color: transparent;
+  }
+}
+
+.muted-thead tr th {
+  font-weight: normal !important;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.recharts-tooltip-wrapper {
+  &:focus,
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+// Global cursor pointer for interactive elements
+button,
+a,
+[role='button'] {
+  cursor: pointer;
+}
+
+.u-select {
+  border: 1px solid #50fa7b;
+  background: #50fa7a0d !important;
+  color: #2e224788;
+}
+
+.hdx-markdown {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  p {
+    margin-top: 0;
+    margin-bottom: 1rem;
+  }
+
+  ol,
+  ul {
+    padding-left: 2rem;
+  }
+
+  th {
+    font-weight: 600;
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+
+  h2 {
+    font-size: 1.8rem;
+  }
+
+  h3 {
+    font-size: 1.6rem;
+  }
+
+  h4 {
+    font-size: 1.4rem;
+  }
+
+  // Remove margin on first and last child elements
+  > :first-child {
+    margin-top: 0;
+  }
+
+  > :last-child {
+    margin-bottom: 0;
+  }
+
+  code {
+    font-size: 0.875em;
+    color: var(--color-json-string);
+    word-wrap: break-word;
+  }
+}

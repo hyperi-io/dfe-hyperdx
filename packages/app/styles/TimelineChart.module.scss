@@ -1,0 +1,20 @@
+.timelineRow {
+  cursor: pointer;
+
+  &:hover {
+    background-color: var(--color-bg-highlighted);
+  }
+}
+
+.timelineRowActive {
+  background-color: var(--color-bg-highlighted);
+  border-radius: var(--mantine-radius-xs);
+}
+
+.labelContainer {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 8px;
+  position: relative;
+}

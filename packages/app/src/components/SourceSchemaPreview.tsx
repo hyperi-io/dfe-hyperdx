@@ -1,0 +1,199 @@
+import { useState } from 'react';
+import { MetricsDataType, TSource } from '@hyperdx/common-utils/dist/types';
+import { Modal, Paper, Tabs, Text, TextProps, Tooltip } from '@mantine/core';
+import { IconCode, IconRefresh } from '@tabler/icons-react';
+
+import { useTableMetadata } from '@/hooks/useMetadata';
+
+import { SQLPreview } from './ChartSQLPreview';
+
+interface SourceSchemaInfoIconProps {
+  onClick: () => void;
+  isEnabled: boolean;
+  tableCount: number;
+  iconStyles?: Pick<TextProps, 'size' | 'color'>;
+  variant?: 'icon' | 'text';
+}
+
+const SourceSchemaInfoIcon = ({
+  onClick,
+  isEnabled,
+  tableCount,
+  iconStyles,
+  variant = 'icon',
+}: SourceSchemaInfoIconProps) => {
+  const tooltipText = isEnabled
+    ? tableCount > 1
+      ? `Show Table Schemas`
+      : 'Show Table Schema'
+    : 'Select a table to view its schema';
+
+  return (
+    <Tooltip
+      label={tooltipText}
+      color="dark"
+      position="right"
+      onClick={() => isEnabled && onClick()}
+    >
+      {variant === 'text' ? (
+        <Text
+          fw={500}
+          size="xs"
+          className="text-sucess-hover"
+          style={{ cursor: isEnabled ? 'pointer' : 'default', ...iconStyles }}
+        >
+          Schema
+        </Text>
+      ) : (
+        <IconCode size={16} />
+      )}
+    </Tooltip>
+  );
+};
+
+interface TableSchemaPreviewProps {
+  databaseName: string;
+  tableName: string;
+  connectionId: string;
+}
+
+const TableSchemaPreview = ({
+  databaseName,
+  tableName,
+  connectionId,
+}: TableSchemaPreviewProps) => {
+  const { data, isLoading } = useTableMetadata({
+    databaseName,
+    tableName,
+    connectionId,
+  });
+
+  return (
+    <Paper
+      flex="auto"
+      shadow="none"
+      radius="sm"
+      p="xs"
+      style={{ overflow: 'hidden' }}
+    >
+      {isLoading ? (
+        <div className="d-inline-block">
+          <IconRefresh className="spin-animate" />
+        </div>
+      ) : (
+        <SQLPreview
+          data={data?.create_table_query ?? 'Schema is not available'}
+          enableCopy={!!data?.create_table_query}
+          copyButtonSize="xs"
+        />
+      )}
+    </Paper>
+  );
+};
+
+export interface SourceSchemaPreviewProps {
+  source?: Pick<TSource, 'connection' | 'from' | 'metricTables'> &
+    Partial<Pick<TSource, 'kind' | 'name' | 'materializedViews'>>;
+  iconStyles?: Pick<TextProps, 'size' | 'color'>;
+  variant?: 'icon' | 'text';
+}
+
+const METRIC_TYPE_NAMES: Record<MetricsDataType, string> = {
+  [MetricsDataType.Sum]: 'Sum',
+  [MetricsDataType.Gauge]: 'Gauge',
+  [MetricsDataType.Histogram]: 'Histogram',
+  [MetricsDataType.Summary]: 'Summary',
+  [MetricsDataType.ExponentialHistogram]: 'Exponential Histogram',
+};
+
+const SourceSchemaPreview = ({
+  source,
+  iconStyles,
+  variant = 'icon',
+}: SourceSchemaPreviewProps) => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const isMetricSource = source?.kind === 'metric';
+  const tables: (TableSchemaPreviewProps & { title: string })[] = [];
+  if (source && isMetricSource) {
+    tables.push(
+      ...Object.values(MetricsDataType)
+        .map(metricType => ({
+          metricType,
+          tableName: source.metricTables?.[metricType],
+        }))
+        .filter(({ tableName }) => !!tableName)
+        .map(({ metricType, tableName }) => ({
+          databaseName: source.from.databaseName,
+          tableName: tableName!,
+          connectionId: source.connection,
+          title: METRIC_TYPE_NAMES[metricType],
+        })),
+    );
+  } else if (source && source.from.tableName) {
+    tables.push({
+      databaseName: source.from.databaseName,
+      tableName: source.from.tableName,
+      connectionId: source.connection,
+      title: source.name ?? source.from.tableName,
+    });
+  }
+
+  const mvConfigs = source?.materializedViews ?? [];
+  tables.push(
+    ...mvConfigs.map(({ tableName, databaseName }) => ({
+      databaseName,
+      tableName,
+      connectionId: source!.connection,
+      title: `${tableName} (MV)`,
+    })),
+  );
+
+  const isEnabled = !!source && tables.length > 0;
+
+  return (
+    <>
+      <SourceSchemaInfoIcon
+        isEnabled={isEnabled}
+        onClick={() => setIsModalOpen(true)}
+        iconStyles={iconStyles}
+        tableCount={tables.length}
+        variant={variant}
+      />
+      {isEnabled && (
+        <Modal
+          opened={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          size="auto"
+          title={tables.length > 1 ? `Table Schemas` : `Table Schema`}
+        >
+          <Tabs
+            defaultValue={`${tables[0]?.databaseName}.${tables[0]?.tableName}.${tables[0]?.title}`}
+          >
+            <Tabs.List>
+              {tables.map(table => (
+                <Tabs.Tab
+                  key={`${table.databaseName}.${table.tableName}.${table.title}`}
+                  value={`${table.databaseName}.${table.tableName}.${table.title}`}
+                >
+                  {table.title}
+                </Tabs.Tab>
+              ))}
+            </Tabs.List>
+            {tables.map(table => (
+              <Tabs.Panel
+                key={`${table.databaseName}.${table.tableName}.${table.title}`}
+                value={`${table.databaseName}.${table.tableName}.${table.title}`}
+                pt="sm"
+              >
+                <TableSchemaPreview {...table} />
+              </Tabs.Panel>
+            ))}
+          </Tabs>
+        </Modal>
+      )}
+    </>
+  );
+};
+
+export default SourceSchemaPreview;
