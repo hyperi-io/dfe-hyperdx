@@ -43,3 +43,12 @@ still handled by OAuth2
 No changes required - HyperDX Next API paths are just proxying the HyperDX API.
 We may want to create a wrapper around the HyperDX API to add RBAC functionality
 or remove access to specific endpoints.
+
+### React versions
+
+HyperDX is running on the latest version of React - 19.2.7 DFE-UI is running on
+an older version of React - 18.3.1
+
+There may be some conflicts between components - there are some complexities
+with upgrading DFE-UI to 19.2.7 as our version of antd is not entirely
+compatible with latest React https://5x.ant.design/docs/react/v5-for-19
