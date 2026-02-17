@@ -54,14 +54,14 @@ HyperDX includes a number of features that may need to be trimmed down/removed
   should be handled by HyperI (end-user should not be able to set these up)
 - ✅ Get started banner (remove) | OnboardingChecklist - all setup should be
   handled by HyperI (end-user should not be able to set these up)
-- ❓Presets (Clickhouse|Services|Kubernetes) - do we want to surface these to
+- ✅ ❓Presets (Clickhouse|Services|Kubernetes) - do we want to surface these to
   users? Do we need to consider RBAC?
-- ❓Service Map - do we want to surface these to users? Do we need to consider
-  RBAC?
-- ❓Client sessions - do we want to surface these to users? Do we need to
+- ✅ ❓Service Map - do we want to surface these to users? Do we need to
   consider RBAC?
-- Alerts (remove frontend functionality for now) - look at including later (we
-  probably need to consider RBAC)
+- ✅ ❓Client sessions - do we want to surface these to users? Do we need to
+  consider RBAC?
+- ✅ Alerts (remove frontend functionality for now) - look at including later
+  (we probably need to consider RBAC)
 
 ### Configuration requirements
 

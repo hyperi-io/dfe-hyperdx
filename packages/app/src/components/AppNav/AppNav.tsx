@@ -92,26 +92,26 @@ const NAV_LINKS: NavLinkConfig[] = [
     href: '/chart',
     icon: <IconChartDots size={16} />,
   },
-  {
-    id: 'alerts',
-    label: 'Alerts',
-    href: '/alerts',
-    icon: <IconBell size={16} />,
-    cloudOnly: true,
-  },
-  {
-    id: 'sessions',
-    label: 'Client Sessions',
-    href: '/sessions',
-    icon: <IconDeviceLaptop size={16} />,
-  },
-  {
-    id: 'service-map',
-    label: 'Service Map',
-    href: '/service-map',
-    icon: <IconSitemap size={16} />,
-    isBeta: true,
-  },
+  // {
+  //   id: 'alerts',
+  //   label: 'Alerts',
+  //   href: '/alerts',
+  //   icon: <IconBell size={16} />,
+  //   cloudOnly: true,
+  // },
+  // {
+  //   id: 'sessions',
+  //   label: 'Client Sessions',
+  //   href: '/sessions',
+  //   icon: <IconDeviceLaptop size={16} />,
+  // },
+  // {
+  //   id: 'service-map',
+  //   label: 'Service Map',
+  //   href: '/service-map',
+  //   icon: <IconSitemap size={16} />,
+  //   isBeta: true,
+  // },
 ];
 
 function NewDashboardButton() {
