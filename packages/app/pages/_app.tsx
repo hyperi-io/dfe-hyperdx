@@ -100,8 +100,13 @@ function AppContent({
 
   // ClickStack theme always uses Inter font - user preference is ignored
   // HyperDX theme allows user to select font preference
+  const isHyperITheme = themeName === 'hyperi';
   const isClickStackTheme = themeName === 'clickstack';
-  const effectiveFont = isClickStackTheme ? 'Inter' : userPreferences.font;
+  const effectiveFont = isHyperITheme
+    ? 'Martel Sans'
+    : isClickStackTheme
+      ? 'Inter'
+      : userPreferences.font;
   const selectedMantineFont = effectiveFont
     ? MANTINE_FONT_MAP[effectiveFont] || undefined
     : undefined;

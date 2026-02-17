@@ -13,11 +13,11 @@
 
 HyperDX includes a built-in theme system supporting multiple brands:
 
-- **NEXT_PUBLIC_THEME** env var selects theme at build time (`hyperdx` |
+- ✅ **NEXT_PUBLIC_THEME** env var selects theme at build time (`hyperdx` |
   `clickstack`)
-- Theme config: `packages/app/src/theme/themes/{theme}/`
-- Assets: favicons, Logomark, Wordmark, `_tokens.scss`, `mantineTheme.ts`
-- Favicons live at `packages/app/public/favicons/{theme}/`
+- ✅ Theme config: `packages/app/src/theme/themes/{theme}/`
+- ✅ Assets: favicons, Logomark, Wordmark, `_tokens.scss`, `mantineTheme.ts`
+- ✅ Favicons live at `packages/app/public/favicons/{theme}/`
 
 ## Extended Branding / Theming
 
@@ -25,6 +25,7 @@ HyperDX color mode & theming does not match our core styling
 
 - Adjust theme from sidebar instead of inside user preferences
 - Sidebar collapse controls - adjust to be the same as ours
+- Sidebar styling - match ours
 
 ### RBAC
 
@@ -62,6 +63,9 @@ HyperDX includes a number of features that may need to be trimmed down/removed
   consider RBAC?
 - ✅ Alerts (remove frontend functionality for now) - look at including later
   (we probably need to consider RBAC)
+
+Intially these items are just being removed from the nav - the routes that hold
+these pages still exist and need to be removed ⚠️
 
 ### Configuration requirements
 

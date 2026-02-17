@@ -161,7 +161,7 @@ export function AppThemeProvider({
     // eslint-disable-next-line no-console
     console.info(
       `🎨 Theme: ${theme.displayName} (${theme.name})`,
-      '\n   Set via console: window.__HDX_THEME.set("clickstack")',
+      '\n   Set via console: window.__HDX_THEME.set("hyperi")',
     );
 
     // Expose namespaced helper object to window for console access
