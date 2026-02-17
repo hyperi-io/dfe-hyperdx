@@ -902,7 +902,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
             )}
           </div>
 
-          {!isCollapsed && (
+          {/* {!isCollapsed && (
             <div
               style={{ width: navWidth }}
               className={styles.onboardingSection}
@@ -910,7 +910,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
               <OnboardingChecklist onAddDataClick={openInstallInstructions} />
               <AppNavCloudBanner />
             </div>
-          )}
+          )} */}
         </ScrollArea>
 
         <div className={styles.footer} style={{ width: navWidth }}>

@@ -48,10 +48,10 @@ HyperDX includes a number of features that may need to be trimmed down/removed
       (add a separate config area in dfe-ui so that we can use RBAC)
 - Help Popup (remove) - all setup should be handled by HyperI (end-user should
   not be able to set these up)
-- Deploy to clickhouse cloud banner (remove) - all setup should be handled by
-  HyperI (end-user should not be able to set these up)
-- Get started banner (remove) - all setup should be handled by HyperI (end-user
-  should not be able to set these up)
+- ✅ Deploy to clickhouse cloud banner (remove) | AppNavCloudBanner - all setup
+  should be handled by HyperI (end-user should not be able to set these up)
+- ✅ Get started banner (remove) | OnboardingChecklist - all setup should be
+  handled by HyperI (end-user should not be able to set these up)
 - ❓Presets (Clickhouse|Services|Kubernetes) - do we want to surface these to
   users? Do we need to consider RBAC?
 - ❓Service Map - do we want to surface these to users? Do we need to consider
