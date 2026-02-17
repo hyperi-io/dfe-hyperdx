@@ -893,13 +893,13 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
             )}
 
             {/* Team Settings (Cloud only) */}
-            {!IS_LOCAL_MODE && (
+            {/* {!IS_LOCAL_MODE && (
               <AppNavLink
                 label="Team Settings"
                 href="/team"
                 icon={<IconSettings size={16} />}
               />
-            )}
+            )} */}
           </div>
 
           {/* {!isCollapsed && (
@@ -918,7 +918,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
             version={APP_VERSION}
             onAddDataClick={openInstallInstructions}
           /> */}
-          <AppNavUserMenu
+          {/* <AppNavUserMenu
             userName={meData?.name}
             teamName={meData?.team?.name}
             onClickUserPreferences={openUserPreferences}
@@ -929,7 +929,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
               referrerPolicy="no-referrer-when-downgrade"
               src="https://static.scarf.sh/a.png?x-pxid=bbc99c42-7a75-4eee-9fb9-2b161fc4acd6"
             />
-          )}
+          )} */}
         </div>
       </div>
       <UserPreferencesModal

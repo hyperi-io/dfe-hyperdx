@@ -35,8 +35,10 @@ the enterprise offering - we will need to roll our own.
 
 HyperDX includes a number of features that may need to be trimmed down/removed
 
-- User preferences (trim options), login/logout & team settings (trim options):
-  this will need to be managed by control-plane/dfe-ui
+- ✅ (Removed all the below from the menu - source code still exists though)
+  User preferences (trim options), login/logout & team settings (trim options) |
+  AppNavUserMenu | Spotlights: this will need to be managed by
+  control-plane/dfe-ui
   - User preferences: keep time format preferences, remove all appearance
     preferences, split out theme select into sidebar
   - Login/Logout: Remove all FE functionality - this will be handled by OAuth2 -

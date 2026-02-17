@@ -95,74 +95,74 @@ export const useSpotlightActions = () => {
           router.push('/dashboards');
         },
       },
-      {
-        id: 'sessions',
-        group: 'Menu',
-        leftSection: <IconDeviceLaptop size={16} />,
-        label: 'Client Sessions',
-        description: 'View client sessions',
-        keywords: ['browser', 'web'],
-        onClick: () => {
-          router.push('/sessions');
-        },
-      },
-      {
-        id: 'alerts',
-        group: 'Menu',
-        leftSection: <IconBell size={16} />,
-        label: 'Alerts',
-        description: 'View and manage alerts',
-        onClick: () => {
-          router.push('/alerts');
-        },
-      },
-      {
-        id: 'service-health',
-        group: 'Menu',
-        label: 'Service Health',
-        leftSection: <IconActivityHeartbeat size={16} />,
-        description: 'HTTP, Database and Infrastructure metrics',
-        onClick: () => {
-          router.push('/services');
-        },
-      },
-      {
-        id: 'team-settings',
-        group: 'Menu',
-        leftSection: <IconSettings size={16} />,
-        label: 'Team Settings',
+      // {
+      //   id: 'sessions',
+      //   group: 'Menu',
+      //   leftSection: <IconDeviceLaptop size={16} />,
+      //   label: 'Client Sessions',
+      //   description: 'View client sessions',
+      //   keywords: ['browser', 'web'],
+      //   onClick: () => {
+      //     router.push('/sessions');
+      //   },
+      // },
+      // {
+      //   id: 'alerts',
+      //   group: 'Menu',
+      //   leftSection: <IconBell size={16} />,
+      //   label: 'Alerts',
+      //   description: 'View and manage alerts',
+      //   onClick: () => {
+      //     router.push('/alerts');
+      //   },
+      // },
+      // {
+      //   id: 'service-health',
+      //   group: 'Menu',
+      //   label: 'Service Health',
+      //   leftSection: <IconActivityHeartbeat size={16} />,
+      //   description: 'HTTP, Database and Infrastructure metrics',
+      //   onClick: () => {
+      //     router.push('/services');
+      //   },
+      // },
+      // {
+      //   id: 'team-settings',
+      //   group: 'Menu',
+      //   leftSection: <IconSettings size={16} />,
+      //   label: 'Team Settings',
 
-        onClick: () => {
-          router.push('/team');
-        },
-      },
-      {
-        id: 'documentation',
-        group: 'Menu',
-        leftSection: <IconHelpCircle size={16} />,
-        label: 'Documentation',
-        keywords: ['help', 'docs'],
-        onClick: () => {
-          router.push(
-            'https://clickhouse.com/docs/use-cases/observability/clickstack',
-          );
-        },
-      },
-      {
-        id: 'cloud',
-        group: 'Menu',
-        leftSection: logomark,
-        label: 'HyperDX Cloud',
-        description: 'Ready to use HyperDX Cloud? Get started for free.',
-        keywords: ['account', 'profile'],
-        onClick: () => {
-          router.push('https://hyperdx.io/register');
-        },
-      },
+      //   onClick: () => {
+      //     router.push('/team');
+      //   },
+      // },
+      // {
+      //   id: 'documentation',
+      //   group: 'Menu',
+      //   leftSection: <IconHelpCircle size={16} />,
+      //   label: 'Documentation',
+      //   keywords: ['help', 'docs'],
+      //   onClick: () => {
+      //     router.push(
+      //       'https://clickhouse.com/docs/use-cases/observability/clickstack',
+      //     );
+      //   },
+      // },
+      // {
+      //   id: 'cloud',
+      //   group: 'Menu',
+      //   leftSection: logomark,
+      //   label: 'HyperDX Cloud',
+      //   description: 'Ready to use HyperDX Cloud? Get started for free.',
+      //   keywords: ['account', 'profile'],
+      //   onClick: () => {
+      //     router.push('https://hyperdx.io/register');
+      //   },
+      // },
     );
 
     return logViewActions;
-  }, [logomark, logViewsData, dashboardsData, router]);
+  }, [logViewsData, dashboardsData, router]);
 
   return { actions };
 };

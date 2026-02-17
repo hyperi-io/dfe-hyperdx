@@ -35,7 +35,7 @@ export const withAppNav = (page: React.ReactNode) => {
                   <Link
                     href="https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started"
                     target="_blank"
-                    rel="noopener norefeer"
+                    rel="noopener noreferrer"
                   >
                     ClickStack Docs
                   </Link>
@@ -47,7 +47,7 @@ export const withAppNav = (page: React.ReactNode) => {
         <div className="d-flex" style={{ height: '100%', overflow: 'hidden' }}>
           <AppNav />
           <div
-            className="w-100 min-w-0"
+            className="min-w-0 w-100"
             style={{ minWidth: 0, overflow: 'auto' }}
           >
             {page}
