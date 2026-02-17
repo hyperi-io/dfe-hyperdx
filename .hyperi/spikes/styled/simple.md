@@ -76,11 +76,14 @@ HyperDX includes a number of features that may need to be trimmed down/removed
 
 ## Notable Files for Customization
 
-| Area             | Location                                                    |
-| ---------------- | ----------------------------------------------------------- |
-| Theme registry   | `packages/app/src/theme/index.ts`                           |
-| Theme components | `packages/app/src/theme/themes/{theme}/`                    |
-| Page titles      | `theme.displayName` (from `_app.tsx`)                       |
-| Hardcoded brand  | `LandingHeader.tsx`, `AuthPage.tsx`, `Spotlights.tsx`, etc. |
-| External links   | `hyperdx.io`, `clickhouse.com/docs`                         |
-| User preferences |
+| Area              | Location                                                    |
+| ----------------- | ----------------------------------------------------------- |
+| Theme registry    | `packages/app/src/theme/index.ts`                           |
+| Theme components  | `packages/app/src/theme/themes/{theme}/`                    |
+| Page titles       | `theme.displayName` (from `_app.tsx`)                       |
+| Hardcoded brand   | `LandingHeader.tsx`, `AuthPage.tsx`, `Spotlights.tsx`, etc. |
+| External links    | `hyperdx.io`, `clickhouse.com/docs`                         |
+| User preferences  | AppNavUserMenu, Spotlights                                  |
+| Help              | AppNavHelpMenu                                              |
+| Clickhouse deploy | AppNavCloudBanner                                           |
+| Get started       | OnboardingChecklist                                         |
