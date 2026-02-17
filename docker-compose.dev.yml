@@ -87,8 +87,8 @@ services:
   ch-server:
     image: clickhouse/clickhouse-server:25.7-alpine
     ports:
-      - 8123:8123 # http api
-      - 9000:9000 # native
+      - 8124:8123 # http api
+      - 9001:9000 # native
     environment:
       # default settings
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
