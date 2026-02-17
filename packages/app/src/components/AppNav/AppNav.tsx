@@ -842,7 +842,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
                     )
                   )}
 
-                  <AppNavGroupLabel
+                  {/* <AppNavGroupLabel
                     name="Presets"
                     collapsed={isDashboardsPresetsCollapsed}
                     onClick={() =>
@@ -850,8 +850,8 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
                         !isDashboardsPresetsCollapsed,
                       )
                     }
-                  />
-                  <Collapse in={!isDashboardsPresetsCollapsed}>
+                  /> */}
+                  {/* <Collapse in={!isDashboardsPresetsCollapsed}>
                     <Link
                       href={`/clickhouse`}
                       tabIndex={0}
@@ -887,7 +887,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
                         Kubernetes
                       </Link>
                     )}
-                  </Collapse>
+                  </Collapse> */}
                 </div>
               </Collapse>
             )}
