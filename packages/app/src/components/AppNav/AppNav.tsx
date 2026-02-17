@@ -914,10 +914,10 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
         </ScrollArea>
 
         <div className={styles.footer} style={{ width: navWidth }}>
-          <AppNavHelpMenu
+          {/* <AppNavHelpMenu
             version={APP_VERSION}
             onAddDataClick={openInstallInstructions}
-          />
+          /> */}
           <AppNavUserMenu
             userName={meData?.name}
             teamName={meData?.team?.name}

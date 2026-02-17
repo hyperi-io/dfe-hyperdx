@@ -46,8 +46,8 @@ HyperDX includes a number of features that may need to be trimmed down/removed
       able to set these up)
     - Review if there are any features we would like to allow use to control
       (add a separate config area in dfe-ui so that we can use RBAC)
-- Help Popup (remove) - all setup should be handled by HyperI (end-user should
-  not be able to set these up)
+- ✅ Help Popup (remove) | AppNavHelpMenu - all setup should be handled by
+  HyperI (end-user should not be able to set these up)
 - ✅ Deploy to clickhouse cloud banner (remove) | AppNavCloudBanner - all setup
   should be handled by HyperI (end-user should not be able to set these up)
 - ✅ Get started banner (remove) | OnboardingChecklist - all setup should be
