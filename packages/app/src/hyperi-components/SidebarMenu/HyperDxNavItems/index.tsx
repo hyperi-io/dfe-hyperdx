@@ -34,7 +34,6 @@ import {
 } from '@tabler/icons-react';
 
 import api from '@/api';
-import { AppNavLink } from '@/components/AppNav/AppNav.components';
 import { IS_LOCAL_MODE } from '@/config';
 import {
   useCreateDashboard,
@@ -43,6 +42,8 @@ import {
 } from '@/dashboard';
 import { useSavedSearches, useUpdateSavedSearch } from '@/savedSearch';
 import type { SavedSearch, ServerDashboard } from '@/types';
+
+import { AppNavLink } from './HyperDxNavItems.components';
 
 import styles from './HyperDxNavItems.module.scss';
 
