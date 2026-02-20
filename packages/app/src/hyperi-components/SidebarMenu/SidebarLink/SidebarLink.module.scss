@@ -1,0 +1,42 @@
+$spacing-xs: 4px;
+$font-size-md: 14px;
+
+.hyperiSidebarLink {
+  color: var(--color-brand-foreground-muted);
+  text-decoration: none;
+  font-size: $font-size-md;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  gap: 12px;
+  padding: 8px 32px;
+  align-content: center;
+  height: 100%;
+  font-weight: 300;
+  line-height: 1.5;
+
+  &:hover {
+    color: var(--color-brand-foreground);
+  }
+}
+
+.hyperiSidebarLinkIconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hyperiSidebarLinkIcon {
+  stroke: #6d6d6d;
+}
+
+.hyperiSidebarLinkIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hyperiSidebarLinkActive {
+  color: var(--color-text-sidenav-link-active);
+  border: 1px solid var(--color-bg-sidenav-link-active);
+}

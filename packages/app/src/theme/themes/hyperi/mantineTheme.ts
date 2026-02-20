@@ -19,7 +19,7 @@ import {
  * Style: Modern, professional
  */
 export const makeTheme = ({
-  fontFamily = '"Martel Sans", sans-serif',
+  fontFamily = '"system-ui", sans-serif',
 }: {
   fontFamily?: string;
 }): MantineThemeOverride => ({

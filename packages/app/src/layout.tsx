@@ -2,8 +2,8 @@ import React from 'react';
 import Link from 'next/link';
 import { Box, Center, Text } from '@mantine/core';
 
-import AppNav from '@/components/AppNav';
 import { IS_CLICKHOUSE_BUILD } from '@/config';
+import AppNav from '@/hyperi-components/AppNav';
 
 import { HDXSpotlightProvider } from './Spotlights';
 

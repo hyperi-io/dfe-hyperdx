@@ -1,0 +1,29 @@
+.hyperiSidebarMenu {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+
+  &Collapsed {
+    max-width: 96px;
+  }
+
+  &Expanded {
+    max-width: 384px;
+  }
+}
+
+.hyperiSidebarMenuItem {
+  color: var(--color-brand-foreground-muted);
+
+  &:hover {
+    background-color: color-mix(
+      in srgb,
+      var(--color-brand-secondary) 20%,
+      transparent
+    );
+    color: var(--color-brand-foreground);
+  }
+}
