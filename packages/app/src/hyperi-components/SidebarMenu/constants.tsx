@@ -1,5 +1,4 @@
 import {
-  IconChartFunnel as FunnelPlotOutlined,
   IconDatabase as DatabaseOutlined,
   IconFilter as FilterOutlined,
   IconFocus2 as AimOutlined,
@@ -18,19 +17,6 @@ const dfeUiBaseUrl =
   process.env.NEXT_PUBLIC_DFE_UI_BASE_URL ?? 'http://localhost:5174';
 
 export const featureFlagSidebarMenuItems = [
-  {
-    key: '/discovery',
-    Component: ({ collapsed }: SidebarMenuProps) => (
-      <SidebarLink
-        collapsed={collapsed}
-        item={{
-          key: `${dfeUiBaseUrl}/discovery`,
-          icon: <FunnelPlotOutlined size={16} />,
-          label: 'Discovery',
-        }}
-      />
-    ),
-  },
   {
     key: '/schemas',
     Component: ({ collapsed }: SidebarMenuProps) => (

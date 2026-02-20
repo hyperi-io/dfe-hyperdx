@@ -19,7 +19,6 @@ import {
   Group,
   Input,
   Loader,
-  ScrollArea,
 } from '@mantine/core';
 import { useLocalStorage } from '@mantine/hooks';
 import {
@@ -35,10 +34,7 @@ import {
 } from '@tabler/icons-react';
 
 import api from '@/api';
-import {
-  AppNavContext,
-  AppNavLink,
-} from '@/components/AppNav/AppNav.components';
+import { AppNavLink } from '@/components/AppNav/AppNav.components';
 import { IS_LOCAL_MODE } from '@/config';
 import {
   useCreateDashboard,
@@ -46,9 +42,7 @@ import {
   useUpdateDashboard,
 } from '@/dashboard';
 import { useSavedSearches, useUpdateSavedSearch } from '@/savedSearch';
-import { useLogomark, useWordmark } from '@/theme/ThemeProvider';
 import type { SavedSearch, ServerDashboard } from '@/types';
-import { useWindowSize } from '@/utils';
 
 import styles from './HyperDxNavItems.module.scss';
 
@@ -580,13 +574,7 @@ export const HyperDxNavItems = ({
   );
 
   return (
-    <ScrollArea
-      type="scroll"
-      scrollbarSize={6}
-      scrollHideDelay={100}
-      classNames={styles}
-      className={styles.scrollContainer}
-    >
+    <>
       <div className={styles.navLinks}>
         {/* Search */}
         <AppNavLink
@@ -717,6 +705,6 @@ export const HyperDxNavItems = ({
           </Collapse>
         )}
       </div>
-    </ScrollArea>
+    </>
   );
 };
