@@ -2,7 +2,7 @@ $spacing-xs: 4px;
 $font-size-md: 14px;
 
 .hyperiSidebarLink {
-  color: var(--color-brand-foreground-muted);
+  color: var(--color-brand-foreground-soft);
   text-decoration: none;
   font-size: $font-size-md;
   display: flex;
@@ -17,6 +17,10 @@ $font-size-md: 14px;
 
   &:hover {
     color: var(--color-brand-foreground);
+
+    .hyperiSidebarLinkIcon {
+      stroke: var(--color-brand-foreground);
+    }
   }
 }
 
@@ -27,7 +31,7 @@ $font-size-md: 14px;
 }
 
 .hyperiSidebarLinkIcon {
-  stroke: #6d6d6d;
+  stroke: var(--color-brand-foreground-soft);
 }
 
 .hyperiSidebarLinkIcon {

@@ -1,0 +1,30 @@
+$user-actions-button-size: 32px;
+
+.userActionsButton {
+  border-radius: 50%;
+  min-height: $user-actions-button-size;
+  min-width: $user-actions-button-size;
+  background: var(--color-brand-background-muted);
+  margin-left: -4px;
+
+  &:hover {
+    background: color-mix(
+      in oklab, var(--color-brand-foreground) 10%, transparent
+    );
+  }
+}
+
+.userActionsButtonDropdownButton {
+  font-weight: 300;
+  font-size: 14px;
+
+  &:hover {
+    background: none;
+    border: var(--color-brand-secondary) 1px solid;
+    color: var(--color-brand-secondary);
+
+    svg {
+      stroke: var(--color-brand-secondary);
+    }
+  }
+}

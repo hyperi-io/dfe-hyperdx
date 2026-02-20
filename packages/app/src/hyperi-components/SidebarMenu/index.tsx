@@ -1,5 +1,8 @@
 import { ScrollArea } from '@mantine/core';
 
+import { ThemeToggle } from '../ThemeToggle';
+import { UserActionsButton } from '../UserActionsButton';
+
 import { featureFlagSidebarMenuItems } from './constants';
 import { HyperDxNavItems } from './HyperDxNavItems';
 
@@ -7,10 +10,9 @@ import styles from './SidebarMenu.module.scss';
 
 interface SidebarMenuProps {
   isCollapsed: boolean;
-  pathname: string;
 }
 
-export const SidebarMenu = ({ isCollapsed, pathname }: SidebarMenuProps) => {
+export const SidebarMenu = ({ isCollapsed }: SidebarMenuProps) => {
   return (
     <ScrollArea
       type="scroll"
@@ -19,17 +21,30 @@ export const SidebarMenu = ({ isCollapsed, pathname }: SidebarMenuProps) => {
       classNames={styles}
       className={styles.scrollContainer}
     >
-      <ul className={styles.hyperiSidebarMenu}>
-        <li>
-          <HyperDxNavItems isCollapsed={isCollapsed} pathname={pathname} />
-        </li>
-
-        {featureFlagSidebarMenuItems.map(item => (
-          <li className={styles.hyperiSidebarMenuItem} key={item.key}>
-            <item.Component collapsed={isCollapsed} />
+      <div className={styles.scrollContainerContent}>
+        <ul className={styles.hyperiSidebarMenu}>
+          <li>
+            <HyperDxNavItems isCollapsed={isCollapsed} />
           </li>
-        ))}
-      </ul>
+
+          {featureFlagSidebarMenuItems.map(item => (
+            <li className={styles.hyperiSidebarMenuItem} key={item.key}>
+              <item.Component collapsed={isCollapsed} />
+            </li>
+          ))}
+        </ul>
+
+        <div className={styles.hyperiSidebarMenuFooter}>
+          {!isCollapsed && (
+            <p className={styles.hyperiSidebarMenuFooterText}>v1.0.0</p>
+          )}
+          <ThemeToggle
+            className={styles.hyperiSidebarMenuFooterThemeToggle}
+            collapsed={isCollapsed}
+          />
+          <UserActionsButton collapsed={isCollapsed} />
+        </div>
+      </div>
     </ScrollArea>
   );
 };

@@ -37,98 +37,6 @@ $transition-slow: 0.2s ease;
   }
 }
 
-/* Layout */
-
-.navGhost {
-  transition: width 0.2s ease;
-  will-change: width;
-}
-
-.nav {
-  height: 100vh;
-  max-height: 100vh;
-  display: flex;
-  flex-flow: column nowrap;
-  justify-content: space-between;
-  border-right: 1px solid var(--color-border);
-  background: var(--color-bg-sidenav);
-  overflow: hidden;
-  transition: width 0.2s ease;
-  flex-shrink: 0;
-
-  &Fixed {
-    position: fixed;
-  }
-
-  &Collapsed {
-    .navLinks {
-      padding-inline: 0;
-      align-items: center;
-    }
-
-    .navItem {
-      padding-inline: $spacing-sm;
-      justify-content: center;
-      height: $nav-item-height-collapsed;
-      margin-block: $spacing-xs;
-    }
-
-    .navItemIcon {
-      margin-right: 0;
-    }
-  }
-}
-
-.header {
-  padding-inline: $spacing-lg;
-  padding-block: $spacing-md;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-
-  &Expanded {
-    height: $header-height;
-  }
-
-  &Collapsed {
-    flex-flow: column nowrap;
-    justify-content: flex-start;
-    align-items: center;
-    padding-inline: 0;
-    padding-block: $spacing-md;
-    min-height: $header-height;
-    gap: $spacing-sm;
-    width: 100%;
-  }
-}
-
-.logoLink {
-  text-decoration: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text);
-}
-
-.logoIconWrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.collapseButton {
-  margin-right: -$spacing-xs;
-  margin-left: -$spacing-xs;
-
-  &Collapsed {
-    transform: rotate(180deg);
-    margin-top: 0;
-    margin-right: 0;
-    margin-left: 0;
-  }
-}
-
 /* Navigation Links */
 
 .navLinks {
@@ -137,7 +45,7 @@ $transition-slow: 0.2s ease;
 }
 
 .navItem {
-  color: var(--color-brand-foreground-muted);
+  color: var(--color-brand-foreground-soft);
   text-decoration: none;
   font-size: $font-size-lg;
   display: flex;
@@ -160,6 +68,10 @@ $transition-slow: 0.2s ease;
       transparent
     );
     color: var(--color-brand-foreground);
+
+    .navItemIcon svg {
+      stroke: var(--color-brand-foreground);
+    }
   }
 
   &:focus-visible {
@@ -171,14 +83,13 @@ $transition-slow: 0.2s ease;
     );
   }
 
-  &:active {
-    color: var(--color-text-sidenav-link-active);
-    border: 4px solid var(--color-brand-secondary);
-  }
-
   &Active {
     color: var(--color-text-sidenav-link-active);
-    border: 4px solid var(--color-brand-secondary);
+    border-right: 4px solid var(--color-brand-secondary);
+
+    .navItemIcon svg {
+      stroke: var(--color-brand-foreground);
+    }
 
     &:hover {
       background: color-mix(
@@ -204,7 +115,7 @@ $transition-slow: 0.2s ease;
 }
 
 .navItemIcon svg {
-  stroke: #6d6d6d;
+  stroke: var(--color-brand-foreground-soft);
 }
 
 .navItemBadge {
@@ -248,7 +159,7 @@ $transition-slow: 0.2s ease;
 
 .subMenuItem {
   display: block;
-  color: var(--color-brand-foreground-muted);
+  color: var(--color-brand-foreground-soft);
   text-decoration: none;
   font-size: $font-size-md;
   padding-left: $spacing-lg;
@@ -261,7 +172,6 @@ $transition-slow: 0.2s ease;
   margin-bottom: 2px;
 
   &:hover {
-    color: var(--color-brand-foreground);
     background: color-mix(
       in srgb,
       var(--color-brand-secondary) 20%,
@@ -347,113 +257,4 @@ $transition-slow: 0.2s ease;
   margin: $spacing-sm $spacing-lg;
 
   @include text-truncate;
-}
-
-/* User Menu */
-
-.userMenu {
-  pointer-events: all;
-  cursor: pointer;
-  margin: $spacing-sm;
-  padding: $spacing-xs $spacing-sm;
-  border-radius: $radius-md;
-  transition:
-    background-color $transition-slow,
-    transform $transition-fast;
-  max-width: 100%;
-  overflow: hidden;
-
-  &:hover {
-    background: var(--color-bg-sidenav-link-active);
-  }
-
-  @include interactive-press;
-
-  &Collapsed {
-    padding: 2px;
-    margin: $spacing-sm auto 0.875rem;
-    background: transparent;
-    border: none !important;
-    width: fit-content;
-
-    &:hover {
-      background: var(--color-bg-sidenav-link-active);
-    }
-
-    @include interactive-press;
-  }
-}
-
-.userMenuInfo {
-  flex: 1;
-  overflow: hidden;
-}
-
-.userMenuName {
-  max-width: 100%;
-
-  @include text-truncate;
-}
-
-.userMenuTeam {
-  font-size: $font-size-sm;
-  max-width: 100%;
-  max-height: $spacing-lg;
-
-  @include text-truncate;
-}
-
-/* Help Button */
-
-.helpButton {
-  @include flex-center;
-
-  pointer-events: all;
-  cursor: pointer;
-  margin: 0 $spacing-sm $spacing-sm;
-  width: $help-button-size;
-  height: $help-button-size;
-  border-radius: 50%;
-  border: 1px solid var(--color-border);
-  transition:
-    background-color $transition-slow,
-    transform $transition-fast,
-    border-color $transition-slow;
-
-  &:hover {
-    background: var(--color-bg-sidenav-link-active);
-    border-color: var(--color-border);
-  }
-
-  @include interactive-press;
-
-  &Collapsed {
-    margin: 0 auto $spacing-sm;
-    border: none;
-    background: transparent;
-
-    &:hover {
-      background: var(--color-bg-sidenav-link-active);
-    }
-
-    @include interactive-press;
-  }
-}
-
-/* Onboarding Section */
-
-.onboardingSection {
-  padding-left: $spacing-sm;
-  padding-right: $spacing-md;
-  margin-bottom: $spacing-sm;
-  margin-top: $spacing-lg;
-  padding-bottom: 80px;
-}
-
-/* Scrollbar Customization */
-
-.scrollbar {
-  .thumb {
-    background-color: var(--color-border);
-  }
 }

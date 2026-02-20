@@ -1,3 +1,10 @@
+$font-size-sm: 14px;
+$color-gray-400: #99a1af;
+$spacing-xs: 4px;
+$spacing-sm: 8px;
+$spacing-md: 16px;
+$spacing-xl: 28px;
+
 .hyperiSidebarMenu {
   display: flex;
   flex-direction: column;
@@ -5,7 +12,6 @@
   padding: 0;
   margin: 0;
   overflow: hidden;
-  padding-bottom: 24px;
 
   &Collapsed {
     max-width: 96px;
@@ -30,7 +36,38 @@
 }
 
 .scrollContainer {
-  max-height: 100%;
+  max-height: 100vh;
+  height: 100%;
+}
+
+.scrollContainer > div > div {
+  height: 100%;
+}
+
+.hyperiSidebarMenuFooter {
+  display: flex;
+  gap: $spacing-sm $spacing-xs;
+  flex-wrap: wrap;
+  padding-inline: $spacing-xl;
+  align-content: flex-end;
+  width: 100%;
+  align-items: center;
+  margin-top: $spacing-xl;
+  margin-bottom: $spacing-md;
+}
+
+.hyperiSidebarMenuFooterText {
+  font-size: $font-size-sm;
+  color: $color-gray-400;
+  margin: 0;
+  margin-right: auto;
+}
+
+.hyperiSidebarMenuFooterThemeToggle {
+  margin-right: $spacing-sm;
+}
+
+.scrollContainerContent {
   height: 100%;
   display: flex;
   flex-direction: column;

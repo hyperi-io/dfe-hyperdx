@@ -22,6 +22,7 @@ const basePath = process.env.NEXT_PUBLIC_HYPERDX_BASE_PATH;
 const nextConfig = {
   reactCompiler: true,
   basePath: basePath,
+  devIndicators: false,
   env: {
     // Ensures bundler-time replacements for client/server code that references this env var
     NEXT_PUBLIC_APP_VERSION: version,

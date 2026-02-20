@@ -10,8 +10,6 @@ import {
   useQueryParams,
   withDefault,
 } from 'use-query-params';
-import HyperDX from '@hyperdx/browser';
-import { AlertState } from '@hyperdx/common-utils/dist/types';
 import {
   Button,
   CloseButton,
@@ -19,11 +17,10 @@ import {
   Group,
   Input,
   Loader,
+  Tooltip,
 } from '@mantine/core';
 import { useLocalStorage } from '@mantine/hooks';
 import {
-  IconBell,
-  IconBellFilled,
   IconChartDots,
   IconChevronDown,
   IconChevronRight,
@@ -33,7 +30,6 @@ import {
   IconTable,
 } from '@tabler/icons-react';
 
-import api from '@/api';
 import { IS_LOCAL_MODE } from '@/config';
 import {
   useCreateDashboard,
@@ -347,10 +343,8 @@ function useSearchableList<T extends AppNavLinkItem>({
 
 export const HyperDxNavItems = ({
   isCollapsed = false,
-  pathname,
 }: {
   isCollapsed: boolean;
-  pathname: string;
 }) => {
   useEffect(() => {
     let redirectUrl;
@@ -398,8 +392,6 @@ export const HyperDxNavItems = ({
     enableBatching: true,
   });
 
-  const { data: meData } = api.useMe();
-
   const [isSearchExpanded, setIsSearchExpanded] = useLocalStorage<boolean>({
     key: 'isSearchExpanded',
     defaultValue: true,
@@ -409,26 +401,6 @@ export const HyperDxNavItems = ({
       key: 'isDashboardsExpanded',
       defaultValue: true,
     });
-
-  const navWidth = isCollapsed ? 50 : 250;
-
-  useEffect(() => {
-    HyperDX.addAction('user navigated', {
-      route: pathname,
-      query: JSON.stringify(query),
-    });
-  }, [pathname, query]);
-
-  useEffect(() => {
-    if (meData != null) {
-      HyperDX.enableAdvancedNetworkCapture();
-      HyperDX.setGlobalAttributes({
-        userEmail: meData.email,
-        userName: meData.name,
-        teamName: meData.team.name,
-      });
-    }
-  }, [meData]);
 
   const {
     q: searchesListQ,
@@ -477,22 +449,6 @@ export const HyperDxNavItems = ({
       >
         <Group gap={2}>
           <div className="d-inline-block text-truncate">{savedSearch.name}</div>
-          {Array.isArray(savedSearch.alerts) &&
-          savedSearch.alerts.length > 0 ? (
-            savedSearch.alerts.some(a => a.state === AlertState.ALERT) ? (
-              <IconBellFilled
-                size={14}
-                className="float-end text-danger ms-1"
-                aria-label="Has Alerts and is in ALERT state"
-              />
-            ) : (
-              <IconBell
-                size={14}
-                className="float-end ms-1"
-                aria-label="Has Alerts and is in OK state"
-              />
-            )
-          ) : null}
         </Group>
       </Link>
     ),
@@ -578,18 +534,35 @@ export const HyperDxNavItems = ({
     <>
       <div className={styles.navLinks}>
         {/* Search */}
-        <AppNavLink
-          label="Search"
-          icon={<IconTable size={16} />}
-          href="/search"
-          isExpanded={isSearchExpanded}
-          onToggle={
-            !IS_LOCAL_MODE
-              ? () => setIsSearchExpanded(!isSearchExpanded)
-              : undefined
-          }
-        />
-
+        {isCollapsed ? (
+          <Tooltip color="dark.5" label="Search" withArrow position="right">
+            <span style={{ display: 'flex', width: '100%' }}>
+              <AppNavLink
+                label="Search"
+                icon={<IconTable size={16} />}
+                href="/search"
+                isExpanded={isSearchExpanded}
+                onToggle={
+                  !IS_LOCAL_MODE
+                    ? () => setIsSearchExpanded(!isSearchExpanded)
+                    : undefined
+                }
+              />
+            </span>
+          </Tooltip>
+        ) : (
+          <AppNavLink
+            label="Search"
+            icon={<IconTable size={16} />}
+            href="/search"
+            isExpanded={isSearchExpanded}
+            onToggle={
+              !IS_LOCAL_MODE
+                ? () => setIsSearchExpanded(!isSearchExpanded)
+                : undefined
+            }
+          />
+        )}
         {!isCollapsed && (
           <Collapse in={isSearchExpanded}>
             <div className={styles.subMenu}>
@@ -636,28 +609,46 @@ export const HyperDxNavItems = ({
             </div>
           </Collapse>
         )}
-        {/* Simple nav links from config */}
-        {NAV_LINKS.filter(link => !link.cloudOnly || !IS_LOCAL_MODE).map(
-          link => (
-            <AppNavLink
-              key={link.id}
-              label={link.label}
-              href={link.href}
-              icon={link.icon}
-              isBeta={link.isBeta}
-            />
-          ),
+        {/* Charts */}
+        {isCollapsed ? (
+          <Tooltip color="dark.5" label="Charts" withArrow position="right">
+            <span style={{ display: 'flex', width: '100%' }}>
+              <AppNavLink
+                label="Chart Explorer"
+                href="/chart"
+                icon={<IconChartDots size={16} />}
+              />
+            </span>
+          </Tooltip>
+        ) : (
+          <AppNavLink
+            label="Chart Explorer"
+            href="/chart"
+            icon={<IconChartDots size={16} />}
+          />
         )}
-
         {/* Dashboards */}
-        <AppNavLink
-          label="Dashboards"
-          href="/dashboards"
-          icon={<IconLayoutGrid size={16} />}
-          isExpanded={isDashboardsExpanded}
-          onToggle={() => setIsDashboardExpanded(!isDashboardsExpanded)}
-        />
-
+        {isCollapsed ? (
+          <Tooltip color="dark.5" label="Dashboards" withArrow position="right">
+            <span style={{ display: 'flex', width: '100%' }}>
+              <AppNavLink
+                label="Dashboards"
+                href="/dashboards"
+                icon={<IconLayoutGrid size={16} />}
+                isExpanded={isDashboardsExpanded}
+                onToggle={() => setIsDashboardExpanded(!isDashboardsExpanded)}
+              />
+            </span>
+          </Tooltip>
+        ) : (
+          <AppNavLink
+            label="Dashboards"
+            href="/dashboards"
+            icon={<IconLayoutGrid size={16} />}
+            isExpanded={isDashboardsExpanded}
+            onToggle={() => setIsDashboardExpanded(!isDashboardsExpanded)}
+          />
+        )}
         {!isCollapsed && (
           <Collapse in={isDashboardsExpanded}>
             <div className={styles.subMenu}>

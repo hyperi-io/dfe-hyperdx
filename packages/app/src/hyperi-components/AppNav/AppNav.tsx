@@ -85,7 +85,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
             </span>
           </div>
         </div>
-        <SidebarMenu isCollapsed={isCollapsed} pathname={pathname} />
+        <SidebarMenu isCollapsed={isCollapsed} />
       </div>
     </AppNavContext.Provider>
   );

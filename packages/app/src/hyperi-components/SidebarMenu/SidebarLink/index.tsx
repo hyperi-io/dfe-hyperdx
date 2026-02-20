@@ -1,4 +1,4 @@
-import { cloneElement } from 'react';
+import { cloneElement, forwardRef } from 'react';
 import { Tooltip } from '@mantine/core';
 import { Icon } from '@tabler/icons-react';
 
@@ -13,17 +13,17 @@ interface SidebarLinkProps {
   };
 }
 
-const SidebarLinkContent = ({ collapsed, item }: SidebarLinkProps) => {
-  return (
-    <a href={item.key} className={styles.hyperiSidebarLink}>
+const SidebarLinkContent = forwardRef<HTMLAnchorElement, SidebarLinkProps>(
+  ({ collapsed, item }, ref) => (
+    <a ref={ref} href={item.key} className={styles.hyperiSidebarLink}>
       <span className={styles.hyperiSidebarLinkIconWrapper}>
         {cloneElement(item.icon, { className: styles.hyperiSidebarLinkIcon })}
       </span>
 
       {!collapsed && <span>{item.label}</span>}
     </a>
-  );
-};
+  ),
+);
 
 export const SidebarLink = ({ collapsed, item }: SidebarLinkProps) => {
   if (!collapsed) {
@@ -31,7 +31,7 @@ export const SidebarLink = ({ collapsed, item }: SidebarLinkProps) => {
   }
 
   return (
-    <Tooltip label={item.label} position="right">
+    <Tooltip color="dark.5" withArrow label={item.label} position="right">
       <SidebarLinkContent collapsed={collapsed} item={item} />
     </Tooltip>
   );

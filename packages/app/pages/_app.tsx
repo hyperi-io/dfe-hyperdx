@@ -14,7 +14,6 @@ import {
   QueryClient,
   QueryClientProvider,
 } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 import { DynamicFavicon } from '@/components/DynamicFavicon';
 import { IS_LOCAL_MODE } from '@/config';
@@ -198,7 +197,6 @@ export default function MyApp({ Component, pageProps }: AppPropsWithLayout) {
                 pageProps={pageProps}
                 confirmModal={confirmModal}
               />
-              <ReactQueryDevtools initialIsOpen={true} />
             </QueryClientProvider>
           </QueryParamProvider>
         </HDXQueryParamProvider>

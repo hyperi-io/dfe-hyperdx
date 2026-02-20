@@ -23,8 +23,10 @@
 
   --color-brand-foreground: #ffffff;
   --color-brand-foreground-muted: #dddddd;
+  --color-brand-foreground-soft: #b7bcc1;
   --color-brand-background: #141414;
   --color-brand-background-muted: #000000;
+  --color-brand-background-accent: #011529;
 
   /* Backgrounds */
   --color-bg-body: var(--mantine-color-dark-9);
@@ -53,7 +55,7 @@
   --color-primary-button-text: var(--color-brand-foreground);
 
   /* Borders & Dividers */
-  --color-border: rgb(235 230 231);
+  --color-border: #303030;
   --color-border-muted: rgb(255 255 255 / 8%);
 
   /* Text */
@@ -132,8 +134,10 @@
 
   --color-brand-foreground: #000000;
   --color-brand-foreground-muted: #222222;
+  --color-brand-foreground-soft: #6d6d6d;
   --color-brand-background: #f5f5f5;
   --color-brand-background-muted: #e5e7eb;
+  --color-brand-background-accent: #f5f5f5;
 
   /* Mantine Overrides */
   --mantine-color-body: var(--color-bg-body);
