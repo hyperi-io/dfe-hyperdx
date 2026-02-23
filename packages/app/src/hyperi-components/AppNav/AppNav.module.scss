@@ -17,7 +17,7 @@ $header-height: 64px;
   display: flex;
   flex-flow: column nowrap;
   border-right: 1px solid var(--color-border);
-  background: var(--color-brand-background-accent);
+  background: var(--color-bg-sidenav);
   transition: width 0.2s ease;
   flex-shrink: 0;
   position: relative;
@@ -50,7 +50,7 @@ $header-height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text);
+  color: var(--color-brand-foreground);
   margin: auto;
 }
 
@@ -68,6 +68,11 @@ $header-height: 64px;
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  &:focus-visible {
+    outline-color: var(--color-brand-secondary);
+    border-radius: 100%;
   }
 
   &Collapsed {

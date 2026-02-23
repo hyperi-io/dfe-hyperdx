@@ -22,6 +22,15 @@ $font-size-md: 14px;
       stroke: var(--color-brand-foreground);
     }
   }
+
+  &:focus-visible {
+    outline: none;
+    background-color: color-mix(
+      in srgb,
+      var(--color-brand-secondary) 20%,
+      transparent
+    );
+  }
 }
 
 .hyperiSidebarLinkIconWrapper {
