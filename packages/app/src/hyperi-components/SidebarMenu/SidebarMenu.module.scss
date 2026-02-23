@@ -1,0 +1,75 @@
+$font-size-sm: 14px;
+$color-gray-400: #99a1af;
+$spacing-xs: 4px;
+$spacing-sm: 8px;
+$spacing-md: 16px;
+$spacing-xl: 28px;
+
+.hyperiSidebarMenu {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+
+  &Collapsed {
+    max-width: 96px;
+  }
+
+  &Expanded {
+    max-width: 384px;
+  }
+}
+
+.hyperiSidebarMenuItem {
+  color: var(--color-brand-foreground-muted);
+
+  &:hover {
+    background-color: color-mix(
+      in srgb,
+      var(--color-brand-secondary) 20%,
+      transparent
+    );
+    color: var(--color-brand-foreground);
+  }
+}
+
+.scrollContainer {
+  max-height: 100vh;
+  height: 100%;
+}
+
+.scrollContainer > div > div {
+  height: 100%;
+}
+
+.hyperiSidebarMenuFooter {
+  display: flex;
+  gap: $spacing-sm $spacing-xs;
+  flex-wrap: wrap;
+  padding-inline: $spacing-xl;
+  align-content: flex-end;
+  width: 100%;
+  align-items: center;
+  margin-top: $spacing-xl;
+  margin-bottom: $spacing-md;
+}
+
+.hyperiSidebarMenuFooterText {
+  font-size: $font-size-sm;
+  color: $color-gray-400;
+  margin: 0;
+  margin-right: auto;
+}
+
+.hyperiSidebarMenuFooterThemeToggle {
+  margin-right: $spacing-sm;
+}
+
+.scrollContainerContent {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
