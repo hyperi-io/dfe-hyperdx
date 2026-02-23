@@ -46,6 +46,7 @@
     "dev:down": "docker compose -f docker-compose.dev.yml down",
     "dev:compose": "docker compose -f docker-compose.dev.yml",
     "lint": "npx nx run-many -t ci:lint",
+    "audit": "bash scripts/audit.sh",
     "version": "make version",
     "release": "npx changeset tag && npx changeset publish"
   },

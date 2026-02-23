@@ -1,0 +1,103 @@
+$spacing-xs: 4px;
+$spacing-sm: 8px;
+$spacing-md: 12px;
+$spacing-lg: 16px;
+$header-height: 64px;
+
+/* Layout */
+
+.navGhost {
+  transition: width 0.2s ease;
+  will-change: width;
+}
+
+.nav {
+  height: 100vh;
+  max-height: 100vh;
+  display: flex;
+  flex-flow: column nowrap;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-bg-sidenav);
+  transition: width 0.2s ease;
+  flex-shrink: 0;
+  position: relative;
+
+  &Fixed {
+    position: fixed;
+  }
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  width: 100%;
+  height: $header-height;
+
+  &Collapsed {
+    flex-flow: column nowrap;
+    justify-content: flex-start;
+    align-items: center;
+    padding-inline: 0;
+    padding-block: $spacing-md;
+    min-height: $header-height;
+    gap: $spacing-sm;
+  }
+}
+
+.logoLink {
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-brand-foreground);
+  margin: auto;
+
+  & > div > svg {
+    color: var(--color-brand-logo);
+  }
+}
+
+.logoIconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.collapseButton {
+  margin-right: -$spacing-xs;
+  margin-left: -$spacing-xs;
+
+  span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &:focus-visible {
+    outline-color: var(--color-brand-secondary);
+    border-radius: 100%;
+  }
+
+  &Collapsed {
+    transform: rotate(180deg);
+    margin-top: 0;
+    margin-right: 0;
+    margin-left: 0;
+  }
+}
+
+.hyperiCollapseButton {
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  right: -12px;
+  top: 20px;
+  background-color: var(--color-bg-sidenav);
+  z-index: 9999;
+}

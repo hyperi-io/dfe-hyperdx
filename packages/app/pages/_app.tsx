@@ -14,7 +14,6 @@ import {
   QueryClient,
   QueryClientProvider,
 } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 import { DynamicFavicon } from '@/components/DynamicFavicon';
 import { IS_LOCAL_MODE } from '@/config';
@@ -100,8 +99,13 @@ function AppContent({
 
   // ClickStack theme always uses Inter font - user preference is ignored
   // HyperDX theme allows user to select font preference
+  const isHyperITheme = themeName === 'hyperi';
   const isClickStackTheme = themeName === 'clickstack';
-  const effectiveFont = isClickStackTheme ? 'Inter' : userPreferences.font;
+  const effectiveFont = isHyperITheme
+    ? 'Martel Sans'
+    : isClickStackTheme
+      ? 'Inter'
+      : userPreferences.font;
   const selectedMantineFont = effectiveFont
     ? MANTINE_FONT_MAP[effectiveFont] || undefined
     : undefined;
@@ -193,7 +197,6 @@ export default function MyApp({ Component, pageProps }: AppPropsWithLayout) {
                 pageProps={pageProps}
                 confirmModal={confirmModal}
               />
-              <ReactQueryDevtools initialIsOpen={true} />
             </QueryClientProvider>
           </QueryParamProvider>
         </HDXQueryParamProvider>
