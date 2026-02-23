@@ -92,26 +92,26 @@ const NAV_LINKS: NavLinkConfig[] = [
     href: '/chart',
     icon: <IconChartDots size={16} />,
   },
-  // {
-  //   id: 'alerts',
-  //   label: 'Alerts',
-  //   href: '/alerts',
-  //   icon: <IconBell size={16} />,
-  //   cloudOnly: true,
-  // },
-  // {
-  //   id: 'sessions',
-  //   label: 'Client Sessions',
-  //   href: '/sessions',
-  //   icon: <IconDeviceLaptop size={16} />,
-  // },
-  // {
-  //   id: 'service-map',
-  //   label: 'Service Map',
-  //   href: '/service-map',
-  //   icon: <IconSitemap size={16} />,
-  //   isBeta: true,
-  // },
+  {
+    id: 'alerts',
+    label: 'Alerts',
+    href: '/alerts',
+    icon: <IconBell size={16} />,
+    cloudOnly: true,
+  },
+  {
+    id: 'sessions',
+    label: 'Client Sessions',
+    href: '/sessions',
+    icon: <IconDeviceLaptop size={16} />,
+  },
+  {
+    id: 'service-map',
+    label: 'Service Map',
+    href: '/service-map',
+    icon: <IconSitemap size={16} />,
+    isBeta: true,
+  },
 ];
 
 function NewDashboardButton() {
@@ -842,7 +842,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
                     )
                   )}
 
-                  {/* <AppNavGroupLabel
+                  <AppNavGroupLabel
                     name="Presets"
                     collapsed={isDashboardsPresetsCollapsed}
                     onClick={() =>
@@ -850,8 +850,8 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
                         !isDashboardsPresetsCollapsed,
                       )
                     }
-                  /> */}
-                  {/* <Collapse in={!isDashboardsPresetsCollapsed}>
+                  />
+                  <Collapse in={!isDashboardsPresetsCollapsed}>
                     <Link
                       href={`/clickhouse`}
                       tabIndex={0}
@@ -887,22 +887,22 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
                         Kubernetes
                       </Link>
                     )}
-                  </Collapse> */}
+                  </Collapse>
                 </div>
               </Collapse>
             )}
 
             {/* Team Settings (Cloud only) */}
-            {/* {!IS_LOCAL_MODE && (
+            {!IS_LOCAL_MODE && (
               <AppNavLink
                 label="Team Settings"
                 href="/team"
                 icon={<IconSettings size={16} />}
               />
-            )} */}
+            )}
           </div>
 
-          {/* {!isCollapsed && (
+          {!isCollapsed && (
             <div
               style={{ width: navWidth }}
               className={styles.onboardingSection}
@@ -910,15 +910,15 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
               <OnboardingChecklist onAddDataClick={openInstallInstructions} />
               <AppNavCloudBanner />
             </div>
-          )} */}
+          )}
         </ScrollArea>
 
         <div className={styles.footer} style={{ width: navWidth }}>
-          {/* <AppNavHelpMenu
+          <AppNavHelpMenu
             version={APP_VERSION}
             onAddDataClick={openInstallInstructions}
-          /> */}
-          {/* <AppNavUserMenu
+          />
+          <AppNavUserMenu
             userName={meData?.name}
             teamName={meData?.team?.name}
             onClickUserPreferences={openUserPreferences}
@@ -929,7 +929,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
               referrerPolicy="no-referrer-when-downgrade"
               src="https://static.scarf.sh/a.png?x-pxid=bbc99c42-7a75-4eee-9fb9-2b161fc4acd6"
             />
-          )} */}
+          )}
         </div>
       </div>
       <UserPreferencesModal
