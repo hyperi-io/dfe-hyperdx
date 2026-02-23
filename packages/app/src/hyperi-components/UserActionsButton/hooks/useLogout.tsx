@@ -1,10 +1,10 @@
-const dfeUiBaseUrl = process.env.NEXT_PUBLIC_DFE_UI_BASE_URL ?? '';
+import { DFE_UI_BASE_URL } from '@/config';
 
 const devLogout = () => {
   // For local development, we can just clear the localStorage
   // This is required for development purposes only
   localStorage.removeItem('accessToken');
-  window.location.href = `${dfeUiBaseUrl}/login`;
+  window.location.href = `${DFE_UI_BASE_URL}/login`;
 };
 
 const productionLogout = () => {

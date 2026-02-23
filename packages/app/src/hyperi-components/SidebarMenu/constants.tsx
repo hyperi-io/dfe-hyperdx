@@ -6,14 +6,14 @@ import {
   IconShieldCheck as SafetyCertificateOutlined,
 } from '@tabler/icons-react';
 
+import { DFE_UI_BASE_URL } from '@/config';
+
 import { SidebarLink } from './SidebarLink';
 
 interface SidebarMenuProps {
   collapsed: boolean;
   isNewViewEnabled?: boolean;
 }
-
-const dfeUiBaseUrl = process.env.NEXT_PUBLIC_DFE_UI_BASE_URL ?? '';
 
 export const featureFlagSidebarMenuItems = [
   {
@@ -22,7 +22,7 @@ export const featureFlagSidebarMenuItems = [
       <SidebarLink
         collapsed={collapsed}
         item={{
-          key: `${dfeUiBaseUrl}/schemas`,
+          key: `${DFE_UI_BASE_URL}/schemas`,
           icon: <DatabaseOutlined size={16} />,
           label: 'Schemas',
         }}
@@ -35,7 +35,7 @@ export const featureFlagSidebarMenuItems = [
       <SidebarLink
         collapsed={collapsed}
         item={{
-          key: `${dfeUiBaseUrl}/rules`,
+          key: `${DFE_UI_BASE_URL}/rules`,
           icon: <SafetyCertificateOutlined size={16} />,
           label: 'Rules',
         }}
@@ -48,7 +48,7 @@ export const featureFlagSidebarMenuItems = [
       <SidebarLink
         collapsed={collapsed}
         item={{
-          key: `${dfeUiBaseUrl}/hunts`,
+          key: `${DFE_UI_BASE_URL}/hunts`,
           icon: <AimOutlined size={16} />,
           label: 'Hunts',
         }}
@@ -61,7 +61,7 @@ export const featureFlagSidebarMenuItems = [
       <SidebarLink
         collapsed={collapsed}
         item={{
-          key: `${dfeUiBaseUrl}/ingest`,
+          key: `${DFE_UI_BASE_URL}/ingest`,
           icon: <FilterOutlined size={16} />,
           label: 'Ingest',
         }}
@@ -74,7 +74,7 @@ export const featureFlagSidebarMenuItems = [
       <SidebarLink
         collapsed={collapsed}
         item={{
-          key: `${dfeUiBaseUrl}/settings`,
+          key: `${DFE_UI_BASE_URL}/settings`,
           icon: <SettingOutlined size={16} />,
           label: 'Settings',
         }}
