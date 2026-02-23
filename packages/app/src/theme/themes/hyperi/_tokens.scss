@@ -9,6 +9,7 @@
  */
 
 @mixin base-tokens {
+  --color-brand-dark: #010847;
   --color-brand-primary: #10398f;
   --color-brand-primary-hover: #3964c0;
   --color-brand-secondary: #2ea4f6;
@@ -22,13 +23,13 @@
   @include base-tokens;
 
   --color-custom-accent: #011529;
-
-  --color-brand-foreground: #ffffff;
-  --color-brand-foreground-muted: #dddddd;
+  --color-brand-foreground: #fff;
+  --color-brand-foreground-muted: #ddd;
   --color-brand-foreground-soft: #b7bcc1;
   --color-brand-background: #141414;
-  --color-brand-background-muted: #000000;
+  --color-brand-background-muted: #000;
   --color-brand-background-secondary: #303030;
+  --color-brand-logo: var(--color-brand-foreground);
 
   /* Backgrounds */
   --color-bg-body: var(--mantine-color-dark-9);
@@ -108,7 +109,9 @@
      Note: 1-indexed CSS vars map to 0-indexed COLORS array in utils.ts
      e.g., --color-chart-1 corresponds to COLORS[0] */
   --color-chart-1: var(--color-brand-primary); /* Dark Blue - Brand (primary) */
-  --color-chart-2: var(--color-brand-secondary); /* Light Blue - Brand (secondary) */
+  --color-chart-2: var(
+    --color-brand-secondary
+  ); /* Light Blue - Brand (secondary) */
   --color-chart-3: #efb118; /* Orange */
   --color-chart-4: #ff725c; /* Red */
   --color-chart-5: #6cc5b0; /* Cyan */
@@ -134,12 +137,13 @@
 @mixin light-mode-tokens {
   @include base-tokens;
 
-  --color-brand-foreground: #000000;
-  --color-brand-foreground-muted: #222222;
+  --color-brand-foreground: #000;
+  --color-brand-foreground-muted: #222;
   --color-brand-foreground-soft: #6d6d6d;
-  --color-brand-background: #ffffff;
+  --color-brand-background: #fff;
   --color-brand-background-muted: #f5f5f5;
   --color-brand-background-secondary: #e5e7eb;
+  --color-brand-logo: var(--color-brand-dark);
 
   /* Mantine Overrides */
   --mantine-color-body: var(--color-bg-body);
@@ -221,7 +225,9 @@
 
   /* Chart Colors - Brand blue first, then Observable palette (same for light mode) */
   --color-chart-1: var(--color-brand-primary); /* Dark Blue - Brand (primary) */
-  --color-chart-2: var(--color-brand-secondary); /* Light Blue - Brand (secondary) */
+  --color-chart-2: var(
+    --color-brand-secondary
+  ); /* Light Blue - Brand (secondary) */
   --color-chart-3: #efb118; /* Orange */
   --color-chart-4: #ff725c; /* Red */
   --color-chart-5: #6cc5b0; /* Cyan */

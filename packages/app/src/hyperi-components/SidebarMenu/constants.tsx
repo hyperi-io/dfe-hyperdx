@@ -13,8 +13,7 @@ interface SidebarMenuProps {
   isNewViewEnabled?: boolean;
 }
 
-const dfeUiBaseUrl =
-  process.env.NEXT_PUBLIC_DFE_UI_BASE_URL ?? 'http://localhost:5174';
+const dfeUiBaseUrl = process.env.NEXT_PUBLIC_DFE_UI_BASE_URL ?? '';
 
 export const featureFlagSidebarMenuItems = [
   {

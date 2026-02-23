@@ -9,7 +9,9 @@ $user-actions-button-size: 32px;
 
   &:hover {
     background: color-mix(
-      in oklab, var(--color-brand-foreground) 10%, transparent
+      in oklab,
+      var(--color-brand-foreground) 10%,
+      transparent
     );
   }
 }

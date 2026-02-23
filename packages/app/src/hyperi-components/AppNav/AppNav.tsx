@@ -31,7 +31,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
   const isSmallScreen = (width ?? 1000) < 900;
   const isCollapsed = isSmallScreen || isPreferCollapsed;
 
-  const navWidth = isCollapsed ? 79 : 214;
+  const navWidth = isCollapsed ? 79 : 250;
 
   return (
     <AppNavContext.Provider value={{ isCollapsed, pathname }}>

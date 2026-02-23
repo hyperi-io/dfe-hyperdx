@@ -52,6 +52,10 @@ $header-height: 64px;
   justify-content: center;
   color: var(--color-brand-foreground);
   margin: auto;
+
+  & > div > svg {
+    color: var(--color-brand-logo);
+  }
 }
 
 .logoIconWrapper {
