@@ -17,6 +17,10 @@
 # Values: python, typescript, golang, none
 language: typescript
 
+# Runners
+runners:
+  default: 'arc-runner-16cpu'
+
 # Quality checks
 quality:
   enabled: true
@@ -38,7 +42,7 @@ test:
 build:
   enabled: true
   strategies:
-    - native               # Standard npm/yarn/pnpm build
+    - native # Standard npm/yarn/pnpm build
 
 # Publishing (on release)
 publish:
@@ -48,4 +52,4 @@ publish:
 
 # TypeScript-specific settings
 typescript:
-  package_manager: auto    # auto, npm, yarn, or pnpm
+  package_manager: auto # auto, npm, yarn, or pnpm
