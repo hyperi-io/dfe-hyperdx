@@ -84,6 +84,7 @@ docker-compose.prod.yml
 
 # Environment variables
 .env
+!.env.dfe-example
 **/.env
 .env.*
 **/.env.*.idea/
@@ -111,3 +112,10 @@ node_modules/
 .yarn/
 
 *.tgz
+
+# AI assistant work files - never commit (local only, public repo)
+ai/
+.claude/
+STATE.md
+TODO.md
+CLAUDE.md
