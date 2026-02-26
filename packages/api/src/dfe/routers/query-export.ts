@@ -24,14 +24,12 @@ import logger from '@/utils/logger';
 
 const router = express.Router();
 
-const exportSqlSchema = z.object({
-  body: z.object({
-    // The chart config to render — same shape as a dashboard tile config
-    chartConfig: SavedChartConfigSchema,
-    // Optional date range for the query (millisecond timestamps)
-    startTime: z.number().optional(),
-    endTime: z.number().optional(),
-  }),
+const exportSqlBodySchema = z.object({
+  // The chart config to render — same shape as a dashboard tile config
+  chartConfig: SavedChartConfigSchema,
+  // Optional date range for the query (millisecond timestamps)
+  startTime: z.number().optional(),
+  endTime: z.number().optional(),
 });
 
 /**
@@ -51,7 +49,7 @@ const exportSqlSchema = z.object({
  */
 router.post(
   '/export-sql',
-  validateRequest(exportSqlSchema),
+  validateRequest({ body: exportSqlBodySchema }),
   async (req, res, next) => {
     try {
       const { teamId } = getNonNullUserWithTeam(req);
@@ -75,7 +73,10 @@ router.post(
       );
 
       // Build the full chart config with optional date range
-      const fullConfig: ChartConfigWithOptDateRange = {
+      const fullConfig: Omit<
+        ChartConfigWithOptDateRange,
+        'connection' | 'from'
+      > = {
         ...chartConfig,
         ...(startTime && endTime
           ? {

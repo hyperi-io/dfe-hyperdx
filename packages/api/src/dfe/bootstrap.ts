@@ -13,6 +13,11 @@ import * as dfeConfig from './config';
 // Casbin types — imported dynamically to avoid requiring the dependency
 // when DFE is not enabled
 type Enforcer = import('casbin').Enforcer;
+type PostgresAdapterConstructor = {
+  newAdapter(
+    options?: import('casbin-pg-adapter').PostgresAdapaterOptions,
+  ): Promise<import('casbin').Adapter>;
+};
 
 let _enforcer: Enforcer | null = null;
 let _initPromise: Promise<Enforcer> | null = null;
@@ -35,10 +40,12 @@ async function _doInit(): Promise<Enforcer> {
   const { newEnforcer } = await import('casbin');
 
   // casbin-pg-adapter — resolve at runtime
-  // The package exports a default class with a static newAdapter() factory
+  // The package exports a default class with a static newAdapter() factory.
+  // Type assertion needed: dynamic import of CJS default export loses static method types.
   const pgAdapterModule = await import('casbin-pg-adapter');
   const PostgresAdapter =
-    pgAdapterModule.default || pgAdapterModule.PostgresAdapter;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- CJS default export loses constructor type in dynamic import
+    pgAdapterModule.default as unknown as PostgresAdapterConstructor;
 
   const modelPath = path.resolve(__dirname, '..', dfeConfig.CASBIN_MODEL_PATH);
 
@@ -47,7 +54,9 @@ async function _doInit(): Promise<Enforcer> {
     'DFE: initializing Casbin enforcer',
   );
 
-  const adapter = await PostgresAdapter.newAdapter(dfeConfig.CASBIN_PG_URL);
+  const adapter = await PostgresAdapter.newAdapter({
+    connectionString: dfeConfig.CASBIN_PG_URL,
+  });
   const enforcer = await newEnforcer(modelPath, adapter);
 
   // Load policies from PostgreSQL
