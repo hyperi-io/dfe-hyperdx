@@ -6,10 +6,11 @@ import { IS_DEV } from '@/theme';
 // Force dynamic rendering so redirect() runs at request time, not build time
 export const getServerSideProps = () => ({ props: {} });
 
-export default function Login() {
+export default function Register() {
   if (!IS_DEV) {
     return redirect('/404');
   }
+
   return (
     <div>
       {IS_DEV && (
@@ -31,7 +32,7 @@ export default function Login() {
           ONLY ENABLED IN DEV MODE
         </div>
       )}
-      <AuthPage action="login" />
+      <AuthPage action="register" />
     </div>
   );
 }

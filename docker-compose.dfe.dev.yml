@@ -1,0 +1,48 @@
+# DFE Dev Override: FerretDB + PostgreSQL (no app — app runs locally)
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml up -d
+#
+# Use this with docker-compose.dev.yml. The app service is not defined in dev
+# (it runs locally via yarn dev), so this override omits the app section.
+# For production, use docker-compose.dfe.yml instead.
+
+services:
+  db:
+    deploy:
+      replicas: 0
+
+  postgres:
+    image: ghcr.io/ferretdb/postgres-documentdb:17-0.107.0-ferretdb-2.7.0
+    environment:
+      POSTGRES_USER: hyperdx
+      POSTGRES_PASSWORD: hyperdx
+      POSTGRES_DB: postgres
+    volumes:
+      - .volumes/pg_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    restart: on-failure
+    healthcheck:
+      test: pg_isready -U hyperdx
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ferretdb:
+    image: ghcr.io/ferretdb/ferretdb:2.7.0
+    environment:
+      FERRETDB_POSTGRESQL_URL: postgres://hyperdx:hyperdx@postgres:5432/postgres
+      # Disable auth for local dev — allows createIndexes and other operations
+      FERRETDB_AUTH: "false"
+    ports:
+      - '27017:27017'
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+networks:
+  internal:
