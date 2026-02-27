@@ -34,7 +34,7 @@
   },
   "scripts": {
     "setup": "yarn install && husky install",
-    "build": "nx run-many -t build",
+    "build": "dotenvx run --env-file .env.dfe -- nx run-many -t build",
     "build:common-utils": "nx run @hyperdx/common-utils:dev:build",
     "app:dev": "concurrently -k -n 'API,APP,ALERTS-TASK,COMMON-UTILS' -c 'green.bold,blue.bold,yellow.bold,magenta' 'nx run @hyperdx/api:dev' 'nx run @hyperdx/app:dev' 'nx run @hyperdx/api:dev-task check-alerts' 'nx run @hyperdx/common-utils:dev'",
     "app:dev:dfe": "concurrently -k -n 'API,APP,COMMON-UTILS' -c 'green.bold,blue.bold,magenta' 'nx run @hyperdx/api:dev' 'nx run @hyperdx/app:dev' 'nx run @hyperdx/common-utils:dev'",
