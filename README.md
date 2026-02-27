@@ -38,8 +38,9 @@ When updating this repository:
 ```sh
 # From root
 yarn # only necessary the first time or if there have been an update to the dependencies
-yarn dev
+yarn dev:hyperi
 ```
 
 - Frontend will be available on http://localhost:8080/
-- External API docs will be available on http://localhost:8000/api/v2/docs/
+- External API docs will be available on http://localhost:8000/api/v2/docs/ (if
+  swagger is enabled in environment variables)
