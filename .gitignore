@@ -95,6 +95,7 @@ docker-compose.prod.yml
 Thumbs.db
 .env.local
 .env.*.local
+!.env.*-example
 *.log
 dist/
 dist-bin/
@@ -111,3 +112,10 @@ node_modules/
 .yarn/
 
 *.tgz
+
+# AI assistant work files - never commit (local only, public repo)
+ai/
+.claude/
+STATE.md
+TODO.md
+CLAUDE.md
