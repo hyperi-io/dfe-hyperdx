@@ -47,7 +47,7 @@
     "dev:local": "IS_LOCAL_APP_MODE='DANGEROUSLY_is_local_app_mode💀' yarn dev",
     "dev:down": "docker compose -f docker-compose.dev.yml down",
     "dev:compose": "docker compose -f docker-compose.dev.yml",
-    "dev:hyperi": "yarn build:common-utils && dotenvx run --convention=nextjs -- docker compose -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml up -d && yarn app:dev:dfe && docker compose -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml down",
+    "dev:hyperi": "yarn build:common-utils && dotenvx run --convention=nextjs -- docker compose --env-file .env.dfe -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml up -d && yarn app:dev:dfe && docker compose --env-file .env.dfe -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml down",
     "lint": "npx nx run-many -t ci:lint",
     "audit": "bash scripts/audit.sh",
     "version": "make version",

@@ -20,6 +20,7 @@ import { validateRequest } from 'zod-express-middleware';
 import { getConnectionById } from '@/controllers/connection';
 import { getSource } from '@/controllers/sources';
 import { getNonNullUserWithTeam } from '@/middleware/auth';
+import { Api500Error } from '@/utils/errors';
 import logger from '@/utils/logger';
 
 const router = express.Router();
@@ -72,12 +73,16 @@ router.post(
         false,
       );
 
-      // Build the full chart config with optional date range
-      const fullConfig: Omit<
-        ChartConfigWithOptDateRange,
-        'connection' | 'from'
-      > = {
+      if (connection == null) {
+        throw new Api500Error('Invalid connection');
+      }
+
+      // Build the full chart config with optional date range.
+      // renderChartConfig requires connection and from; add them from the resolved source.
+      const fullConfig: ChartConfigWithOptDateRange = {
         ...chartConfig,
+        connection: connectionId,
+        from: source.from,
         ...(startTime && endTime
           ? {
               dateRange: [new Date(startTime), new Date(endTime)],
@@ -87,9 +92,9 @@ router.post(
 
       // Create a ClickHouse client to fetch metadata
       const clickhouseClient = new ClickhouseClient({
-        host: connection?.host || 'http://localhost:8123',
-        username: connection?.username,
-        password: connection?.password,
+        host: connection.host,
+        username: connection.username,
+        password: connection.password,
       });
 
       const metadata = getMetadata(clickhouseClient);
