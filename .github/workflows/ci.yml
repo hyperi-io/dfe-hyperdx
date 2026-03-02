@@ -26,6 +26,7 @@ jobs:
       credentials:
         username: ${{ secrets.ARTIFACTORY_CI_USERNAME }}
         password: ${{ secrets.ARTIFACTORY_CI_TOKEN }}
+      options: --user 0
     steps:
       - name: Generate token
         id: token
