@@ -11,7 +11,7 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: ['**']
     paths-ignore: ['**.md', 'docs/**', 'LICENSE*', '.gitignore']
   pull_request:
     paths-ignore: ['**.md', 'docs/**', 'LICENSE*', '.gitignore']
@@ -21,12 +21,6 @@ jobs:
   quality:
     name: Quality
     runs-on: ${{ vars.GH_RUNNER_DEFAULT || 'ubuntu-latest' }}
-    container:
-      image: ${{ vars.CI_RUNNER_IMAGE || 'hypersec.jfrog.io/hyperi-docker/ci-runner:ubuntu-24.04' }}
-      credentials:
-        username: ${{ secrets.ARTIFACTORY_CI_USERNAME }}
-        password: ${{ secrets.ARTIFACTORY_CI_TOKEN }}
-      options: --user 0
     steps:
       - name: Generate token
         id: token
