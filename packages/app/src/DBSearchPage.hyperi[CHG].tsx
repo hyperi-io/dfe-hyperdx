@@ -127,7 +127,7 @@ import {
 } from './components/TimePicker/utils';
 import { useTableMetadata } from './hooks/useMetadata';
 import { useSqlSuggestions } from './hooks/useSqlSuggestions';
-import { CreateHuntFromSearch } from './hyperi-components/CreateHuntFromSearch';
+import { CreateHuntFromSearch } from './hyperi/components/CreateHuntFromSearch';
 import {
   parseAsSortingStateString,
   parseAsStringWithNewLines,

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Box, Center, Text } from '@mantine/core';
 
 import { IS_CLICKHOUSE_BUILD } from '@/config';
-import AppNav from '@/hyperi-components/AppNav';
+import AppNav from '@/hyperi/components/AppNav';
 
 import { HDXSpotlightProvider } from './Spotlights';
 
