@@ -127,13 +127,13 @@ import {
 } from './components/TimePicker/utils';
 import { useTableMetadata } from './hooks/useMetadata';
 import { useSqlSuggestions } from './hooks/useSqlSuggestions';
+import { CreateHuntFromSearch } from './hyperi-components/CreateHuntFromSearch';
 import {
   parseAsSortingStateString,
   parseAsStringWithNewLines,
 } from './utils/queryParsers';
 import api from './api';
 import { LOCAL_STORE_CONNECTIONS_KEY } from './connection';
-import { DBSearchPageAlertModal } from './DBSearchPageAlertModal';
 import { SearchConfig } from './types';
 
 import searchPageStyles from '../styles/SearchPage.module.scss';
@@ -1357,9 +1357,6 @@ function DBSearchPage() {
     [setIsLive, setQueryErrors],
   );
 
-  const [isAlertModalOpen, { open: openAlertModal, close: closeAlertModal }] =
-    useDisclosure();
-
   // Add this effect to trigger initial search when component mounts
   useEffect(() => {
     if (isReady && queryReady && !isChartConfigLoading) {
@@ -1580,14 +1577,6 @@ function DBSearchPage() {
           {savedSearch ? `${savedSearch.name} Search` : 'Search'} - HyperI
         </title>
       </Head>
-      {!IS_LOCAL_MODE && isAlertModalOpen && (
-        <DBSearchPageAlertModal
-          id={savedSearch?.id}
-          searchedConfig={searchedConfig}
-          open={isAlertModalOpen}
-          onClose={closeAlertModal}
-        />
-      )}
       <OnboardingModal />
       <form
         data-testid="search-form"
@@ -1660,17 +1649,7 @@ function DBSearchPage() {
                   Update
                 </Button>
               )}
-              {!IS_LOCAL_MODE && (
-                <Button
-                  data-testid="alerts-button"
-                  variant="secondary"
-                  size="xs"
-                  onClick={openAlertModal}
-                  style={{ flexShrink: 0 }}
-                >
-                  Alerts
-                </Button>
-              )}
+              <CreateHuntFromSearch savedSearchId={savedSearchId} />
               {!!savedSearch && (
                 <>
                   <Tags
