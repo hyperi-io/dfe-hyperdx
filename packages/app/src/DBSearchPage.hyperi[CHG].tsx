@@ -127,7 +127,7 @@ import {
 } from './components/TimePicker/utils';
 import { useTableMetadata } from './hooks/useMetadata';
 import { useSqlSuggestions } from './hooks/useSqlSuggestions';
-import { CreateHuntFromSearch } from './hyperi/components/CreateHuntFromSearch';
+import { CreateRuleFromSearch } from './hyperi/components/CreateRuleFromSearch';
 import {
   parseAsSortingStateString,
   parseAsStringWithNewLines,
@@ -1649,7 +1649,11 @@ function DBSearchPage() {
                   Update
                 </Button>
               )}
-              <CreateHuntFromSearch savedSearchId={savedSearchId} />
+              <CreateRuleFromSearch
+                savedSearchName={savedSearch?.name}
+                chartConfig={chartConfig}
+                savedSearchId={savedSearchId}
+              />
               {!!savedSearch && (
                 <>
                   <Tags

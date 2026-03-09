@@ -5,6 +5,7 @@ import session from 'express-session';
 import onHeaders from 'on-headers';
 
 import * as config from './config';
+import queryExportRouter from './dfe/routers/query-export';
 import { isUserAuthenticated } from './middleware/auth';
 import defaultCors from './middleware/cors';
 import { appErrorHandler } from './middleware/error';
@@ -118,16 +119,8 @@ app.use('/saved-search', isUserAuthenticated, savedSearchRouter);
 app.use('/clickhouse-proxy', isUserAuthenticated, clickhouseProxyRouter);
 
 // --- DFE ROUTES START ---
-{
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { isDfeEnabled } = require('./dfe/config');
-  if (isDfeEnabled) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const queryExportRouter = require('./dfe/routers/query-export').default;
-    app.use('/dfe', isUserAuthenticated, queryExportRouter);
-    logger.info('DFE: query export router mounted at /dfe');
-  }
-}
+
+app.use('/dfe', isUserAuthenticated, queryExportRouter);
 // --- DFE ROUTES END ---
 // ---------------------------------------------------------------------
 
