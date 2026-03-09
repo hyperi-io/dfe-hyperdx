@@ -82,12 +82,20 @@ router.post(
       const fullConfig: ChartConfigWithOptDateRange = {
         ...chartConfig,
         connection: connectionId,
-        from: source.from,
         ...(startTime && endTime
           ? {
               dateRange: [new Date(startTime), new Date(endTime)],
             }
           : {}),
+        // Adjust the config to use the org_id and source_table_name placeholders
+        // required by the DFE control plane
+        from: {
+          databaseName: '{{org_id}}',
+          tableName: '{{source_table_name}}',
+        },
+        where: chartConfig.where
+          ? `${chartConfig.where} AND {timestamp_condition}`
+          : '{timestamp_condition}',
       };
 
       // Create a ClickHouse client to fetch metadata
