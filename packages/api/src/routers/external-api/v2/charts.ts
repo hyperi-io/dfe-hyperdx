@@ -599,7 +599,7 @@ router.post(
               groupByFields,
             } as SeriesResult;
           } catch (err) {
-            console.error(`Error processing series ${index}:`, err);
+            console.error('Error processing series', index, err);
             throw err;
           }
         }),

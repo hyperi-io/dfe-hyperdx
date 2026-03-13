@@ -16,6 +16,9 @@ FROM base AS dev
 
 EXPOSE 8000
 
+RUN chown -R node:node /app
+USER node
+
 ENTRYPOINT ["npx", "nx", "run", "@hyperdx/api:dev"]
 
 

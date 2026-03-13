@@ -416,7 +416,7 @@ describe('webhooks router', () => {
       const updatedData = {
         name: 'Updated Webhook Name',
         service: WebhookService.Slack,
-        url: 'https://hooks.slack.com/services/T11111111/B11111111/YYYYYYYYYYYYYYYYYYYYYYYY',
+        url: 'https://example.com/webhook/slack-updated',
         description: 'Updated description',
         queryParams: { param2: 'value2' },
         headers: { 'X-Updated-Header': 'Updated Value' },
@@ -469,7 +469,7 @@ describe('webhooks router', () => {
 
       const webhook2 = await Webhook.create({
         ...MOCK_WEBHOOK,
-        url: 'https://hooks.slack.com/services/T11111111/B11111111/YYYYYYYYYYYYYYYYYYYYYYYY',
+        url: 'https://example.com/webhook/slack-updated',
         team: team._id,
       });
 
@@ -550,7 +550,7 @@ describe('webhooks router', () => {
       // In a production test suite, you'd want to mock the fetch/slack client
       const response = await agent.post('/webhooks/test').send({
         service: WebhookService.Slack,
-        url: 'https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX',
+        url: 'https://example.com/webhook/slack-placeholder',
         body: '{"text": "Test message"}',
       });
 

@@ -24,11 +24,21 @@ if (fs.existsSync(PYODIDE_PATH)) {
 function removeNonEssentialFiles(dir) {
   let removedCount = 0;
 
+  const baseDir = path.resolve(OUT_DIR);
+
   function walkDir(currentPath) {
     const entries = fs.readdirSync(currentPath, { withFileTypes: true });
 
     for (const entry of entries) {
-      const fullPath = path.join(currentPath, entry.name);
+      // Sanitize: reject path traversal (..) and absolute paths
+      if (entry.name.includes('..') || path.isAbsolute(entry.name)) {
+        continue;
+      }
+      const fullPath = path.resolve(currentPath, entry.name);
+      // Ensure resolved path stays within baseDir
+      if (path.relative(baseDir, fullPath).startsWith('..')) {
+        continue;
+      }
 
       if (entry.isDirectory()) {
         walkDir(fullPath);

@@ -1853,8 +1853,9 @@ export function TableSourceForm({
 
       // eslint-disable-next-line no-console
       console.debug(
-        // HDX-3148
-        `[${eventName}] SourceForm validation error`,
+        eventName === 'create'
+          ? '[create] SourceForm validation error'
+          : '[save] SourceForm validation error',
         JSON.stringify(errors),
       );
 

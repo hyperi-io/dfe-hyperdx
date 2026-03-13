@@ -182,7 +182,9 @@ let resolvedDefaultTheme: ThemeName = isValidThemeName(envTheme)
 // Validate that the resolved default theme exists and is valid
 if (!themes[resolvedDefaultTheme]) {
   console.warn(
-    `[Theme Validation] Theme "${resolvedDefaultTheme}" from NEXT_PUBLIC_THEME not found in registry. Falling back to "hyperdx".`,
+    '[Theme Validation] Theme from NEXT_PUBLIC_THEME not found in registry. Falling back to "hyperdx".',
+    'Requested:',
+    resolvedDefaultTheme,
   );
   resolvedDefaultTheme = 'hyperdx';
 } else {
@@ -191,7 +193,9 @@ if (!themes[resolvedDefaultTheme]) {
     validateThemeConfig(themes[resolvedDefaultTheme], resolvedDefaultTheme);
   } catch (error) {
     console.error(
-      `[Theme Validation] Theme "${resolvedDefaultTheme}" failed validation. Falling back to "hyperdx".`,
+      '[Theme Validation] Theme failed validation. Falling back to "hyperdx".',
+      'Theme:',
+      resolvedDefaultTheme,
       error,
     );
     resolvedDefaultTheme = 'hyperdx';
@@ -237,7 +241,9 @@ export function getTheme(name: ThemeName = DEFAULT_THEME): ThemeConfig {
     validateThemeConfig(theme, name);
   } catch (error) {
     console.error(
-      `[Theme Validation] Theme "${name}" failed runtime validation. Falling back to "hyperdx".`,
+      '[Theme Validation] Theme failed runtime validation. Falling back to "hyperdx".',
+      'Theme:',
+      name,
       error,
     );
     // Return hyperdx theme as safe fallback

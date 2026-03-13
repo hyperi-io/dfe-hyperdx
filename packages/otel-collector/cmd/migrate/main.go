@@ -89,6 +89,7 @@ func getEnv(key, defaultValue string) string {
 func parseTLSConfig(cfg *Config) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: cfg.TLSInsecureSkipVerify,
+		MinVersion:         tls.VersionTLS13,
 	}
 
 	// Set server name override if provided

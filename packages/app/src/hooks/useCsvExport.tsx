@@ -80,7 +80,7 @@ const generateCsvData = (
           ),
         };
       } catch (error) {
-        console.warn(`CSV Export: Error processing row ${index}:`, error);
+        console.warn('CSV Export: Error processing row', index, error);
         return {};
       }
     })

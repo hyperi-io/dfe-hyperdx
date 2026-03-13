@@ -74,9 +74,9 @@ console.info(`Running: ${playwrightCmd.join(' ')}`);
 // eslint-disable-next-line no-console
 console.info(`Mode: ${useLocal ? 'Local (frontend only)' : 'Full-stack'}`);
 
-const child = spawn('npx', playwrightCmd, {
+const child = spawn('npx', [...playwrightCmd], {
   stdio: 'inherit',
-  shell: true,
+  shell: false,
   env,
   cwd: path.join(__dirname, '..'),
 });

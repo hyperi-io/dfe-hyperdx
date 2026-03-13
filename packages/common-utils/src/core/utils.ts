@@ -790,7 +790,10 @@ export function parseTokenizerFromTextIndex({
   const tokenizerArg = args.find(arg => arg.key === 'tokenizer')?.value;
   if (!tokenizerArg) {
     console.error(
-      `Invalid tokenizer argument in index type ${typeFull}: ${tokenizerArg}`,
+      'Invalid tokenizer argument in index type:',
+      typeFull,
+      'tokenizer:',
+      tokenizerArg,
       argsString,
       splitAndTrimWithBracket(argsString),
     );

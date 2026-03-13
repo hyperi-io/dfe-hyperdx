@@ -160,7 +160,9 @@ export function AppThemeProvider({
 
     // eslint-disable-next-line no-console
     console.info(
-      `🎨 Theme: ${theme.displayName} (${theme.name})`,
+      '🎨 Theme:',
+      theme.displayName,
+      '(' + theme.name + ')',
       '\n   Set via console: window.__HDX_THEME.set("hyperi")',
     );
 

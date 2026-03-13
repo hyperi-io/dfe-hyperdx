@@ -5,7 +5,16 @@ import type { StorybookConfig } from '@storybook/nextjs';
 
 const require = createRequire(import.meta.url);
 
-function getAbsolutePath(value: string): any {
+const ALLOWED_PACKAGE_PREFIXES = [
+  '@storybook/addon-links',
+  '@storybook/addon-styling-webpack',
+  '@storybook/addon-docs',
+  '@storybook/nextjs',
+];
+function getAbsolutePath(value: string): string {
+  if (!ALLOWED_PACKAGE_PREFIXES.some(p => value === p || value.startsWith(p + '/'))) {
+    throw new Error(`Invalid package path: ${value}`);
+  }
   return dirname(require.resolve(join(value, 'package.json')));
 }
 

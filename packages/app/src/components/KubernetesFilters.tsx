@@ -27,6 +27,10 @@ type FilterSelectProps = {
   dataTestId?: string;
 };
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 const FilterSelect: React.FC<FilterSelectProps> = ({
   metricSource,
   placeholder,
@@ -116,7 +120,10 @@ export const KubernetesFilters: React.FC<KubernetesFiltersProps> = ({
     attribute: string,
   ) => {
     const match = searchQuery.match(
-      new RegExp(`${resourceAttr}\\.${attribute}:"([^"]+)"`, 'i'),
+      new RegExp(
+        `${escapeRegExp(resourceAttr)}\\.${escapeRegExp(attribute)}:"([^"]+)"`,
+        'i',
+      ),
     );
     return match ? match[1] : null;
   };
@@ -183,7 +190,10 @@ export const KubernetesFilters: React.FC<KubernetesFiltersProps> = ({
 
     // Remove existing filter for this attribute if it exists
     let newQuery = searchQuery;
-    const regex = new RegExp(`${fullAttribute}:"[^"]*"`, 'g');
+    const regex = new RegExp(
+      `${escapeRegExp(fullAttribute)}:"[^"]*"`,
+      'g',
+    );
     newQuery = newQuery.replace(regex, '').trim();
 
     // Add new filter if value is not null

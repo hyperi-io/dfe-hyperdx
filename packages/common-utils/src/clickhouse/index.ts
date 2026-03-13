@@ -216,10 +216,21 @@ export const chSql = (
         'UNSAFE_RAW_SQL' in value
           ? {}
           : Array.isArray(value)
-            ? value.reduce((acc, v) => {
-                Object.assign(acc, v.params);
-                return acc;
-              }, {})
+            ? value.reduce(
+                (acc, v) => {
+                  for (const [k, val] of Object.entries(v.params)) {
+                    if (
+                      typeof val === 'string' ||
+                      typeof val === 'number' ||
+                      typeof val === 'boolean'
+                    ) {
+                      acc[k] = val;
+                    }
+                  }
+                  return acc;
+                },
+                {} as Record<string, string | number | boolean>,
+              )
             : 'params' in value
               ? value.params
               : 'Identifier' in value
@@ -255,12 +266,28 @@ export const concatChSql = (sep: string, ...args: (ChSql | ChSql[])[]) => {
             .filter(Boolean) // skip empty string expressions
             .join(sep);
         acc.params = arg.reduce((acc, a) => {
-          Object.assign(acc, a.params);
+          for (const [k, v] of Object.entries(a.params)) {
+            if (
+              typeof v === 'string' ||
+              typeof v === 'number' ||
+              typeof v === 'boolean'
+            ) {
+              acc[k] = v;
+            }
+          }
           return acc;
         }, acc.params);
       } else if (arg.sql.length > 0) {
         acc.sql += `${acc.sql.length > 0 ? sep : ''}${arg.sql}`;
-        Object.assign(acc.params, arg.params);
+        for (const [k, v] of Object.entries(arg.params)) {
+          if (
+            typeof v === 'string' ||
+            typeof v === 'number' ||
+            typeof v === 'boolean'
+          ) {
+            acc.params[k] = v;
+          }
+        }
       }
       return acc;
     },

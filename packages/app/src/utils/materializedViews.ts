@@ -263,9 +263,17 @@ export function parseSummedColumns(mvTableMetadata: TableMetadata) {
   }
 }
 
-function escapeRegExp(s: string) {
-  // $& means the whole matched string
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Check if str contains word as a whole word (avoid ReDoS from dynamic RegExp) */
+function containsWord(str: string, word: string): boolean {
+  if (!word || word.length > 256) return false;
+  const idx = str.indexOf(word);
+  if (idx === -1) return false;
+  const wordChar = /[a-zA-Z0-9_]/;
+  const before = str[idx - 1];
+  const after = str[idx + word.length];
+  return (
+    (!before || !wordChar.test(before)) && (!after || !wordChar.test(after))
+  );
 }
 
 export function getSourceTableColumn(
@@ -296,9 +304,7 @@ export function getSourceTableColumn(
     const matchingSourceColumn =
       matchingSelectExpression &&
       sourceTableColumns.find(col =>
-        new RegExp(`\\b${escapeRegExp(col.name)}\\b`).test(
-          matchingSelectExpression,
-        ),
+        containsWord(matchingSelectExpression, col.name),
       );
     if (matchingSourceColumn) {
       return matchingSourceColumn.name;

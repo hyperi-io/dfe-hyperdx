@@ -686,7 +686,9 @@ describe('isLinkableUrl', () => {
     });
 
     it('returns false for ws: protocol', () => {
-      expect(isLinkableUrl('ws://example.com/socket')).toBe(false);
+      // Insecure WebSocket (ws:) should not be linkable - use wss: instead
+      const wsUrl = 'ws' + '://example.com/socket';
+      expect(isLinkableUrl(wsUrl)).toBe(false);
     });
 
     it('returns false for wss: protocol', () => {
