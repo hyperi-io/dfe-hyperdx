@@ -49,6 +49,8 @@
     "lint": "npx nx run-many -t ci:lint",
     "format": "prettier --write --ignore-unknown .",
     "tsc": "npx nx run-many -t ci:lint",
+    "typecheck": "npx nx run-many -t ci:lint",
+    "test": "npx nx run-many -t ci:unit",
     "audit": "bash scripts/audit.sh",
     "version": "make version",
     "release": "npx changeset tag && npx changeset publish"

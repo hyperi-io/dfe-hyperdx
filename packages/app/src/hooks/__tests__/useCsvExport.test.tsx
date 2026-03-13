@@ -147,7 +147,8 @@ describe('useCsvExport', () => {
 
       expect(result.current.csvData).toHaveLength(2);
       expect(console.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Error processing row 1:'),
+        expect.stringContaining('Error processing row'),
+        1,
         expect.any(Error),
       );
     });
