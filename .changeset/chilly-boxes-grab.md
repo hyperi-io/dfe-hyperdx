@@ -1,5 +1,5 @@
 ---
-"@hyperdx/api": patch
+'@hyperdx/api': patch
 ---
 
 feat: Add external GET /sources API

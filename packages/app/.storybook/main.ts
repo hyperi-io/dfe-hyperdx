@@ -12,7 +12,11 @@ const ALLOWED_PACKAGE_PREFIXES = [
   '@storybook/nextjs',
 ];
 function getAbsolutePath(value: string): string {
-  if (!ALLOWED_PACKAGE_PREFIXES.some(p => value === p || value.startsWith(p + '/'))) {
+  if (
+    !ALLOWED_PACKAGE_PREFIXES.some(
+      p => value === p || value.startsWith(p + '/'),
+    )
+  ) {
     throw new Error(`Invalid package path: ${value}`);
   }
   return dirname(require.resolve(join(value, 'package.json')));

@@ -190,10 +190,7 @@ export const KubernetesFilters: React.FC<KubernetesFiltersProps> = ({
 
     // Remove existing filter for this attribute if it exists
     let newQuery = searchQuery;
-    const regex = new RegExp(
-      `${escapeRegExp(fullAttribute)}:"[^"]*"`,
-      'g',
-    );
+    const regex = new RegExp(`${escapeRegExp(fullAttribute)}:"[^"]*"`, 'g');
     newQuery = newQuery.replace(regex, '').trim();
 
     // Add new filter if value is not null

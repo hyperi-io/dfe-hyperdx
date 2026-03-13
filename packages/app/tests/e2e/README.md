@@ -93,7 +93,11 @@ ClickHouse data.
 - MongoDB (port 29998) - authentication, teams, users, persistence
 - API Server (port 29000) - full backend logic
 - App Server (port 28081) - frontend
-- **Local Docker ClickHouse** (localhost:8123) - seeded E2E test data (logs/traces/metrics/K8s). Seeded timestamps span a past+future window (~1h past, ~2h future from seed time) so relative ranges like "last 5 minutes" keep finding data. If you run tests more than ~2 hours after the last seed, re-run the global setup (or full test run) to re-seed.
+- **Local Docker ClickHouse** (localhost:8123) - seeded E2E test data
+  (logs/traces/metrics/K8s). Seeded timestamps span a past+future window (~1h
+  past, ~2h future from seed time) so relative ranges like "last 5 minutes" keep
+  finding data. If you run tests more than ~2 hours after the last seed, re-run
+  the global setup (or full test run) to re-seed.
 
 **Benefits:**
 
@@ -366,7 +370,8 @@ multiple servers:
 **Sources don't appear in UI:**
 
 - Check API logs for `setupTeamDefaults` errors
-- Verify `DEFAULT_SOURCES` in `.env.e2e` points to local Docker ClickHouse (localhost:8123)
+- Verify `DEFAULT_SOURCES` in `.env.e2e` points to local Docker ClickHouse
+  (localhost:8123)
 - Ensure you registered a new user (DEFAULT_SOURCES only applies to new teams)
 
 **Tests can't find demo data:**

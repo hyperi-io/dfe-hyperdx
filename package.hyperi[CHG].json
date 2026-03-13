@@ -3,9 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "license": "MIT",
-  "workspaces": [
-    "packages/*"
-  ],
+  "workspaces": ["packages/*"],
   "devDependencies": {
     "@changesets/cli": "^2.26.2",
     "@dotenvx/dotenvx": "^1.51.1",
@@ -65,9 +63,7 @@
       "prettier --write --ignore-unknown",
       "eslint --flag v10_config_lookup_from_file --fix --quiet"
     ],
-    "**/*.{mdx,json,yml}": [
-      "prettier --write --ignore-unknown"
-    ]
+    "**/*.{mdx,json,yml}": ["prettier --write --ignore-unknown"]
   },
   "packageManager": "yarn@4.5.1",
   "resolutions": {

@@ -1,15 +1,15 @@
 # HyperDX OIDC Connection Middleware
 
-**Status:** Proposed
-**Last Updated:** 2026-02-16
+**Status:** Proposed **Last Updated:** 2026-02-16
 
 ---
 
 ## Problem
 
 HyperDX connects to ClickHouse using a single set of credentials per Connection
-object. When used as both the observability UI and data exploration UI, different
-users need different ClickHouse access levels based on their organizational role.
+object. When used as both the observability UI and data exploration UI,
+different users need different ClickHouse access levels based on their
+organizational role.
 
 HyperDX has no native OIDC integration and no concept of mapping an
 authenticated user's identity to a specific ClickHouse connection.
@@ -18,11 +18,11 @@ authenticated user's identity to a specific ClickHouse connection.
 
 Different OIDC providers expose group information differently:
 
-| Provider | Groups in Token | Format | Notes |
-|----------|----------------|--------|-------|
+| Provider     | Groups in Token   | Format             | Notes                                                                                                |
+| ------------ | ----------------- | ------------------ | ---------------------------------------------------------------------------------------------------- |
 | **Entra ID** | Yes (with config) | Object IDs (GUIDs) | Can emit `cloud_displayname` via optional claims but requires non-Free tier and is a preview feature |
-| **Okta** | Yes | Display names | Most straightforward — configure a groups claim and get names |
-| **Google** | No groups claim | N/A | Google Workspace has no standard groups claim; group membership requires the Admin SDK Directory API |
+| **Okta**     | Yes               | Display names      | Most straightforward — configure a groups claim and get names                                        |
+| **Google**   | No groups claim   | N/A                | Google Workspace has no standard groups claim; group membership requires the Admin SDK Directory API |
 
 The middleware must handle all three without provider-specific code.
 
@@ -118,6 +118,7 @@ OIDC_EMAIL_CONNECTION_MAP='{
 ```
 
 Matching rules:
+
 - Exact email match is checked first (`admin@hypersec.io`)
 - Domain suffix match is checked second (`@hypersec.io`)
 - First match wins within each category
@@ -166,11 +167,11 @@ CREATE USER ch_admin IDENTIFIED BY '...' DEFAULT ROLE analyst_admin;
 Create Connection objects in HyperDX (via UI or MongoDB seed) that use these
 ClickHouse users:
 
-| Connection Name | ClickHouse User | Purpose |
-|-----------------|-----------------|---------|
-| `ch-readonly`   | `ch_readonly`   | Viewer-tier access |
+| Connection Name | ClickHouse User | Purpose             |
+| --------------- | --------------- | ------------------- |
+| `ch-readonly`   | `ch_readonly`   | Viewer-tier access  |
 | `ch-analyst`    | `ch_analyst`    | Analyst-tier access |
-| `ch-admin`      | `ch_admin`      | Admin-tier access |
+| `ch-admin`      | `ch_admin`      | Admin-tier access   |
 
 All connections point to the same ClickHouse host — only the credentials differ.
 
@@ -210,8 +211,8 @@ needed. See `spike/envoy-gateway.yaml` for the full configuration.
 
 - Handles OIDC login flow, token validation, and claim extraction natively
 - Forwards claims as HTTP headers to upstream (HyperDX API)
-- Uses Kubernetes Gateway API (`HTTPRoute`, `SecurityPolicy`) — the successor
-  to the Ingress API
+- Uses Kubernetes Gateway API (`HTTPRoute`, `SecurityPolicy`) — the successor to
+  the Ingress API
 - Single component replaces both nginx-ingress and oauth2-proxy
 
 > **Note:** The community `kubernetes/ingress-nginx` controller reaches
@@ -253,15 +254,15 @@ scope: "openid email profile"
 
 ### Files to Create
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| `packages/api/src/middleware/oidc-connection.ts` | ~80 | Claim-to-connection mapping middleware |
+| File                                             | Lines | Purpose                                |
+| ------------------------------------------------ | ----- | -------------------------------------- |
+| `packages/api/src/middleware/oidc-connection.ts` | ~80   | Claim-to-connection mapping middleware |
 
 ### Files to Modify
 
-| File | Change | Lines Changed |
-|------|--------|---------------|
-| `packages/api/src/api-app.ts` | Import middleware + add to `/clickhouse-proxy` route chain | 2 |
+| File                          | Change                                                     | Lines Changed |
+| ----------------------------- | ---------------------------------------------------------- | ------------- |
+| `packages/api/src/api-app.ts` | Import middleware + add to `/clickhouse-proxy` route chain | 2             |
 
 ### No Changes Required
 
@@ -436,11 +437,11 @@ OIDC_DEFAULT_CONNECTION: 'ch-readonly'
 
 **Typical deployments use one or two of these, not all three:**
 
-| Provider | Recommended Config |
-|----------|-------------------|
+| Provider | Recommended Config                                              |
+| -------- | --------------------------------------------------------------- |
 | Entra ID | `OIDC_GROUP_CONNECTION_MAP` (GUIDs) + `OIDC_DEFAULT_CONNECTION` |
-| Okta | `OIDC_GROUP_CONNECTION_MAP` (names) + `OIDC_DEFAULT_CONNECTION` |
-| Google | `OIDC_EMAIL_CONNECTION_MAP` + `OIDC_DEFAULT_CONNECTION` |
+| Okta     | `OIDC_GROUP_CONNECTION_MAP` (names) + `OIDC_DEFAULT_CONNECTION` |
+| Google   | `OIDC_EMAIL_CONNECTION_MAP` + `OIDC_DEFAULT_CONNECTION`         |
 
 ## Deployment Profiles
 
@@ -459,19 +460,19 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:latest
     ports:
-      - "8123:8123"
-      - "9000:9000"
+      - '8123:8123'
+      - '9000:9000'
 
   mongodb:
     image: mongo:7
     ports:
-      - "27017:27017"
+      - '27017:27017'
 
   otel-collector:
     image: docker.hyperdx.io/hyperdx/hyperdx-otel-collector:latest
     ports:
-      - "4317:4317"   # OTLP gRPC
-      - "4318:4318"   # OTLP HTTP
+      - '4317:4317' # OTLP gRPC
+      - '4318:4318' # OTLP HTTP
     environment:
       - CLICKHOUSE_ENDPOINT=http://clickhouse:8123
       - CLICKHOUSE_USER=default
@@ -480,8 +481,8 @@ services:
   hyperdx:
     image: docker.hyperdx.io/hyperdx/hyperdx-api:latest
     ports:
-      - "8080:8080"
-      - "8000:8000"
+      - '8080:8080'
+      - '8000:8000'
     environment:
       - IS_LOCAL_APP_MODE=true
       - CLICKHOUSE_HOST=http://clickhouse:8123

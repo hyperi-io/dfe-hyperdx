@@ -6,13 +6,13 @@ receivers:
     protocols:
       grpc:
         include_metadata: true
-        endpoint: "0.0.0.0:4317"
+        endpoint: '0.0.0.0:4317'
       http:
         cors:
-          allowed_origins: ["*"]
-          allowed_headers: ["*"]
+          allowed_origins: ['*']
+          allowed_headers: ['*']
         include_metadata: true
-        endpoint: "0.0.0.0:4318"
+        endpoint: '0.0.0.0:4318'
 
 connectors:
   routing/logs:
