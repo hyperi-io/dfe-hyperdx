@@ -96,6 +96,10 @@ router.post(
         where: chartConfig.where
           ? `${chartConfig.where} AND {timestamp_condition}`
           : '{timestamp_condition}',
+        // When where is empty, the effective where is only {timestamp_condition}
+        // (a SQL placeholder). It must not be parsed as Lucene—the Lucene parser
+        // expects {a TO b} range syntax and fails on {timestamp_condition}.
+        ...(chartConfig.where ? {} : { whereLanguage: 'sql' as const }),
       };
 
       // Create a ClickHouse client to fetch metadata
