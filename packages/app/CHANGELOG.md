@@ -10,10 +10,17 @@
 
 - fa2b73ca: feat: Format byte numbers on ClickHouse page
 - b6c34b13: fix: Handling non-monotonic sums
-- 79356c4c: Set Button component default variant to "primary" for consistent styling across the app
-- 42820f39: fix: Apply theme CSS class during SSR to prevent button styling mismatch
+- 79356c4c: Set Button component default variant to "primary" for consistent
+  styling across the app
+- 42820f39: fix: Apply theme CSS class during SSR to prevent button styling
+  mismatch
 
-  Adds the theme class (e.g., `theme-hyperdx`) to the HTML element during server-side rendering in `_document.tsx`. This ensures CSS variables for button styling are correctly applied from the first render, preventing a hydration mismatch that caused primary buttons to display with Mantine's default styling instead of the custom theme styling when `NEXT_PUBLIC_THEME` was explicitly set.
+  Adds the theme class (e.g., `theme-hyperdx`) to the HTML element during
+  server-side rendering in `_document.tsx`. This ensures CSS variables for
+  button styling are correctly applied from the first render, preventing a
+  hydration mismatch that caused primary buttons to display with Mantine's
+  default styling instead of the custom theme styling when `NEXT_PUBLIC_THEME`
+  was explicitly set.
 
 - e11b3138: fix: add react-hooks-eslint-plugin and fix issues across app
 - Updated dependencies [b6c34b13]
@@ -26,8 +33,10 @@
 - 6cfa40a0: feat: Add support for querying nested/array columns with lucene
 - 3c38272f: UI improvements for ClickStack/HyperDX:
 
-  - Improve Sessions page empty state with enhanced Card and Stepper component for setup instructions
-  - Apply consistent IBM Plex Mono font family to log tables, JSON viewer, and multi-series table charts
+  - Improve Sessions page empty state with enhanced Card and Stepper component
+    for setup instructions
+  - Apply consistent IBM Plex Mono font family to log tables, JSON viewer, and
+    multi-series table charts
 
 - Updated dependencies [6cfa40a0]
   - @hyperdx/common-utils@0.12.1
@@ -45,12 +54,20 @@
 - ea56d11f: chore: Change "None" aggregation label to "Custom" in charts.
 - 7448508d: feat: Theme-aware UI improvements for ClickStack
 
-  - **Chart colors**: Made chart color palette theme-aware - ClickStack uses blue as primary color, HyperDX uses green. Charts now correctly display blue bars for ClickStack theme.
-  - **Semantic colors**: Updated semantic color functions (getChartColorSuccess, getChartColorWarning, getChartColorError) to be theme-aware, reading from CSS variables or falling back to theme-appropriate palettes.
-  - **Info log colors**: Changed info-level logs to use primary chart color (blue for ClickStack, green for HyperDX) instead of success green.
-  - **Button variants**: Made ResumeLiveTailButton variant conditional - uses 'secondary' for ClickStack theme, 'primary' for HyperDX theme.
-  - **Nav styles**: Fixed collapsed navigation styles for proper alignment and spacing when nav is collapsed to 50px width.
-  - **Icon stroke width**: Added custom stroke width (1.5) for Tabler icons in ClickStack theme only, providing a more refined appearance.
+  - **Chart colors**: Made chart color palette theme-aware - ClickStack uses
+    blue as primary color, HyperDX uses green. Charts now correctly display blue
+    bars for ClickStack theme.
+  - **Semantic colors**: Updated semantic color functions (getChartColorSuccess,
+    getChartColorWarning, getChartColorError) to be theme-aware, reading from
+    CSS variables or falling back to theme-appropriate palettes.
+  - **Info log colors**: Changed info-level logs to use primary chart color
+    (blue for ClickStack, green for HyperDX) instead of success green.
+  - **Button variants**: Made ResumeLiveTailButton variant conditional - uses
+    'secondary' for ClickStack theme, 'primary' for HyperDX theme.
+  - **Nav styles**: Fixed collapsed navigation styles for proper alignment and
+    spacing when nav is collapsed to 50px width.
+  - **Icon stroke width**: Added custom stroke width (1.5) for Tabler icons in
+    ClickStack theme only, providing a more refined appearance.
 
 - Updated dependencies [f44923ba]
   - @hyperdx/common-utils@0.12.0
@@ -60,20 +77,24 @@
 ### Minor Changes
 
 - 4c287b16: fix: Fix external dashboard endpoints
-- 2f1a13cc: feat: Multi-theme system with HyperDX and ClickStack branding support
+- 2f1a13cc: feat: Multi-theme system with HyperDX and ClickStack branding
+  support
 
   ## Major Features
 
   ### Multi-Theme System
 
-  - Add infrastructure for supporting multiple brand themes (HyperDX & ClickStack)
+  - Add infrastructure for supporting multiple brand themes (HyperDX &
+    ClickStack)
   - Theme switching available in dev/local mode via localStorage
-  - Production deployments use `NEXT_PUBLIC_THEME` environment variable (deployment-configured)
+  - Production deployments use `NEXT_PUBLIC_THEME` environment variable
+    (deployment-configured)
   - Each theme provides its own logos, colors, favicons, and default fonts
 
   ### Dynamic Favicons
 
-  - Implement theme-aware favicon system with SVG, PNG fallbacks, and Apple Touch Icon
+  - Implement theme-aware favicon system with SVG, PNG fallbacks, and Apple
+    Touch Icon
   - Add hydration-safe `DynamicFavicon` component
   - Include XSS protection for theme-color meta tag validation
 
@@ -86,33 +107,43 @@
 
   ### User Preferences Updates
 
-  - Rename `theme` property to `colorMode` to clarify light/dark mode vs brand theme
+  - Rename `theme` property to `colorMode` to clarify light/dark mode vs brand
+    theme
   - Remove background overlay feature (backgroundEnabled, backgroundUrl, etc.)
-  - Add automatic data migration from legacy `theme` → `colorMode` in localStorage
+  - Add automatic data migration from legacy `theme` → `colorMode` in
+    localStorage
   - Ensure existing users don't lose their preferences during migration
 
   ### Performance & Type Safety
 
-  - Optimize theme CSS class management (single class swap instead of iterating all themes)
+  - Optimize theme CSS class management (single class swap instead of iterating
+    all themes)
   - Improve type safety in migration function using destructuring
   - Add type guards for runtime validation of localStorage data
 
-- d07e30d5: Associates a logged in HyperDX user to the ClickHouse query recorded in the query log.
+- d07e30d5: Associates a logged in HyperDX user to the ClickHouse query recorded
+  in the query log.
 
 ### Patch Changes
 
-- 9101a993: fix: Update ConnectionForm button variant based on test connection state
+- 9101a993: fix: Update ConnectionForm button variant based on test connection
+  state
 
-  Changed the button variant in the ConnectionForm component to reflect the test connection state, using 'danger' for invalid states and 'secondary' for others. This improves user feedback during connection testing.
+  Changed the button variant in the ConnectionForm component to reflect the test
+  connection state, using 'danger' for invalid states and 'secondary' for
+  others. This improves user feedback during connection testing.
 
 - f7d8b83f: Improve sidebar expand/collapse animation
 - b8ab312a: chore: improve Team typing
 - 08b922cd: debug: notify SourceForm error path when message is 'Required'
 - 16df5024: fix: Fix tile hover state after closing edit modal
 - 22f882d6: Do not trigger table search input on modals/drawers
-- 7a5a5ef6: fix: Fix histogram disappearing and scrollbar issues on event patterns and search pages
+- 7a5a5ef6: fix: Fix histogram disappearing and scrollbar issues on event
+  patterns and search pages
 
-  Fixes regression from PR #1598 by adding proper flex container constraints to prevent histogram from disappearing and scrollbar from cutting off 120px early.
+  Fixes regression from PR #1598 by adding proper flex container constraints to
+  prevent histogram from disappearing and scrollbar from cutting off 120px
+  early.
 
 - be4b784c: fix: Make JSON line hover visible in inline panel
 - eea4fa48: fix: Prevent orphan alert when duplicating dashboard tiles
@@ -135,12 +166,14 @@
   - Improved modal rendering to prevent screen shake/glitching
   - Follows Mantine useHotkeys pattern for keyboard shortcuts
 
-- 9f51920b: Add a search input that allows searching within the virtual elements on the log search page
+- 9f51920b: Add a search input that allows searching within the virtual elements
+  on the log search page
 - bc8c4eec: feat: allow applying session settings to queries
 
 ### Patch Changes
 
-- 5b3ce9fc: refactor: Standardize Button/ActionIcon variants and add ESLint enforcement
+- 5b3ce9fc: refactor: Standardize Button/ActionIcon variants and add ESLint
+  enforcement
 - 1cf8cebb: feat: Support JSON Sessions
 - 190c66b8: Add metric column name validation when saving dashboard tiles
 - 9725a1fc: chore: Remove beta label from MVs
@@ -148,35 +181,45 @@
 - 18222cd3: fix: Fix accuracy of ClickHouse inserts chart
 - 66b1a48a: fix: Disable usePresetDashboardFilters request in local mode
 - de680527: fix: Make pattern sampling query random
-- 418828e8: Add better types for AI features, Fix bug that could cause page crash when generating graphs
+- 418828e8: Add better types for AI features, Fix bug that could cause page
+  crash when generating graphs
 - f39fcdac: fix: Refresh metadata after creating new connection in local mode
 - 5b252211: fix: Respect date range URL params on Services dashboard
 - ddc7dd04: various improvements to search result drawers and nesting logic
 - 79398be7: chore: Standardize granularities
-- 72d89989: Fix sessions subpanel not being closable, also fix loading indicator adding additional scrollbar to page
+- 72d89989: Fix sessions subpanel not being closable, also fix loading indicator
+  adding additional scrollbar to page
 - db845604: fix: bypass aliasWith so that useRowWhere works correctly
 - cf71a1cb: feat: Add text-brand semantic color tokens for theme flexibility
 - acefcbed: fix: Fix K8s events query for JSON schema
 - 3a2c33d3: feat: debounce highlighted attribute validation query
 - 1d961409: fix: Set correct values when opening number format form
 - 6752b3f8: fix: Filter DBTraceWaterfall events on timestamp expression
-- 1ed1ebf3: feat(charts): switch to Observable categorical color palette for better accessibility and theme support
-- 824a19a7: refactor(app-nav): reorganize AppNav component structure and improve maintainability
-- 78423450: Add `variant` prop to table components for muted background styling in dashboard tiles
+- 1ed1ebf3: feat(charts): switch to Observable categorical color palette for
+  better accessibility and theme support
+- 824a19a7: refactor(app-nav): reorganize AppNav component structure and improve
+  maintainability
+- 78423450: Add `variant` prop to table components for muted background styling
+  in dashboard tiles
 - f98fc519: perf: Query filter values from MVs
-- b2089fa9: fix: Prevent dashboard error when metricName is defined for non-metric source
+- b2089fa9: fix: Prevent dashboard error when metricName is defined for
+  non-metric source
 - 64998e0f: fix: Fix dashboard filters from Metric Tables
-- cf3ebb4b: feat: Add disabled state support and Storybook stories for Button and ActionIcon components
+- cf3ebb4b: feat: Add disabled state support and Storybook stories for Button
+  and ActionIcon components
 
-  - Ensure all Button and ActionIcon variants use Mantine's default disabled styling for consistency
-  - Add comprehensive Storybook stories including Playground, DisabledStates, and LoadingStates
+  - Ensure all Button and ActionIcon variants use Mantine's default disabled
+    styling for consistency
+  - Add comprehensive Storybook stories including Playground, DisabledStates,
+    and LoadingStates
   - Improve component documentation and testing capabilities
 
 - ac3082a5: Validate column names for metrics before creating a chart
 - 16036025: feat: Add HAVING filter to table charts
 - bf553d68: Revert "fix: alias reference bug in processRowToWhereClause"
 - 4a856173: feat: Add hasAllTokens for text index support
-- 5ba7fe00: style: Rename sidenav background color tokens for clarity and update AppNav hover/focus states
+- 5ba7fe00: style: Rename sidenav background color tokens for clarity and update
+  AppNav hover/focus states
 - Updated dependencies [1cf8cebb]
 - Updated dependencies [418828e8]
 - Updated dependencies [79398be7]
@@ -191,7 +234,8 @@
 
 ### Minor Changes
 
-- 8b5e80da: Add chart legend series filtering with click and shift-click selection
+- 8b5e80da: Add chart legend series filtering with click and shift-click
+  selection
 - 5dded38f: Refactor Sources components and add custom Mantine UI variants
 
   - Move SourceForm to Sources/ subfolder with reusable SourcesList component
@@ -205,13 +249,15 @@
 - ab7645de: feat: Add a minimum date to MV configuration
 - 9f9629e4: fix: Increase span waterfall limit to 50 - 100k spans
 - 99863885: fix: Fix missing dashboard edit icons on search tile
-- 1a9362e7: Fix bug where loading saved search from another page might use default values instead
+- 1a9362e7: Fix bug where loading saved search from another page might use
+  default values instead
 - 2c288b1e: Fix threshold on alerts not visible, fix sessions page overflow bug
 - 8927f9e2: chore: bundle drain3 wasm deps
 - 725dbc2f: feat: Align line/bar chart date ranges to chart granularity
 - 1e6987e4: fix: Set better Chart Axis Bounds
 - 158ccefa: refactor: Add ChartContainer component with toolbar
-- 8213d69b: fix: Ensure displayed queries and MV indicators match queried configs
+- 8213d69b: fix: Ensure displayed queries and MV indicators match queried
+  configs
 - ae12ca16: feat: Add MV granularities and infer config from SummingMergeTree
 - 3b71fecb: fix: display "temporary dashboard" banner until dashboard is created
 - 8172fba9: fix: Fix a couple of visual bugs in Chart titles
@@ -231,7 +277,8 @@
 ### Patch Changes
 
 - 4889205a: fix: Prevent crashes on Services and ClickHouse dashboards
-- 103c63cc: chore(eslint): enable @typescript-eslint/no-unsafe-type-assertion rule (warn)
+- 103c63cc: chore(eslint): enable @typescript-eslint/no-unsafe-type-assertion
+  rule (warn)
 - e78960f3: style: Fix style inconsistencies
 - 11bd8e3d: Fix issue where select is not updating when loading saved searches
 - 8584b4a4: fix: source form was not loading properly for all sources
@@ -251,7 +298,8 @@
 - 99e7ce25: Reduce instrumentation trace events when search results shown
 - 5062d80d: fix: Prevent dashboard infinite re-render
 - d5181b6a: fix: Add SPAN*KIND* values to service map filters
-- 21427340: Improve light mode contrast for DBRowTableIconButton by removing hardcoded gray color and text-muted-hover class
+- 21427340: Improve light mode contrast for DBRowTableIconButton by removing
+  hardcoded gray color and text-muted-hover class
 - 215b9bf7: Add prop to disable drilldown if not supported
 - 6d4fc318: feat: parallelize DBSearchPage's histogram query
 - 8241ffea: Make line wrapping in search page persistent
@@ -262,12 +310,14 @@
 - b564a369: fix: Ensure adequate SQL/Schema Preview modal height
 - 50ba92ac: feat: Add custom filters to the services dashboard"
 - dc846011: fix: show alert indicator for bar charts too
-- b99052ad: fix: cityHash64 in sessions cast to string due to number precision issues in the browser
+- b99052ad: fix: cityHash64 in sessions cast to string due to number precision
+  issues in the browser
 - 141b4969: fix: Correctly disable previous period query
 - b58c52eb: fix: Fix bugs in the Services dashboard
 - 19b710fb: fix: Update Request Error Rate config to use MVs
 - 84d60a64: fix: Fix double value for isRootSpan facet
-- 61cb9425: Performance Improvement to only run sample query when the table is visible
+- 61cb9425: Performance Improvement to only run sample query when the table is
+  visible
 - ae4c8765: fix: error loading row data by multiple search panel in dashboard
 - 776e3927: fix: Fix queries/minute calculation in Services Dashboard
 - 6d4fc318: feat: add teamsetting for paralellizing queries when possible
@@ -287,19 +337,28 @@
 - 52d27985: chore: Upgrade nextjs, react, and eslint + add react compiler
 - 630592db: # Font Rendering Fix
 
-  Migrate from Google Fonts CDN to Next.js self-hosted fonts for improved reliability and production deployment.
+  Migrate from Google Fonts CDN to Next.js self-hosted fonts for improved
+  reliability and production deployment.
 
   ## Changes
 
-  - Replaced Google Fonts imports with `next/font/google` for IBM Plex Mono, Roboto Mono, Inter, and Roboto
-  - Font variables are applied server-side in `_document.tsx` and available globally via CSS class inheritance
-  - Implemented dynamic font switching with CSS variables (`--app-font-family`) and Mantine theme integration
-  - Font configuration centralized in `src/config/fonts.ts` with derived maps for CSS variables and Mantine compatibility
-  - Added Roboto font option alongside existing fonts (IBM Plex Mono, Roboto Mono, Inter)
-  - CSS variable always has a value (defaults to Inter) even when user preference is undefined
+  - Replaced Google Fonts imports with `next/font/google` for IBM Plex Mono,
+    Roboto Mono, Inter, and Roboto
+  - Font variables are applied server-side in `_document.tsx` and available
+    globally via CSS class inheritance
+  - Implemented dynamic font switching with CSS variables (`--app-font-family`)
+    and Mantine theme integration
+  - Font configuration centralized in `src/config/fonts.ts` with derived maps
+    for CSS variables and Mantine compatibility
+  - Added Roboto font option alongside existing fonts (IBM Plex Mono, Roboto
+    Mono, Inter)
+  - CSS variable always has a value (defaults to Inter) even when user
+    preference is undefined
   - Removed old Google Fonts CDN links from `_document.tsx`
-  - `!important` flag used only in CSS for external components (nextra sidebar), not in inline styles
-  - Fonts are now available globally without external CDN dependency, fixing production deployment issues
+  - `!important` flag used only in CSS for external components (nextra sidebar),
+    not in inline styles
+  - Fonts are now available globally without external CDN dependency, fixing
+    production deployment issues
 
   ## Benefits
 
@@ -316,7 +375,8 @@
 - 586bcce7: feat: Add previous period comparisons to line chart
 - 4503d394: improve markdown rendering after we removed bootrstrap reset styles
 - c60e646e: Improve how filters are parsed on the search page
-- 337be9a2: Add support for deeplinking to search page from most charts and tables
+- 337be9a2: Add support for deeplinking to search page from most charts and
+  tables
 - 991bd7e6: fix: Round previous period offset to the second
 - 562dd7ea: Fix minor UI issues and enhance styling across various components
 - 087ff400: feat: Grouped filters for map/json types
@@ -329,15 +389,20 @@
 - ff422206: fix: Fix Services Dashboard Database tab charts
 - d7a5c43b: feat: add ability to change live tail refresh interval
 
-  Adds a dropdown selector in the search page that allows users to configure the live tail refresh interval. Options include 1s, 2s, 4s (default), 10s, and 30s. The selected refresh frequency is persisted in the URL query parameter.
+  Adds a dropdown selector in the search page that allows users to configure the
+  live tail refresh interval. Options include 1s, 2s, 4s (default), 10s, and
+  30s. The selected refresh frequency is persisted in the URL query parameter.
 
 - 7c391dfb: fix: Disable useSessionId query when traceId input is undefined
-- 36cf8665: fix: Don't clobber spans in trace waterfall when multiple spans have duplicate span ids
+- 36cf8665: fix: Don't clobber spans in trace waterfall when multiple spans have
+  duplicate span ids
 - 07392d23: feat: Add clickpy_link to clickpy trace source attributes
 - f868c3ca: Add back selection ui on histogram
-- 21146027: chore: remove deprecated SpanAttribute.http.scheme reference from serviceDashboard
+- 21146027: chore: remove deprecated SpanAttribute.http.scheme reference from
+  serviceDashboard
 - 70fe682b: Add clickable alert timeline chips
-- 7cf4ba4d: Allow HyperDX's listen address to be overriden at runtime with the env var HYPERDX_APP_LISTEN_HOSTNAME. The default remains 0.0.0.0 .
+- 7cf4ba4d: Allow HyperDX's listen address to be overriden at runtime with the
+  env var HYPERDX_APP_LISTEN_HOSTNAME. The default remains 0.0.0.0 .
 - 3b2a8633: fix: sort on the client side in KubernetedDashboardPage
 - 9da2d32f: feat: Improve filter search
 - 770276a1: feat: Add waterfall span/error count summary, span tooltip status
@@ -349,7 +414,8 @@
 - c8ec7fa9: fix: Hide table header when no columns are displayed
 - 770276a1: feat: Add search to trace waterfall
 - a9f10c5f: feat: Add highlighted attributes to overview panel
-- 238c36fd: feat: Improve display of large sizes and volumes of highlighted attributes
+- 238c36fd: feat: Improve display of large sizes and volumes of highlighted
+  attributes
 - Updated dependencies [586bcce7]
 - Updated dependencies [ea25cc5d]
 - Updated dependencies [52d27985]
@@ -367,7 +433,9 @@
 - f612bf3c: feat: add support for alert auto-resolve
 - 91e443f4: feat: Add service maps (beta)
 - cfba5cb6: feat: Sort source dropdown alphabetically
-- af6a8d0d: feat: Remove `bootstrap`, `react-bootstrap` and unused `react-bootstrap-range-slider`, adopt semantic tokens, and improve Mantine UI usage
+- af6a8d0d: feat: Remove `bootstrap`, `react-bootstrap` and unused
+  `react-bootstrap-range-slider`, adopt semantic tokens, and improve Mantine UI
+  usage
 
 ### Patch Changes
 
@@ -382,15 +450,18 @@
 - c4915d45: feat: Add custom trace-level attributes above trace waterfall
 - c42a070a: fix: Fix session search behavior
 - 1e39e134: Fix bug with generating search urls
-- b90a0649: fix: Switch to 'all' after filters change on kubernetes dashboard page
-- 8dee21c8: Improve event deltas (error states, complex values leverage ctes, etc.)
+- b90a0649: fix: Switch to 'all' after filters change on kubernetes dashboard
+  page
+- 8dee21c8: Improve event deltas (error states, complex values leverage ctes,
+  etc.)
 - 09f07e57: fix: Prevent incorrect dashboard side panel close
 - 2faa15a0: Add title tag to app where missed (including catchall title)
 - 63fcf145: fix: optimize query key for aliasMap to prevent jitter
 - 2743d85b: Add ability to resize trace waterfall subpanel
 - a7e150c8: feat: Improve Service Maps
 - 7bb7a878: feat: Add filter for root spans
-- 64b56730: feat: Format row counts (result counter and scanned row estimate) in search page
+- 64b56730: feat: Format row counts (result counter and scanned row estimate) in
+  search page
 - 24bf2b41: bug fixes with relative time selection
 - c5cb1d4b: fix: add json compatibility for infrastructure tab
 - 44caf197: Zero-fill empty alert periods
@@ -406,14 +477,18 @@
 ### Patch Changes
 
 - 93edb6f8: fix: memoize inputs to fix text input performance
-- d5a38c3e: fix: Fix pattern sample query for sources with multi-column timestamp expressions
+- d5a38c3e: fix: Fix pattern sample query for sources with multi-column
+  timestamp expressions
 - 7b6ed70c: fix: Support custom Timestamp Columns in Surrounding Context panel
-- 2162a690: feat: Optimize and fix filtering on toStartOfX primary key expressions
+- 2162a690: feat: Optimize and fix filtering on toStartOfX primary key
+  expressions
 - 15331acb: feat: Auto-select correlated sources on k8s dashboard
 - bb3539dd: improve drawer a11y
 - 24b5477d: feat: allow specifying webhook request headers
 - 3ee93ae9: feat: Show pinned filter values while filters are loading
-- de0b4fc7: Adds "Relative Time" switch to TimePicker component (if relative time is supported by parent). When enabled, searches will work similar to Live Tail but be relative to the option selected.
+- de0b4fc7: Adds "Relative Time" switch to TimePicker component (if relative
+  time is supported by parent). When enabled, searches will work similar to Live
+  Tail but be relative to the option selected.
 - 757196f2: close modals when bluring (dates and search hints)
 - ff86d400: feat: Implement query chunking for charts
 - 21614b94: feat: Include displayed timestamp in default order by
@@ -433,9 +508,11 @@
   `/hyperdx`). It includes updated Next.js, NGINX, and Traefik configurations,
   along with documentation for the new setup.
 
-- 730325a5: Improve SourceSchemaPreview button integration in SourceSelect and DBTableSelect components.
+- 730325a5: Improve SourceSchemaPreview button integration in SourceSelect and
+  DBTableSelect components.
 - dbf16827: feat: add refresh to existing preset dashboards
-- eaff4929: Add toggle filters button, copy field, and per-row copy-to-clipboard for JSON data and modal URLs in RawLogTable
+- eaff4929: Add toggle filters button, copy field, and per-row copy-to-clipboard
+  for JSON data and modal URLs in RawLogTable
 - 348a4044: migration: migrate to Pino for standardized and faster logging
 
 ### Patch Changes
@@ -450,13 +527,15 @@
 - 5efa2ffa: feat: handle k8s metrics semantic convention updates
 - 43e32aaf: fix: handle metrics semantic convention upgrade (feature gate)
 - bd940f30: style: Improve dashboard filter modal UX
-- 3332d5ea: Add ability to customize event deltas heat map y, count, and grouping attributes
+- 3332d5ea: Add ability to customize event deltas heat map y, count, and
+  grouping attributes
 - 6262ced8: fix: Fix crash when navigating away from chart explorer search page
 - ec2ea566: Improve Support for Dynamic and JSON(<parameters>) Types
 - 65872831: fix: Preserve original select from time chart event selection
 - b46ae2f2: fix: Fix sidebar when selecting JSON property
 - 62eddcf2: fix: Fix infinite querying on non-windowed searches
-- 065cabdb: fix: Update "Copy Object" in line viewer to work with nested objects and arrays
+- 065cabdb: fix: Update "Copy Object" in line viewer to work with nested objects
+  and arrays
 - 05ca6ceb: Attempt to make claude code reviews less chirpy
 - daffcf35: feat: Add percentages to filter values
 - 5210bb86: refactor: clean up table connections
@@ -489,7 +568,8 @@
 - 69a2a6af: fix: 'Around a time' duration update in TimePicker
 - ea5d2921: Improve memory efficiency in high row cound envs
 - 24314a96: add dashboard import/export functionality
-- 8f06ce7b: perf: add prelimit CTE to getMapKeys query + store clickhouse settings in shared cache
+- 8f06ce7b: perf: add prelimit CTE to getMapKeys query + store clickhouse
+  settings in shared cache
 - e053c490: chore: Customize user-agent for Alerts ClickHouse client
 - 7837a621: fix: Multiline support for WHERE Input boxes
 - Updated dependencies [8673f967]
@@ -505,15 +585,18 @@
 
 ### Minor Changes
 
-- 5a44953e: feat: Add new none aggregation function to allow fully user defined aggregations in SQL
+- 5a44953e: feat: Add new none aggregation function to allow fully user defined
+  aggregations in SQL
 - 0cf8556d: feat: Allow chart series to be reordered
-- 970c0027: Fix: improve the discoverability of inline item expansion within the search table
+- 970c0027: Fix: improve the discoverability of inline item expansion within the
+  search table
 
 ### Patch Changes
 
 - 7a058059: Reusable DBSqlRowTableWithSideBar Component
 - 2c44ef98: style: Update icon used to show source schema
-- 0d9f3fe0: fix: Always enable query analyzer to fix compatibility issues with old ClickHouse versions.
+- 0d9f3fe0: fix: Always enable query analyzer to fix compatibility issues with
+  old ClickHouse versions.
 - 21f1aa75: fix: filter values for json casted to string
 - 825452fe: refactor: Decouple alerts processing from Mongo
 - 1d79980e: fix: Fix ascending order in windowed searches
@@ -533,11 +616,15 @@
 
 ### Patch Changes
 
-- c48f4181: Add accordion functionality to filter groups, changed how the system prioritizes which filters are open by default, added new sort logic for prioritizing certain filters.
+- c48f4181: Add accordion functionality to filter groups, changed how the system
+  prioritizes which filters are open by default, added new sort logic for
+  prioritizing certain filters.
 - 45e8e1b6: fix: Update tsconfigs to resolve IDE type errors
 - d938b4a4: feat: Improve Slack Webhook validation
-- 5c88c463: fix bug where reading value when server is offline could throw client error
-- cd5cc7d2: fix: Fixed trace table source inference to correctly infer span events column
+- 5c88c463: fix bug where reading value when server is offline could throw
+  client error
+- cd5cc7d2: fix: Fixed trace table source inference to correctly infer span
+  events column
 - Updated dependencies [45e8e1b6]
 - Updated dependencies [fa45875d]
 - Updated dependencies [d938b4a4]
@@ -550,7 +637,8 @@
 ### Minor Changes
 
 - 25f77aa7: added team level queryTimeout to ClickHouse client
-- 64eb638b: feat: Improve search speed by chunking long time range searches into smaller incremental search windows.
+- 64eb638b: feat: Improve search speed by chunking long time range searches into
+  smaller incremental search windows.
 
 ### Patch Changes
 
@@ -562,16 +650,19 @@
   - uninstall @clickhouse/client + @clickhouse/client-web in app package
   - bump @clickhouse/client in common-utils package to v1.12.1
 - fb66126e: fix: remove play button and time picker from markdown tab
-- 88f3cafb: fix: Prevent empty order by set in search page for certain sort/primary keys
+- 88f3cafb: fix: Prevent empty order by set in search page for certain
+  sort/primary keys
 - 784014b6: fix: broke out line break icon from HyperJsonMenu
 - 9c4c5f49: feat: support toUnixTimestamp style timestamps in ORDER BY
 - aacd24dd: refactor: decouple clickhouse client into browser.ts and node.ts
 - 52483f6a: feat: enable filters for json columns
 - aacd24dd: bump: default request_timeout to 1hr
 - 5e4047a9: feat: add generated SQL modal to the search page
-- 042e3595: Resolved overflow issue and enhanced color contrast in nav bar profile section.
+- 042e3595: Resolved overflow issue and enhanced color contrast in nav bar
+  profile section.
 - a714412d: Improve live tail logic to not fetch if the page isn't visible.
-- b6787d56: fix: format numbers on dashboards only for the queried column, not groupBy columns
+- b6787d56: fix: format numbers on dashboards only for the queried column, not
+  groupBy columns
 - ecb20c84: feat: remove useless session source fields
 - Updated dependencies [25f77aa7]
 - Updated dependencies [d6f8058e]
@@ -595,7 +686,8 @@
 
 ### Patch Changes
 
-- d29e2bc: fix: handle the case when `CUSTOM_OTELCOL_CONFIG_FILE` is not specified
+- d29e2bc: fix: handle the case when `CUSTOM_OTELCOL_CONFIG_FILE` is not
+  specified
 - 5eeee5c: change app's docs links to ClickStack docs
 - Updated dependencies [d29e2bc]
   - @hyperdx/common-utils@0.3.1
@@ -604,17 +696,20 @@
 
 ### Minor Changes
 
-- c0b188c: Track the user id who created alerts and display the information in the UI.
+- c0b188c: Track the user id who created alerts and display the information in
+  the UI.
 - 6dd6165: feat: Display original query to error messages in search page
 
 ### Patch Changes
 
-- 5ad1455: feat: centralize the default orderBy and optimize it for diverse table structures
+- 5ad1455: feat: centralize the default orderBy and optimize it for diverse
+  table structures
 - 823566f: chore: show display switcher on dashboard page
 - 4c459dc: handle escaped string search correctly
 - 35fe9cf: fix default order by generated for advanced table sorting keys
 - 5a59d32: Upgraded NX from version 16.8.1 to 21.3.11
-- 9cd9bfb: fix: Properly fetch tables in source edit dropdown when new connection is selected
+- 9cd9bfb: fix: Properly fetch tables in source edit dropdown when new
+  connection is selected
 - Updated dependencies [6dd6165]
 - Updated dependencies [5a59d32]
   - @hyperdx/common-utils@0.3.0
@@ -624,8 +719,10 @@
 ### Patch Changes
 
 - 39cde41: fix: k8s event property mappings
-- b568b00: feat: introduce team 'clickhouse-settings' endpoint + metadataMaxRowsToRead setting
-- 86115fa: feat: Add click + sidepanel support to items within surrounding context
+- b568b00: feat: introduce team 'clickhouse-settings' endpoint +
+  metadataMaxRowsToRead setting
+- 86115fa: feat: Add click + sidepanel support to items within surrounding
+  context
 - 7cd1d2a: fix: endless rerenders caused by Date.now() in a component
 - ba86b0c: fix: Set default source in dropdown if one does not exist
 - Updated dependencies [39cde41]
@@ -647,13 +744,16 @@
 
 ### Minor Changes
 
-- bb37520: Correlated source field links are bidirectional by default and no link exists.
+- bb37520: Correlated source field links are bidirectional by default and no
+  link exists.
 
 ### Patch Changes
 
 - 4ce81d4: fix: handle Nullable + Tuple type column + decouple useRowWhere
-- 6c13403: fix: use '--kill-others-on-fail' to prevent processes from terminating when RUN_SCHEDULED_TASKS_EXTERNALLY is enabled
-- 61c79a1: fix: Ensure percentile aggregations on histograms don't create invalid SQL queries due to improperly escaped aliases.
+- 6c13403: fix: use '--kill-others-on-fail' to prevent processes from
+  terminating when RUN_SCHEDULED_TASKS_EXTERNALLY is enabled
+- 61c79a1: fix: Ensure percentile aggregations on histograms don't create
+  invalid SQL queries due to improperly escaped aliases.
 - Updated dependencies [4ce81d4]
 - Updated dependencies [61c79a1]
   - @hyperdx/common-utils@0.2.7
@@ -663,7 +763,8 @@
 ### Patch Changes
 
 - 33fc071: feat: Allow users to define custom column aliases for charts
-- b9ad3bd: fix: Limit source selector to only display the supported types in search, sessions and dashboards
+- b9ad3bd: fix: Limit source selector to only display the supported types in
+  search, sessions and dashboards
 - 10abadd: feat: Add verbose time range used for search in results table
 - 40d0439: feat: Allow pinning a field in the filter panel
 - 4581a68: fix: queries firing before having a valid table or connection id
@@ -723,7 +824,8 @@
 - ab387e1: fix: missing types in app build
 - fce5ee5: feat: add load more to features and improve querying
 - dfdb2d7: Better loading state for events patterns table
-- 3eeb530: fix: date range undefined error causing issue loading keyvals for autocomplete
+- 3eeb530: fix: date range undefined error causing issue loading keyvals for
+  autocomplete
 - 8874648: fix: Pollyfill crypto.randomUUID
 - 43edac8: chore: bump @hyperdx/node-opentelemetry to v0.8.2
 - Updated dependencies [ab3b5cb]
@@ -740,12 +842,14 @@
 ### Minor Changes
 
 - 759da7a: Support multiple OTEL metric types in source configuration setup.
-- 9579251: Stores the collapse vs expand status of the side navigation in local storage so it's carried across browser windows/sessions.
+- 9579251: Stores the collapse vs expand status of the side navigation in local
+  storage so it's carried across browser windows/sessions.
 - 57a6bc3: feat: BETA metrics support (sum + gauge)
 
 ### Patch Changes
 
-- 56e39dc: 36c3edc fix: remove several source change forms throughout the log drawer
+- 56e39dc: 36c3edc fix: remove several source change forms throughout the log
+  drawer
 - c60b975: chore: bump node to v22.16.0
 - ab617c1: feat: support multiseries metrics chart
 - 7de8916: Removes trailing slash for connection urls
@@ -754,20 +858,27 @@
 - 459267a: feat: introduce session table model form
 - fe8ed22: fix: color display on search page for traces
 - b3f3151: Allow to create Slack Webhooks from Team Settings page
-- 2e350e2: feat: implement logs > metrics correlation flow + introduce convertV1ChartConfigToV2
+- 2e350e2: feat: implement logs > metrics correlation flow + introduce
+  convertV1ChartConfigToV2
 - 321e24f: fix: alerting time range filtering bug
 - 092a292: fix: autocomplete for key-values complete for v2 lucene
 - a6fd5e3: feat: introduce k8s preset dashboard
 - 2f626e1: fix: metric name filtering for some metadata
-- cfdd523: feat: clickhouse queries are by default conducted through the clickhouse library via POST request. localMode still uses GET for CORS purposes
+- cfdd523: feat: clickhouse queries are by default conducted through the
+  clickhouse library via POST request. localMode still uses GET for CORS
+  purposes
 - 6dc6989: feat: Automatically use last used source when loading search page
-- a9dfa14: Added support to CTE rendering where you can now specify a CTE using a full chart config object instance. This CTE capability is then used to avoid the URI too long error for delta event queries.
-- fa7875c: feat: add summary and exponential histogram metrics to the source form and database storage
+- a9dfa14: Added support to CTE rendering where you can now specify a CTE using
+  a full chart config object instance. This CTE capability is then used to avoid
+  the URI too long error for delta event queries.
+- fa7875c: feat: add summary and exponential histogram metrics to the source
+  form and database storage
 - 5a10ae1: fix: delete huge z-value for tooltip
 - f5e9a07: chore: bump node version to v22
 - b16c8e1: feat: compute charts ratio
 - 6864836: fix: don't show ellipses on search when query is in-flight
-- 86465a2: fix: map CLICKHOUSE_SERVER_ENDPOINT to otelcol ch exporter 'endpoint' field
+- 86465a2: fix: map CLICKHOUSE_SERVER_ENDPOINT to otelcol ch exporter 'endpoint'
+  field
 - 08009ac: feat: add saved filters for searches
 - 92a4800: feat: move rrweb event fetching to the client instead of an api route
 - b99236d: fix: autocomplete options for dashboard page
@@ -776,20 +887,24 @@
 - 7f0b397: feat: queryChartConfig method + events chart ratio
 - 5db2767: Fixed CI linting and UI release task.
 - 000458d: chore: GA v2
-- 84a9119: fix: Session replay intermittently showing "No replay available for this session"
+- 84a9119: fix: Session replay intermittently showing "No replay available for
+  this session"
 - 4514f2c: Remove connection health hook - too noisy
 - 8d534da: fixed ui state on session panel to be inline with ui
-- 931d738: fix: bugs with showing non otel spans (ex. clickhouse opentelemetry span logs)
+- 931d738: fix: bugs with showing non otel spans (ex. clickhouse opentelemetry
+  span logs)
 - 2580ddd: chore: bump next to v13.5.10
 - db761ba: fix: remove originalWhere tag from view. not used anyways
 - 184402d: fix: use quote for aliases for sql compatibility
-- 5044083: Session Replay tab for traces is disabled unless the source is configured with a sessionId
+- 5044083: Session Replay tab for traces is disabled unless the source is
+  configured with a sessionId
 - 8c95b9e: Add search history
 - a762203: fix: metadata getAllKeyValues query key scoped to table now
 - cd0e4fd: fix: correct handling of gauge metrics in renderChartConfig
 - b4b5f6b: style: remove unused routes/components + clickhouse utils (api)
 - 1211386: add severitytext coloring to event patterns
-- 6dafb87: fix: View Events not shown for multiple series; grabs where clause when single series
+- 6dafb87: fix: View Events not shown for multiple series; grabs where clause
+  when single series
 - e7262d1: feat: introduce all-one-one (auth vs noauth) multi-stage build
 - decd622: fix: k8s dashboard uptime metrics + warning k8s event body
 - e884d85: fix: metrics > logs correlation flow
@@ -848,10 +963,13 @@
 - d176b54: fix: chartpage querying too on every keystroke after initial query
 - fe8ed22: fix: color display on search page for traces
 - 321e24f: fix: alerting time range filtering bug
-- fa7875c: feat: add summary and exponential histogram metrics to the source form and database storage
-- 86465a2: fix: map CLICKHOUSE_SERVER_ENDPOINT to otelcol ch exporter 'endpoint' field
+- fa7875c: feat: add summary and exponential histogram metrics to the source
+  form and database storage
+- 86465a2: fix: map CLICKHOUSE_SERVER_ENDPOINT to otelcol ch exporter 'endpoint'
+  field
 - 43a9ca1: adopt clickhouse-js for all client side queries
-- 84a9119: fix: Session replay intermittently showing "No replay available for this session"
+- 84a9119: fix: Session replay intermittently showing "No replay available for
+  this session"
 - 8d534da: fixed ui state on session panel to be inline with ui
 - a762203: fix: metadata getAllKeyValues query key scoped to table now
 - 1211386: add severitytext coloring to event patterns
@@ -874,7 +992,8 @@
 
 ### Patch Changes
 
-- 931d738: fix: bugs with showing non otel spans (ex. clickhouse opentelemetry span logs)
+- 931d738: fix: bugs with showing non otel spans (ex. clickhouse opentelemetry
+  span logs)
 - Updated dependencies [931d738]
   - @hyperdx/common-utils@0.2.0-beta.5
 
@@ -883,7 +1002,9 @@
 ### Patch Changes
 
 - 7de8916: Removes trailing slash for connection urls
-- cfdd523: feat: clickhouse queries are by default conducted through the clickhouse library via POST request. localMode still uses GET for CORS purposes
+- cfdd523: feat: clickhouse queries are by default conducted through the
+  clickhouse library via POST request. localMode still uses GET for CORS
+  purposes
 - 6dc6989: feat: Automatically use last used source when loading search page
 - 92a4800: feat: move rrweb event fetching to the client instead of an api route
 - 7f0b397: feat: queryChartConfig method + events chart ratio
@@ -898,7 +1019,8 @@
 
 ### Patch Changes
 
-- 56e39dc: 36c3edc fix: remove several source change forms throughout the log drawer
+- 56e39dc: 36c3edc fix: remove several source change forms throughout the log
+  drawer
 - 092a292: fix: autocomplete for key-values complete for v2 lucene
 - 2f626e1: fix: metric name filtering for some metadata
 - f5e9a07: chore: bump node version to v22
@@ -916,21 +1038,27 @@
 
 ### Minor Changes
 
-- 9579251: Stores the collapse vs expand status of the side navigation in local storage so it's carried across browser windows/sessions.
+- 9579251: Stores the collapse vs expand status of the side navigation in local
+  storage so it's carried across browser windows/sessions.
 
 ### Patch Changes
 
 - 3be7f4d: fix: input does not overlap with language select button anymore
-- 2e350e2: feat: implement logs > metrics correlation flow + introduce convertV1ChartConfigToV2
+- 2e350e2: feat: implement logs > metrics correlation flow + introduce
+  convertV1ChartConfigToV2
 - a6fd5e3: feat: introduce k8s preset dashboard
-- a9dfa14: Added support to CTE rendering where you can now specify a CTE using a full chart config object instance. This CTE capability is then used to avoid the URI too long error for delta event queries.
+- a9dfa14: Added support to CTE rendering where you can now specify a CTE using
+  a full chart config object instance. This CTE capability is then used to avoid
+  the URI too long error for delta event queries.
 - 5a10ae1: fix: delete huge z-value for tooltip
 - 6864836: fix: don't show ellipses on search when query is in-flight
 - b99236d: fix: autocomplete options for dashboard page
 - 5db2767: Fixed CI linting and UI release task.
 - 2580ddd: chore: bump next to v13.5.10
-- 5044083: Session Replay tab for traces is disabled unless the source is configured with a sessionId
-- 6dafb87: fix: View Events not shown for multiple series; grabs where clause when single series
+- 5044083: Session Replay tab for traces is disabled unless the source is
+  configured with a sessionId
+- 6dafb87: fix: View Events not shown for multiple series; grabs where clause
+  when single series
 - decd622: fix: k8s dashboard uptime metrics + warning k8s event body
 - e884d85: fix: metrics > logs correlation flow
 - e5a210a: feat: support search on multi implicit fields (BETA)

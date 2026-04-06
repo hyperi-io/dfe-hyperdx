@@ -3,7 +3,7 @@
 
 extensions:
   bearertokenauth/hyperdx:
-    scheme: ""
+    scheme: ''
     tokens:
       - ${env:OTLP_AUTH_TOKEN}
 

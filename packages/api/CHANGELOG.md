@@ -28,11 +28,13 @@
 
 - 4c287b16: fix: Fix external dashboard endpoints
 - 3aa8be0a: Concat zod errors into a single message field
-- d07e30d5: Associates a logged in HyperDX user to the ClickHouse query recorded in the query log.
+- d07e30d5: Associates a logged in HyperDX user to the ClickHouse query recorded
+  in the query log.
 
 ### Patch Changes
 
-- 4e7d04c7: API: Show error "Invalid JSON payload" if the JSON body has a syntax error
+- 4e7d04c7: API: Show error "Invalid JSON payload" if the JSON body has a syntax
+  error
 - 941bc23e: fix: Fix inaccurate openapi docs for external alerts API
 - b8ab312a: chore: improve Team typing
 - Updated dependencies [6aa3ac6f]
@@ -48,9 +50,11 @@
 ### Patch Changes
 
 - d769f88d: Fix issue when a source type is switched after creation
-- 418828e8: Add better types for AI features, Fix bug that could cause page crash when generating graphs
+- 418828e8: Add better types for AI features, Fix bug that could cause page
+  crash when generating graphs
 - 79398be7: chore: Standardize granularities
-- eef80b7e: Add ability to define different anthropic api BASE_URLs, add core logic for different ai providers
+- eef80b7e: Add ability to define different anthropic api BASE_URLs, add core
+  logic for different ai providers
 - 4a856173: feat: Add hasAllTokens for text index support
 - Updated dependencies [1cf8cebb]
 - Updated dependencies [418828e8]
@@ -81,7 +85,8 @@
 
 ### Patch Changes
 
-- 103c63cc: chore(eslint): enable @typescript-eslint/no-unsafe-type-assertion rule (warn)
+- 103c63cc: chore(eslint): enable @typescript-eslint/no-unsafe-type-assertion
+  rule (warn)
 - Updated dependencies [103c63cc]
 - Updated dependencies [103c63cc]
   - @hyperdx/common-utils@0.10.1
@@ -166,7 +171,8 @@
 
 ### Minor Changes
 
-- f4c35239: Allows defining the ClickHouse request timeout value from the command line on the check-alert task
+- f4c35239: Allows defining the ClickHouse request timeout value from the
+  command line on the check-alert task
 - 348a4044: migration: migrate to Pino for standardized and faster logging
 - c90a93e6: Updated the cron package to pick up a fix for stalled cron tasks.
 
@@ -212,7 +218,8 @@
 ### Patch Changes
 
 - df259392: chore: remove unused npm packages
-- 0d9f3fe0: fix: Always enable query analyzer to fix compatibility issues with old ClickHouse versions.
+- 0d9f3fe0: fix: Always enable query analyzer to fix compatibility issues with
+  old ClickHouse versions.
 - 140e4d2f: feat: Get ClickHouse client from AlertProvider
 - 825452fe: refactor: Decouple alerts processing from Mongo
 - Updated dependencies [0d9f3fe0]
@@ -245,7 +252,8 @@
 
 ### Patch Changes
 
-- 85685801: feat: INGESTION_API_KEY allows for environment variable defined api key
+- 85685801: feat: INGESTION_API_KEY allows for environment variable defined api
+  key
 - eb6f3a01: Fix the alert connection query to include the password field.
 - d6f8058e: - deprecate unused packages/api/src/clickhouse
   - deprecate unused route /datasources
@@ -254,7 +262,8 @@
   - uninstall @clickhouse/client + @clickhouse/client-web in app package
   - bump @clickhouse/client in common-utils package to v1.12.1
 - aacd24dd: refactor: decouple clickhouse client into browser.ts and node.ts
-- bb2221a1: fix: Keep "created by" field unchanged during alert updates in dashboards
+- bb2221a1: fix: Keep "created by" field unchanged during alert updates in
+  dashboards
 - aacd24dd: bump: default request_timeout to 1hr
 - f800fd13: Fixes alert title used on dashboards with multiple tiles
 - 261d4693: feat: limit how many tasks are executing at any time
@@ -280,8 +289,10 @@
 
 ### Patch Changes
 
-- d29e2bc: fix: handle the case when `CUSTOM_OTELCOL_CONFIG_FILE` is not specified
-- c216053: Changes the order of alert evaluation to group queries by the connection on the alert.
+- d29e2bc: fix: handle the case when `CUSTOM_OTELCOL_CONFIG_FILE` is not
+  specified
+- c216053: Changes the order of alert evaluation to group queries by the
+  connection on the alert.
 - Updated dependencies [d29e2bc]
   - @hyperdx/common-utils@0.3.1
 
@@ -289,7 +300,8 @@
 
 ### Minor Changes
 
-- c0b188c: Track the user id who created alerts and display the information in the UI.
+- c0b188c: Track the user id who created alerts and display the information in
+  the UI.
 
 ### Patch Changes
 
@@ -305,7 +317,8 @@
 ### Patch Changes
 
 - 39cde41: fix: k8s event property mappings
-- b568b00: feat: introduce team 'clickhouse-settings' endpoint + metadataMaxRowsToRead setting
+- b568b00: feat: introduce team 'clickhouse-settings' endpoint +
+  metadataMaxRowsToRead setting
 - Updated dependencies [39cde41]
 - Updated dependencies [b568b00]
   - @hyperdx/common-utils@0.2.9
@@ -324,9 +337,12 @@
 ### Patch Changes
 
 - 4ce81d4: fix: handle Nullable + Tuple type column + decouple useRowWhere
-- 21b5df6: fix: Hotfix to prevent the app from crashing due to a strict mode exception
-- 6c13403: fix: use '--kill-others-on-fail' to prevent processes from terminating when RUN_SCHEDULED_TASKS_EXTERNALLY is enabled
-- 61c79a1: fix: Ensure percentile aggregations on histograms don't create invalid SQL queries due to improperly escaped aliases.
+- 21b5df6: fix: Hotfix to prevent the app from crashing due to a strict mode
+  exception
+- 6c13403: fix: use '--kill-others-on-fail' to prevent processes from
+  terminating when RUN_SCHEDULED_TASKS_EXTERNALLY is enabled
+- 61c79a1: fix: Ensure percentile aggregations on histograms don't create
+  invalid SQL queries due to improperly escaped aliases.
 - Updated dependencies [4ce81d4]
 - Updated dependencies [61c79a1]
   - @hyperdx/common-utils@0.2.7
@@ -385,7 +401,8 @@
 
 - ab3b5cb: perf: merge api + app packages to dedupe node_modules
 - ab387e1: fix: missing types in app build
-- d1dc2ec: Bumped mongodb driver support to allow for AWS IAM authentication. This drops support for MongoDB 3.6.
+- d1dc2ec: Bumped mongodb driver support to allow for AWS IAM authentication.
+  This drops support for MongoDB 3.6.
 - 43edac8: chore: bump @hyperdx/node-opentelemetry to v0.8.2
 - fa11fbb: fix: usage stats missing cluster id
 - Updated dependencies [ab3b5cb]
@@ -397,7 +414,8 @@
 
 ### Minor Changes
 
-- 79fe30f: Queries depending on numeric aggregates now use the type's default value (e.g. 0) instead of null when dealing with non-numeric data.
+- 79fe30f: Queries depending on numeric aggregates now use the type's default
+  value (e.g. 0) instead of null when dealing with non-numeric data.
 - 759da7a: Support multiple OTEL metric types in source configuration setup.
 
 ### Patch Changes
@@ -405,18 +423,23 @@
 - c60b975: chore: bump node to v22.16.0
 - 50ce38f: Histogram metric query test cases
 - 9004826: fix: remove total number of webhook limit
-- 2e350e2: feat: implement logs > metrics correlation flow + introduce convertV1ChartConfigToV2
+- 2e350e2: feat: implement logs > metrics correlation flow + introduce
+  convertV1ChartConfigToV2
 - 321e24f: fix: alerting time range filtering bug
 - 9a9581b: Adds external API for alerts and dashboards
 - e5dfefb: Added test cases for the webhook and source routes.
-- fa7875c: feat: add summary and exponential histogram metrics to the source form and database storage
+- fa7875c: feat: add summary and exponential histogram metrics to the source
+  form and database storage
 - f5e9a07: chore: bump node version to v22
 - 59ee6d2: bring usage stats up to date
 - 1674ab8: moved swagger to dependencies instead of devDependencies
-- 86465a2: fix: map CLICKHOUSE_SERVER_ENDPOINT to otelcol ch exporter 'endpoint' field
+- 86465a2: fix: map CLICKHOUSE_SERVER_ENDPOINT to otelcol ch exporter 'endpoint'
+  field
 - d72d1d2: Add ingestion key authentication in OTel collector via OpAMP
-- b9f7d32: Refactored renderWith to simplify logic and ship more tests with the changes.
-- 293a2af: Adds openapidoc annotations for spec generation and swagger route for development
+- b9f7d32: Refactored renderWith to simplify logic and ship more tests with the
+  changes.
+- 293a2af: Adds openapidoc annotations for spec generation and swagger route for
+  development
 - 92a4800: feat: move rrweb event fetching to the client instead of an api route
 - adc2a0b: fix: Ensure errors from proxy are shown to the user
 - 43a9ca1: adopt clickhouse-js for all client side queries
@@ -424,14 +447,16 @@
 - 5db2767: Fixed CI linting and UI release task.
 - 000458d: chore: GA v2
 - 99b60d5: Fixed sum metric query to pass integration test case from v1.
-- 931d738: fix: bugs with showing non otel spans (ex. clickhouse opentelemetry span logs)
+- 931d738: fix: bugs with showing non otel spans (ex. clickhouse opentelemetry
+  span logs)
 - 184402d: fix: use quote for aliases for sql compatibility
 - cd0e4fd: fix: correct handling of gauge metrics in renderChartConfig
 - d63deed: fix: support otelcol opamp for aio build
 - b4b5f6b: style: remove unused routes/components + clickhouse utils (api)
 - e7262d1: feat: introduce all-one-one (auth vs noauth) multi-stage build
 - d326610: feat: introduce RUN_SCHEDULED_TASKS_EXTERNALLY + enable in-app task
-- 96b8c50: Fix histogram query metric to support grouping and correct issues with value computation.
+- 96b8c50: Fix histogram query metric to support grouping and correct issues
+  with value computation.
 - 414ff92: perf + fix: single clickhouse proxy middleware instance
 - Updated dependencies [50ce38f]
 - Updated dependencies [79fe30f]
@@ -486,14 +511,17 @@
 - c60b975: chore: bump node to v22.16.0
 - 9004826: fix: remove total number of webhook limit
 - 321e24f: fix: alerting time range filtering bug
-- fa7875c: feat: add summary and exponential histogram metrics to the source form and database storage
+- fa7875c: feat: add summary and exponential histogram metrics to the source
+  form and database storage
 - 59ee6d2: bring usage stats up to date
-- 86465a2: fix: map CLICKHOUSE_SERVER_ENDPOINT to otelcol ch exporter 'endpoint' field
+- 86465a2: fix: map CLICKHOUSE_SERVER_ENDPOINT to otelcol ch exporter 'endpoint'
+  field
 - d72d1d2: Add ingestion key authentication in OTel collector via OpAMP
 - 43a9ca1: adopt clickhouse-js for all client side queries
 - d63deed: fix: support otelcol opamp for aio build
 - e7262d1: feat: introduce all-one-one (auth vs noauth) multi-stage build
-- 96b8c50: Fix histogram query metric to support grouping and correct issues with value computation.
+- 96b8c50: Fix histogram query metric to support grouping and correct issues
+  with value computation.
 - Updated dependencies [e935bb6]
 - Updated dependencies [321e24f]
 - Updated dependencies [7d2cfcf]
@@ -513,7 +541,8 @@
 ### Patch Changes
 
 - 1674ab8: moved swagger to dependencies instead of devDependencies
-- 931d738: fix: bugs with showing non otel spans (ex. clickhouse opentelemetry span logs)
+- 931d738: fix: bugs with showing non otel spans (ex. clickhouse opentelemetry
+  span logs)
 - Updated dependencies [931d738]
   - @hyperdx/common-utils@0.2.0-beta.5
 
@@ -521,12 +550,14 @@
 
 ### Minor Changes
 
-- 79fe30f: Queries depending on numeric aggregates now use the type's default value (e.g. 0) instead of null when dealing with non-numeric data.
+- 79fe30f: Queries depending on numeric aggregates now use the type's default
+  value (e.g. 0) instead of null when dealing with non-numeric data.
 
 ### Patch Changes
 
 - 9a9581b: Adds external API for alerts and dashboards
-- 293a2af: Adds openapidoc annotations for spec generation and swagger route for development
+- 293a2af: Adds openapidoc annotations for spec generation and swagger route for
+  development
 - 92a4800: feat: move rrweb event fetching to the client instead of an api route
 - 7f0b397: feat: queryChartConfig method + events chart ratio
 - b4b5f6b: style: remove unused routes/components + clickhouse utils (api)
@@ -553,8 +584,10 @@
 ### Patch Changes
 
 - 50ce38f: Histogram metric query test cases
-- 2e350e2: feat: implement logs > metrics correlation flow + introduce convertV1ChartConfigToV2
-- b9f7d32: Refactored renderWith to simplify logic and ship more tests with the changes.
+- 2e350e2: feat: implement logs > metrics correlation flow + introduce
+  convertV1ChartConfigToV2
+- b9f7d32: Refactored renderWith to simplify logic and ship more tests with the
+  changes.
 - 5db2767: Fixed CI linting and UI release task.
 - d326610: feat: introduce RUN_SCHEDULED_TASKS_EXTERNALLY + enable in-app task
 - 414ff92: perf + fix: single clickhouse proxy middleware instance

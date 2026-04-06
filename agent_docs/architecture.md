@@ -3,7 +3,8 @@
 ## Core Services
 
 - **HyperDX UI (`packages/app`)**: Next.js frontend serving the user interface
-- **HyperDX API (`packages/api`)**: Node.js/Express backend handling queries and business logic
+- **HyperDX API (`packages/api`)**: Node.js/Express backend handling queries and
+  business logic
 - **OpenTelemetry Collector**: Receives and processes telemetry data
 - **ClickHouse**: Primary data store for all telemetry (logs, metrics, traces)
 - **MongoDB**: Metadata storage (users, dashboards, alerts, saved searches)
@@ -18,12 +19,14 @@
 ## Key MongoDB Models
 
 All models follow consistent patterns with:
+
 - Team-based multi-tenancy (most entities belong to a `team`)
 - ObjectId references between related entities
 - Timestamps for audit trails
 - Zod schema validation
 
 **Key Models** (see `packages/api/src/models/`):
+
 - `Team`: Multi-tenant organization unit
 - `User`: Team members with authentication
 - `Source`: ClickHouse data source configuration
@@ -42,21 +45,26 @@ All models follow consistent patterns with:
 ## Backend Architecture
 
 - **Routers**: `packages/api/src/routers/` - Domain-specific API routes
-- **Controllers**: `packages/api/src/controllers/` - Business logic separated from routes
+- **Controllers**: `packages/api/src/controllers/` - Business logic separated
+  from routes
 - **Middleware**: Authentication, CORS, error handling
 - **Services**: Reusable business logic (e.g., `agentService`)
 
 ## Data & Query Patterns
 
 ### ClickHouse Integration
+
 - **Query building**: Use `common-utils` for safe query construction
-- **Schema flexibility**: Support for various telemetry schemas via `Source` configuration
+- **Schema flexibility**: Support for various telemetry schemas via `Source`
+  configuration
 
 ### MongoDB Patterns
+
 - **Multi-tenancy**: All queries filtered by team context
 - **Relationships**: Use ObjectId references with proper population
 - **Indexing**: Strategic indexes for query performance
-- **Migrations**: Versioned migrations for schema changes (see `packages/api/migrations/`)
+- **Migrations**: Versioned migrations for schema changes (see
+  `packages/api/migrations/`)
 
 ## Security Requirements
 
@@ -64,4 +72,3 @@ All models follow consistent patterns with:
 - **Team isolation**: All data access must filter by team context
 - **API authentication**: Use authentication middleware on protected routes
 - **Secrets**: Never commit secrets; use `.env` files
-

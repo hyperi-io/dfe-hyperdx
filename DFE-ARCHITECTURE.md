@@ -14,7 +14,7 @@ handled externally via OIDC through Envoy, authorization is enforced by Casbin
 PostgreSQL. The HyperDX application code is left untouched to preserve clean
 upstream merge compatibility.
 
-This document is a combination of the following:  
+This document is a combination of the following:
 
 - Derek's original
   - HyperDX-DF-Embed.pptx and docx
@@ -188,18 +188,18 @@ graph TB
 ```
 
 The DFE platform embeds HyperDX as its visualization and search layer. Users
-access HyperDX through Envoy, which handles OIDC authentication. Casbin
-provides shared RBAC across both the DFE Python UI and HyperDX Node.js API,
-backed by the same PostgreSQL instance. Detection and alerting are handled by
-the DFE rules engine — HyperDX's built-in alerting is disabled.
+access HyperDX through Envoy, which handles OIDC authentication. Casbin provides
+shared RBAC across both the DFE Python UI and HyperDX Node.js API, backed by the
+same PostgreSQL instance. Detection and alerting are handled by the DFE rules
+engine — HyperDX's built-in alerting is disabled.
 
 ---
 
 ## Production Deployment: FerretDB and PostgreSQL
 
-For production, we replace MongoDB with
-[FerretDB](https://www.ferretdb.com/) — an open-source proxy that speaks the
-MongoDB wire protocol but stores data in PostgreSQL via the
+For production, we replace MongoDB with [FerretDB](https://www.ferretdb.com/) —
+an open-source proxy that speaks the MongoDB wire protocol but stores data in
+PostgreSQL via the
 [DocumentDB extension](https://github.com/FerretDB/documentdb). HyperDX requires
 **zero code changes**; the Mongoose ODM, `connect-mongo` session store, and all
 MongoDB queries work transparently through FerretDB.
@@ -210,8 +210,8 @@ MongoDB queries work transparently through FerretDB.
   Existing drivers, tools (mongosh, Compass, mongodump), and ODMs (Mongoose)
   connect to it with a standard `mongodb://` connection string.
 - **PostgreSQL backend**: All document data is stored in PostgreSQL as JSONB via
-  the DocumentDB extension, giving you PostgreSQL's mature ecosystem for backups,
-  replication, monitoring, and operational tooling.
+  the DocumentDB extension, giving you PostgreSQL's mature ecosystem for
+  backups, replication, monitoring, and operational tooling.
 - **No vendor lock-in**: Apache 2.0 licensed, avoids MongoDB's SSPL.
 - **No application migration needed**: HyperDX talks to FerretDB exactly as it
   would to MongoDB. The `MONGO_URI` just points at FerretDB instead.
@@ -286,8 +286,8 @@ Key points:
   It connects to PostgreSQL via `FERRETDB_POSTGRESQL_URL`.
 - **`app`** changes only `MONGO_URI` to point at FerretDB. All application code,
   Mongoose models, session storage, and alert checking work unchanged.
-- Pin both image tags to matching versions (e.g. `17-0.107.0-ferretdb-2.7.0`
-  and `ferretdb:2.7.0`) to avoid compatibility issues between DocumentDB and
+- Pin both image tags to matching versions (e.g. `17-0.107.0-ferretdb-2.7.0` and
+  `ferretdb:2.7.0`) to avoid compatibility issues between DocumentDB and
   FerretDB releases.
 
 ### Full Production Service Topology
@@ -322,7 +322,8 @@ Everything in HyperDX is unchanged:
 - **Session store** — `connect-mongo` stores sessions via the same MongoDB
   protocol; FerretDB handles the translation
 - **Passport.js auth** — `passport-local-mongoose` plugin works through Mongoose
-- **Alert checker** — background task queries metadata through the same ODM layer
+- **Alert checker** — background task queries metadata through the same ODM
+  layer
 - **Migrations** — `migrate-mongo` runs against FerretDB the same way
 - **All API routes and controllers** — no code changes required
 
@@ -343,14 +344,15 @@ graph LR
     API -->|"imports"| CU
 ```
 
-| Package | Path | Role |
-|---|---|---|
-| `@hyperdx/app` | `packages/app` | Next.js frontend — search, dashboards, alerts, session replay |
-| `@hyperdx/api` | `packages/api` | Express REST API + OpAMP server — auth, CRUD, ClickHouse proxy |
-| `@hyperdx/common-utils` | `packages/common-utils` | Isomorphic TypeScript — query engine, Lucene→SQL parser, Zod types |
-| `@hyperdx/otel-collector` | `packages/otel-collector` | Go binary for ClickHouse schema migrations (goose-based) |
+| Package                   | Path                      | Role                                                               |
+| ------------------------- | ------------------------- | ------------------------------------------------------------------ |
+| `@hyperdx/app`            | `packages/app`            | Next.js frontend — search, dashboards, alerts, session replay      |
+| `@hyperdx/api`            | `packages/api`            | Express REST API + OpAMP server — auth, CRUD, ClickHouse proxy     |
+| `@hyperdx/common-utils`   | `packages/common-utils`   | Isomorphic TypeScript — query engine, Lucene→SQL parser, Zod types |
+| `@hyperdx/otel-collector` | `packages/otel-collector` | Go binary for ClickHouse schema migrations (goose-based)           |
 
-Additional infrastructure lives in `docker/` (Compose files, OTel collector config, nginx proxy).
+Additional infrastructure lives in `docker/` (Compose files, OTel collector
+config, nginx proxy).
 
 ---
 
@@ -397,7 +399,8 @@ flowchart LR
 Key details:
 
 - **Receivers** accept OTLP (gRPC on 4317, HTTP on 4318) and Fluentd (24225)
-- **Transform processor** parses JSON log bodies, infers severity, normalizes case
+- **Transform processor** parses JSON log bodies, infers severity, normalizes
+  case
 - **Routing connector** inspects log attributes — events with `rr-web.event` are
   routed to the session replay pipeline (`hyperdx_sessions` table)
 - **ClickHouse exporter** writes to `otel_logs`, `otel_traces`, and five metric
@@ -419,10 +422,10 @@ sequenceDiagram
     API-->>Browser: Query results
 ```
 
-The query engine (`renderChartConfig` in `common-utils`) runs **in the browser**,
-generating parameterized ClickHouse SQL. The API acts as an authenticated proxy
-— it never interprets the SQL, only validates the session and injects ClickHouse
-credentials.
+The query engine (`renderChartConfig` in `common-utils`) runs **in the
+browser**, generating parameterized ClickHouse SQL. The API acts as an
+authenticated proxy — it never interprets the SQL, only validates the session
+and injects ClickHouse credentials.
 
 In **local mode** (single-user deployment), the browser queries ClickHouse
 directly, bypassing the proxy entirely.
@@ -489,8 +492,8 @@ graph TB
 In production, five services run in a single Docker Compose network. The `app`
 container bundles both the Next.js frontend and the Express API. FerretDB sits
 between the app and PostgreSQL, translating MongoDB wire protocol to SQL
-transparently. The OTel collector runs in **OpAMP supervisor mode** — it receives
-its pipeline configuration dynamically from the API server.
+transparently. The OTel collector runs in **OpAMP supervisor mode** — it
+receives its pipeline configuration dynamically from the API server.
 
 ---
 
@@ -721,6 +724,7 @@ erDiagram
 ```
 
 All tables use:
+
 - **MergeTree** engine with ZSTD compression
 - **Partitioning** by `toDate(Timestamp)`
 - **TTL** based on timestamp for automatic data expiry
@@ -756,10 +760,10 @@ sequenceDiagram
     COL->>CH: Scrape Prometheus metrics
 ```
 
-The OTel collector runs under an **OpAMP supervisor** that manages its lifecycle.
-The HyperDX API dynamically generates the collector's full pipeline configuration
-(receivers, processors, connectors, exporters, and service pipelines) based on
-team settings. This enables:
+The OTel collector runs under an **OpAMP supervisor** that manages its
+lifecycle. The HyperDX API dynamically generates the collector's full pipeline
+configuration (receivers, processors, connectors, exporters, and service
+pipelines) based on team settings. This enables:
 
 - **Remote configuration** — pipeline changes without collector restarts
 - **Auth enforcement** — collector can require API keys when
@@ -820,12 +824,13 @@ Key characteristics:
 
 - **Passport.js local strategy** — email + password, hashed with pbkdf2 via
   `@hyperdx/passport-local-mongoose` (a private fork)
-- **Single-tenant** — `getTeam()` does `Team.findOne({})` with no ID filter;
-  the entire deployment assumes exactly one team
+- **Single-tenant** — `getTeam()` does `Team.findOne({})` with no ID filter; the
+  entire deployment assumes exactly one team
 - **No RBAC** — every user on the team has identical, full access
 - **Session-based** — Express sessions stored in MongoDB (30-day rolling cookie)
-- **Manual registration** — first user creates the team via `/register/password`,
-  subsequent users join via invite tokens (`/team/setup/:token`)
+- **Manual registration** — first user creates the team via
+  `/register/password`, subsequent users join via invite tokens
+  (`/team/setup/:token`)
 - **`allowedAuthMethods`** — exists on the Team model but only supports
   `['password']`; no API route to configure it; enforcement is inside the
   passport-local-mongoose fork
@@ -856,10 +861,10 @@ graph LR
     CONN -->|"team-specific<br/>CH credentials"| CH
 ```
 
-The authentication boundary moves **out of HyperDX entirely**. Envoy handles
-the OIDC flow (authorization code grant, token validation, refresh). HyperDX
-receives pre-authenticated identity via trusted headers and maps it to teams
-and ClickHouse connections.
+The authentication boundary moves **out of HyperDX entirely**. Envoy handles the
+OIDC flow (authorization code grant, token validation, refresh). HyperDX
+receives pre-authenticated identity via trusted headers and maps it to teams and
+ClickHouse connections.
 
 ### Auth Flow with Envoy and OIDC
 
@@ -913,7 +918,9 @@ Replace `isUserAuthenticated` with a new middleware that:
   compatibility or local dev)
 
 **Files to modify:**
-- `packages/api/src/middleware/auth.ts` — add `isExternalAuthenticated` middleware
+
+- `packages/api/src/middleware/auth.ts` — add `isExternalAuthenticated`
+  middleware
 - `packages/api/src/api-app.ts` — conditionally use the new middleware based on
   config (e.g. `AUTH_MODE=oidc-proxy`)
 
@@ -927,7 +934,9 @@ Replace the manual register + invite flow with just-in-time provisioning:
 - No registration page, no invite tokens needed
 
 **Files to modify:**
-- `packages/api/src/controllers/user.ts` — add `findOrCreateUserFromOIDC(email, groups)`
+
+- `packages/api/src/controllers/user.ts` — add
+  `findOrCreateUserFromOIDC(email, groups)`
 - `packages/api/src/controllers/team.ts` — fix `getTeam()` to filter by ID (not
   just `findOne({})`) and add `findOrCreateTeamByName(groupName)`
 
@@ -941,8 +950,11 @@ The current `getTeam()` returns the first team found. For multi-team support:
 - Verify all routes properly scope data access to `req.user.team`
 
 **Files to modify:**
-- `packages/api/src/controllers/team.ts` — `getTeam()` must accept and filter by ID
-- `packages/api/src/controllers/connection.ts` — `getConnections()` must filter by team
+
+- `packages/api/src/controllers/team.ts` — `getTeam()` must accept and filter by
+  ID
+- `packages/api/src/controllers/connection.ts` — `getConnections()` must filter
+  by team
 
 #### 4. Team → ClickHouse User Mapping
 
@@ -961,6 +973,7 @@ OIDC proxy mode to avoid confusion:
 - `POST /team/invitation` — disabled
 
 **Files to modify:**
+
 - `packages/api/src/routers/api/root.ts` — gate routes behind `AUTH_MODE` config
 - `packages/api/src/routers/api/team.ts` — gate invite routes
 
@@ -977,12 +990,12 @@ exists:
 
 #### Summary of New Config
 
-| Variable | Value | Purpose |
-|---|---|---|
-| `AUTH_MODE` | `oidc-proxy` | Enables trusted header auth, disables Passport routes |
-| `AUTH_HEADER_EMAIL` | `X-Forwarded-Email` | Header containing authenticated user's email |
-| `AUTH_HEADER_GROUPS` | `X-Forwarded-Groups` | Header containing comma-separated group/team claims |
-| `AUTH_DEFAULT_TEAM` | (optional) | Default team name if no group header is present |
+| Variable             | Value                | Purpose                                               |
+| -------------------- | -------------------- | ----------------------------------------------------- |
+| `AUTH_MODE`          | `oidc-proxy`         | Enables trusted header auth, disables Passport routes |
+| `AUTH_HEADER_EMAIL`  | `X-Forwarded-Email`  | Header containing authenticated user's email          |
+| `AUTH_HEADER_GROUPS` | `X-Forwarded-Groups` | Header containing comma-separated group/team claims   |
+| `AUTH_DEFAULT_TEAM`  | (optional)           | Default team name if no group header is present       |
 
 ---
 
@@ -1001,9 +1014,11 @@ instance that FerretDB uses for metadata.
 - **RBAC with domains/tenants** — first-class support for multi-tenant RBAC
   where users have different roles in different teams
 - **PostgreSQL adapter** — policies stored in the same PostgreSQL backing
-  FerretDB, via [`casbin-pg-adapter`](https://github.com/touchifyapp/casbin-pg-adapter)
-- **Express middleware** — [`casbin-express-authz`](https://github.com/node-casbin/express-authz)
-  plugs directly into the existing Express route chain
+  FerretDB, via
+  [`casbin-pg-adapter`](https://github.com/touchifyapp/casbin-pg-adapter)
+- **Express middleware** —
+  [`casbin-express-authz`](https://github.com/node-casbin/express-authz) plugs
+  directly into the existing Express route chain
 - **Supports OIDC claims** — roles can be seeded from OIDC group claims passed
   through Envoy, or managed via a Casbin admin API
 - **Model flexibility** — can start with simple RBAC and evolve to ABAC or
@@ -1044,11 +1059,11 @@ Where:
 
 Roles:
 
-| Role | Permissions |
-| --- | --- |
-| `viewer` | `read` on all resources |
-| `editor` | `read` + `write` on dashboards, alerts, saved-searches |
-| `admin` | All actions on all resources, including `connections`, `sources`, `team-settings` |
+| Role     | Permissions                                                                       |
+| -------- | --------------------------------------------------------------------------------- |
+| `viewer` | `read` on all resources                                                           |
+| `editor` | `read` + `write` on dashboards, alerts, saved-searches                            |
+| `admin`  | All actions on all resources, including `connections`, `sources`, `team-settings` |
 
 ### Policy Storage in PostgreSQL
 
@@ -1056,9 +1071,8 @@ Casbin policies are stored in the same PostgreSQL instance that backs FerretDB,
 using [`casbin-pg-adapter`](https://github.com/touchifyapp/casbin-pg-adapter)
 for Node.js (HyperDX) and
 [`casbin-sqlalchemy-adapter`](https://github.com/pycasbin/sqlalchemy-adapter)
-for Python (parent UI). Both enforcers read and write the **same
-`casbin_rule` table** — the table schema is identical across all Casbin
-implementations.
+for Python (parent UI). Both enforcers read and write the **same `casbin_rule`
+table** — the table schema is identical across all Casbin implementations.
 
 ```mermaid
 graph LR
@@ -1119,8 +1133,8 @@ CREATE TABLE casbin_rule (
 -- g     | bob@acme.com    | admin        | team-platform   |
 ```
 
-Note that a user can have different roles in different teams (Bob is `editor`
-in `team-sre` but `admin` in `team-platform`).
+Note that a user can have different roles in different teams (Bob is `editor` in
+`team-sre` but `admin` in `team-platform`).
 
 #### Shared Enforcer Pattern: Python Manages, Node.js Enforces
 
@@ -1134,9 +1148,9 @@ The DFE platform UI (Python) is the **policy authority** — it handles:
 HyperDX (Node.js) is a **policy consumer** — it only enforces:
 
 - On each API request, call `enforcer.enforce(email, team, resource, action)`
-- Periodically reload policies from PostgreSQL (Casbin adapters support this
-  via `loadPolicy()` with a configurable interval, or use a watcher for
-  real-time sync)
+- Periodically reload policies from PostgreSQL (Casbin adapters support this via
+  `loadPolicy()` with a configurable interval, or use a watcher for real-time
+  sync)
 - Never modifies policies directly
 
 This separation means HyperDX requires minimal code changes — just the
@@ -1176,11 +1190,12 @@ On first authentication of a new user, the OIDC middleware:
 
 1. Creates/finds the User in FerretDB
 2. Maps OIDC group claims to Teams (find-or-create)
-3. Seeds a default Casbin role assignment (e.g. `g, alice@acme.com, viewer, team-sre`)
-   based on the OIDC groups — the first user in a team gets `admin`
+3. Seeds a default Casbin role assignment (e.g.
+   `g, alice@acme.com, viewer, team-sre`) based on the OIDC groups — the first
+   user in a team gets `admin`
 
-Subsequent role changes are managed through a Casbin admin API or directly
-in PostgreSQL.
+Subsequent role changes are managed through a Casbin admin API or directly in
+PostgreSQL.
 
 #### Express Middleware Chain
 
@@ -1226,7 +1241,11 @@ function casbinAuthz(resource: string, action: string) {
 // Usage in routers:
 router.get('/dashboards', casbinAuthz('dashboards', 'read'), getDashboards);
 router.post('/dashboards', casbinAuthz('dashboards', 'write'), createDashboard);
-router.delete('/connections/:id', casbinAuthz('connections', 'admin'), deleteConnection);
+router.delete(
+  '/connections/:id',
+  casbinAuthz('connections', 'admin'),
+  deleteConnection,
+);
 ```
 
 ### Policy Examples
@@ -1278,17 +1297,17 @@ g, carol@acme.com, viewer, team-platform
 
 #### HyperDX Resource-to-Route Mapping
 
-| Resource | Routes | Notes |
-| --- | --- | --- |
-| `dashboards` | `/dashboards/*` | CRUD on dashboard tiles and filters |
-| `alerts` | `/alerts/*` | Alert CRUD, silence, history |
-| `saved-searches` | `/saved-search/*` | Saved query CRUD |
-| `connections` | `/connections/*` | ClickHouse connection management (sensitive) |
-| `sources` | `/sources/*` | Telemetry source configuration (sensitive) |
-| `team-settings` | `/team/*` | Team name, API key rotation, CH settings, member management |
-| `webhooks` | `/webhooks/*` | Webhook destination CRUD |
-| `ai` | `/ai/*` | AI assistant access |
-| `clickhouse` | `/clickhouse-proxy/*` | Direct ClickHouse query proxy |
+| Resource         | Routes                | Notes                                                       |
+| ---------------- | --------------------- | ----------------------------------------------------------- |
+| `dashboards`     | `/dashboards/*`       | CRUD on dashboard tiles and filters                         |
+| `alerts`         | `/alerts/*`           | Alert CRUD, silence, history                                |
+| `saved-searches` | `/saved-search/*`     | Saved query CRUD                                            |
+| `connections`    | `/connections/*`      | ClickHouse connection management (sensitive)                |
+| `sources`        | `/sources/*`          | Telemetry source configuration (sensitive)                  |
+| `team-settings`  | `/team/*`             | Team name, API key rotation, CH settings, member management |
+| `webhooks`       | `/webhooks/*`         | Webhook destination CRUD                                    |
+| `ai`             | `/ai/*`               | AI assistant access                                         |
+| `clickhouse`     | `/clickhouse-proxy/*` | Direct ClickHouse query proxy                               |
 
 ---
 
@@ -1300,14 +1319,14 @@ and use the DFE platform's own rules engine and hunt workflows instead.
 
 ### What Gets Disabled
 
-| HyperDX Component | Status | Reason |
-| --- | --- | --- |
-| `checkAlerts` background task | **Disabled** — do not start this process | DFE rules engine replaces it |
-| Alert model + AlertHistory model | **Unused** — data stays in FerretDB but is never written to | No cleanup needed |
-| `/alerts` API routes | **Blocked by Casbin** — deny `alerts` resource for all roles | Or leave accessible read-only for viewing legacy alerts |
-| `/webhooks` API routes | **Blocked by Casbin** — deny `webhooks` resource | DFE handles notifications |
-| Alert UI in frontend | **Left in place** — just inaccessible via RBAC | No frontend code changes |
-| Silence alert endpoint (`/ext/silence-alert/:token`) | **Dead** — no alerts fire, so no tokens are generated | No change needed |
+| HyperDX Component                                    | Status                                                       | Reason                                                  |
+| ---------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------- |
+| `checkAlerts` background task                        | **Disabled** — do not start this process                     | DFE rules engine replaces it                            |
+| Alert model + AlertHistory model                     | **Unused** — data stays in FerretDB but is never written to  | No cleanup needed                                       |
+| `/alerts` API routes                                 | **Blocked by Casbin** — deny `alerts` resource for all roles | Or leave accessible read-only for viewing legacy alerts |
+| `/webhooks` API routes                               | **Blocked by Casbin** — deny `webhooks` resource             | DFE handles notifications                               |
+| Alert UI in frontend                                 | **Left in place** — just inaccessible via RBAC               | No frontend code changes                                |
+| Silence alert endpoint (`/ext/silence-alert/:token`) | **Dead** — no alerts fire, so no tokens are generated        | No change needed                                        |
 
 ### How to Disable
 
@@ -1347,16 +1366,16 @@ The DFE platform provides:
   data sources. Hunts can reference HyperDX saved searches and dashboards via
   deep links.
 
-HyperDX remains the **visualization and search layer** — users search logs,
-view traces, build dashboards, and replay sessions. Detection and response
-logic lives in the DFE platform.
+HyperDX remains the **visualization and search layer** — users search logs, view
+traces, build dashboards, and replay sessions. Detection and response logic
+lives in the DFE platform.
 
 ---
 
 ## DFE: Additive-Only Feasibility Assessment
 
-A realistic assessment of where the additive-only principle holds, where it
-gets difficult, and what the actual upstream merge cost looks like.
+A realistic assessment of where the additive-only principle holds, where it gets
+difficult, and what the actual upstream merge cost looks like.
 
 ### Per-Work-Stream Breakdown
 
@@ -1365,7 +1384,8 @@ gets difficult, and what the actual upstream merge cost looks like.
 Zero upstream application files modified. The only changes are to Docker Compose
 (infrastructure we own) and the `MONGO_URI` environment variable value.
 
-Prior art: [FerretDB published a guide](https://blog.ferretdb.io/full-stack-observability-hyperdx-ferretdb/)
+Prior art:
+[FerretDB published a guide](https://blog.ferretdb.io/full-stack-observability-hyperdx-ferretdb/)
 in July 2025 confirming HyperDX works with FerretDB as a drop-in MongoDB
 replacement, with zero compatibility issues reported.
 
@@ -1398,8 +1418,8 @@ needs updating — but that's our file, not an upstream conflict.
 
 #### Multi-Tenancy: Additive With a Caveat
 
-The current `getTeam()` does `Team.findOne({})` — returns the only team. We
-do **not** modify this function. Instead:
+The current `getTeam()` does `Team.findOne({})` — returns the only team. We do
+**not** modify this function. Instead:
 
 - Our OIDC middleware resolves the correct team and sets `req.user.team`
 - All route handlers already read `req.user.team` via `getNonNullUserWithTeam()`
@@ -1414,8 +1434,7 @@ handler without passing RBAC. But it's defense-in-depth, not a guarantee.
 
 **What to do on each upstream merge:** grep for new calls to `getTeam()` in
 upstream changes. If any appear in routes accessible through the DFE flow,
-assess whether they need team scoping. This is a review-on-merge checklist
-item.
+assess whether they need team scoping. This is a review-on-merge checklist item.
 
 **Upstream merge cost: zero code conflicts, but requires review of new
 `getTeam()` calls.**
@@ -1425,8 +1444,8 @@ item.
 The `checkAlerts` task is not started. Casbin blocks the `/alerts` and
 `/webhooks` routes. No upstream code is modified or deleted.
 
-**Upstream merge cost: zero.** Upstream can add alert features freely — the
-code merges in, it just never runs.
+**Upstream merge cost: zero.** Upstream can add alert features freely — the code
+merges in, it just never runs.
 
 #### Frontend: Zero to Minimal Changes
 
@@ -1446,22 +1465,22 @@ Three scenarios and how they play out with zero frontend modifications:
 
 **If UI polish is desired** (hiding invite buttons, showing role info), that
 requires 1-2 small conditionals in upstream frontend files (`TeamPage.tsx`,
-possibly `AuthPage.tsx`). These are in rendering logic, not structural code,
-so upstream conflicts are unlikely but possible.
+possibly `AuthPage.tsx`). These are in rendering logic, not structural code, so
+upstream conflicts are unlikely but possible.
 
-**Upstream merge cost: zero if we accept the cosmetic quirks. Trivial if we
-add 1-2 conditionals.**
+**Upstream merge cost: zero if we accept the cosmetic quirks. Trivial if we add
+1-2 conditionals.**
 
 ### Honest Summary
 
-| Work Stream | Files modified in upstream | Truly additive? | Merge cost per release |
-| --- | --- | --- | --- |
-| FerretDB | 0 | Yes | Zero |
-| OIDC middleware | 1 (`api-app.ts`) | Effectively yes | Trivial (one delimited block) |
-| Casbin RBAC | 0 | Yes | Zero (review new routes) |
-| Multi-tenancy | 0 | Yes (with review caveat) | Zero (review `getTeam()` calls) |
-| Alerting disabled | 0 | Yes | Zero |
-| Frontend | 0-2 (optional cosmetics) | Mostly | Zero to trivial |
+| Work Stream       | Files modified in upstream | Truly additive?          | Merge cost per release          |
+| ----------------- | -------------------------- | ------------------------ | ------------------------------- |
+| FerretDB          | 0                          | Yes                      | Zero                            |
+| OIDC middleware   | 1 (`api-app.ts`)           | Effectively yes          | Trivial (one delimited block)   |
+| Casbin RBAC       | 0                          | Yes                      | Zero (review new routes)        |
+| Multi-tenancy     | 0                          | Yes (with review caveat) | Zero (review `getTeam()` calls) |
+| Alerting disabled | 0                          | Yes                      | Zero                            |
+| Frontend          | 0-2 (optional cosmetics)   | Mostly                   | Zero to trivial                 |
 
 **Realistic worst case per upstream merge:**
 
@@ -1498,15 +1517,15 @@ graph LR
 
 **Cost: Zero application changes**
 
-| Factor | Assessment |
-|---|---|
-| Code changes | None — Mongoose, connect-mongo, passport-local-mongoose all work |
-| Testing effort | Smoke test the existing suite against FerretDB |
-| Risk | Low — FerretDB 2.x with DocumentDB extension is mature |
-| Upstream compatibility | Full — can pull upstream HyperDX updates without merge conflicts |
-| Operational overhead | One extra container (FerretDB proxy), ~50MB RAM, stateless |
-| Performance | Slight overhead from protocol translation; metadata workload is light |
-| Data portability | `mongodump`/`mongorestore` work through FerretDB for backup/migration |
+| Factor                 | Assessment                                                            |
+| ---------------------- | --------------------------------------------------------------------- |
+| Code changes           | None — Mongoose, connect-mongo, passport-local-mongoose all work      |
+| Testing effort         | Smoke test the existing suite against FerretDB                        |
+| Risk                   | Low — FerretDB 2.x with DocumentDB extension is mature                |
+| Upstream compatibility | Full — can pull upstream HyperDX updates without merge conflicts      |
+| Operational overhead   | One extra container (FerretDB proxy), ~50MB RAM, stateless            |
+| Performance            | Slight overhead from protocol translation; metadata workload is light |
+| Data portability       | `mongodump`/`mongorestore` work through FerretDB for backup/migration |
 
 **Key advantage: zero fork divergence.** Every upstream HyperDX release merges
 cleanly because the application layer is identical. The only difference is the
@@ -1524,24 +1543,26 @@ graph LR
 
 **Cost: Major fork with ongoing maintenance burden**
 
-| Factor | Assessment |
-|---|---|
-| Code changes | ~40+ files across models, controllers, routers, middleware, tasks, tests |
-| Testing effort | Full rewrite of all integration tests; new test fixtures |
-| Risk | High — subtle behavioral differences in query semantics, type coercion, etc. |
+| Factor                 | Assessment                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------- |
+| Code changes           | ~40+ files across models, controllers, routers, middleware, tasks, tests        |
+| Testing effort         | Full rewrite of all integration tests; new test fixtures                        |
+| Risk                   | High — subtle behavioral differences in query semantics, type coercion, etc.    |
 | Upstream compatibility | **Broken** — every upstream HyperDX release touching MongoDB code will conflict |
-| Operational overhead | Simpler stack (no FerretDB proxy), one fewer container |
-| Performance | Slightly better (no translation layer), but metadata workload is trivial |
-| Data portability | Standard PostgreSQL tooling (pg_dump, logical replication) |
+| Operational overhead   | Simpler stack (no FerretDB proxy), one fewer container                          |
+| Performance            | Slightly better (no translation layer), but metadata workload is trivial        |
+| Data portability       | Standard PostgreSQL tooling (pg_dump, logical replication)                      |
 
 #### Scope of a Direct Migration
 
 To quantify the fork cost, here is what would need to change:
 
 **Models (13 files)** — `packages/api/src/models/`:
+
 - Rewrite all Mongoose schemas to PostgreSQL table definitions
 - Replace `Schema.Types.ObjectId` refs with foreign keys
-- Replace `Schema.Types.Mixed` (dashboard tiles, alert channels) with JSONB columns
+- Replace `Schema.Types.Mixed` (dashboard tiles, alert channels) with JSONB
+  columns
 - Replace `MongooseMap` (webhook headers/params) with JSONB
 - Reimplement TTL indexes as scheduled cleanup jobs or PostgreSQL row expiry
 - Replace `passport-local-mongoose` plugin with custom password hashing +
@@ -1549,25 +1570,30 @@ To quantify the fork cost, here is what would need to change:
 - Replace `connect-mongo` session store with `connect-pg-simple`
 
 **Controllers (8+ files)** — `packages/api/src/controllers/`:
+
 - Rewrite all Mongoose queries (`.find()`, `.findOne()`, `.findOneAndUpdate()`,
   `.create()`, `.aggregate()`) to SQL
 - The three aggregation pipelines are the most complex rewrites:
   - `controllers/team.ts` — tag extraction (`$unwind` + `$group`)
-  - `controllers/alertHistory.ts` — alert history grouping (`$group` + `$push` + `$sum`)
-  - `tasks/checkAlerts/index.ts` — latest alert state (`$group` + `$first` + `$$ROOT`)
+  - `controllers/alertHistory.ts` — alert history grouping (`$group` + `$push` +
+    `$sum`)
+  - `tasks/checkAlerts/index.ts` — latest alert state (`$group` + `$first` +
+    `$$ROOT`)
 - Replace `.populate()` calls with SQL JOINs
 
 **Routers (10+ files)** — `packages/api/src/routers/`:
+
 - Update all routes that construct Mongoose queries
 - Replace MongoDB ObjectId validation with UUID or integer ID validation
 
 **Tests (10+ files)** — all `__tests__/` directories:
+
 - Replace MongoDB test fixtures with PostgreSQL setup/teardown
 - Replace `mongooseConnection.dropDatabase()` with PostgreSQL equivalents
 - Update CI Docker Compose to use PostgreSQL instead of MongoDB
 
-**Migrations** — replace `migrate-mongo` with a PostgreSQL migration tool
-(e.g. `node-pg-migrate`, Prisma Migrate, or Drizzle Kit)
+**Migrations** — replace `migrate-mongo` with a PostgreSQL migration tool (e.g.
+`node-pg-migrate`, Prisma Migrate, or Drizzle Kit)
 
 **Dependencies** — remove `mongoose`, `mongodb`, `connect-mongo`,
 `@hyperdx/passport-local-mongoose`, `migrate-mongo`; add PostgreSQL ORM +
@@ -1602,15 +1628,16 @@ graph TB
 ```
 
 With FerretDB, upstream merges are clean because nothing in the application
-layer changes. With direct PostgreSQL, **every upstream release that touches
-a model, controller, or test will require manual conflict resolution** — and
-the data layer is the most frequently changed part of any application.
+layer changes. With direct PostgreSQL, **every upstream release that touches a
+model, controller, or test will require manual conflict resolution** — and the
+data layer is the most frequently changed part of any application.
 
 #### When Direct PostgreSQL Makes Sense
 
 A direct migration would be justified if:
 
-- HyperDX were a stable, rarely-updated dependency (it isn't — active development)
+- HyperDX were a stable, rarely-updated dependency (it isn't — active
+  development)
 - The metadata workload were performance-critical (it isn't — light CRUD for
   config data; ClickHouse handles the heavy queries)
 - FerretDB had significant compatibility gaps for this workload (it doesn't —
@@ -1626,8 +1653,8 @@ searches) is simple CRUD that FerretDB handles without issue. The one extra
 container (~50MB RAM, stateless) is a trivially small cost compared to
 maintaining a hard fork of the data layer across every upstream release.
 
-Save the engineering effort for the OIDC auth integration, which is where
-the real value lies and where the changes are scoped to a small, well-defined
+Save the engineering effort for the OIDC auth integration, which is where the
+real value lies and where the changes are scoped to a small, well-defined
 surface area in the middleware and auth routes.
 
 ---
@@ -1718,8 +1745,12 @@ app.use(express.json({ limit: '32mb' }));
 // DFE addition — a single conditional block, clearly marked:
 // --- DFE START ---
 if (dfeConfig.AUTH_MODE === 'oidc-proxy') {
-  const { oidcIdentityMiddleware } = await import('./dfe/middleware/oidc-identity');
-  const { casbinAuthzMiddleware } = await import('./dfe/middleware/casbin-authz');
+  const { oidcIdentityMiddleware } = await import(
+    './dfe/middleware/oidc-identity'
+  );
+  const { casbinAuthzMiddleware } = await import(
+    './dfe/middleware/casbin-authz'
+  );
   app.use(oidcIdentityMiddleware);
   app.use(casbinAuthzMiddleware);
 }
@@ -1729,8 +1760,8 @@ if (dfeConfig.AUTH_MODE === 'oidc-proxy') {
 This block:
 
 - Is clearly delimited with `DFE START` / `DFE END` comments
-- Uses dynamic `import()` so the DFE modules are never loaded unless the env
-  var is set — zero impact on vanilla HyperDX
+- Uses dynamic `import()` so the DFE modules are never loaded unless the env var
+  is set — zero impact on vanilla HyperDX
 - Is a pure addition at the end of the middleware stack — it doesn't modify
   existing lines, so upstream changes to the middleware stack above it merge
   cleanly
@@ -1761,7 +1792,7 @@ export async function oidcIdentityMiddleware(req, res, next) {
   req.user = user;
 
   // Mark as authenticated for Passport's req.isAuthenticated() check
-  req.login(user, { session: false }, (err) => {
+  req.login(user, { session: false }, err => {
     if (err) return next(err);
     next();
   });
@@ -1860,19 +1891,19 @@ git merge upstream/main
 
 ### Summary: What Changes per Layer
 
-| Layer | Approach | Conflict risk |
-| --- | --- | --- |
-| **Infrastructure** (Docker Compose) | Replace `mongo` with `postgres` + `ferretdb` | None — infra files are ours |
-| **Auth middleware** | New `dfe/middleware/` files + 1 conditional block in `api-app.ts` | Minimal — one clearly delimited insertion point |
-| **Authorization** | New `dfe/middleware/casbin-authz.ts` + Casbin model conf | None — all new files |
-| **User/team provisioning** | New `dfe/controllers/` files | None — all new files |
-| **Mongoose models** | Unchanged | None — FerretDB handles this |
-| **Controllers/routers** | Unchanged | None — Casbin enforcement is global middleware |
-| **Frontend** | Unchanged (Envoy handles login redirect; existing session flow works) | None |
-| **Tests** | New `dfe/__tests__/` for DFE-specific code | None — additive |
+| Layer                               | Approach                                                              | Conflict risk                                   |
+| ----------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------- |
+| **Infrastructure** (Docker Compose) | Replace `mongo` with `postgres` + `ferretdb`                          | None — infra files are ours                     |
+| **Auth middleware**                 | New `dfe/middleware/` files + 1 conditional block in `api-app.ts`     | Minimal — one clearly delimited insertion point |
+| **Authorization**                   | New `dfe/middleware/casbin-authz.ts` + Casbin model conf              | None — all new files                            |
+| **User/team provisioning**          | New `dfe/controllers/` files                                          | None — all new files                            |
+| **Mongoose models**                 | Unchanged                                                             | None — FerretDB handles this                    |
+| **Controllers/routers**             | Unchanged                                                             | None — Casbin enforcement is global middleware  |
+| **Frontend**                        | Unchanged (Envoy handles login redirect; existing session flow works) | None                                            |
+| **Tests**                           | New `dfe/__tests__/` for DFE-specific code                            | None — additive                                 |
 
-Total files modified in upstream HyperDX: **1** (`api-app.ts`, one conditional block).
-Total new files: **~6-8** in `packages/api/src/dfe/`.
+Total files modified in upstream HyperDX: **1** (`api-app.ts`, one conditional
+block). Total new files: **~6-8** in `packages/api/src/dfe/`.
 
 ---
 
@@ -1914,14 +1945,14 @@ graph LR
 
 The key types in the pipeline:
 
-| Type | Location | Purpose |
-| --- | --- | --- |
-| `SavedChartConfig` | `common-utils/src/types.ts` | Stored config for a dashboard tile (source, select, where, groupBy, etc.) |
-| `ChartConfigWithOptDateRange` | `common-utils/src/types.ts` | Runtime config with optional date range appended |
-| `SavedSearch` | `api/src/models/savedSearch.ts` | Persisted query with source, select, where, whereLanguage, orderBy, filters |
-| `ChSql` | `common-utils/src/clickhouse/index.ts` | Parameterized SQL template (`{ sql, params }`) |
-| `renderChartConfig()` | `common-utils/src/core/renderChartConfig.ts` | Converts config → `ChSql` (the SQL generation engine) |
-| `parameterizedQueryToSql()` | `common-utils/src/clickhouse/index.ts` | Fills parameters into `ChSql` → executable SQL string |
+| Type                          | Location                                     | Purpose                                                                     |
+| ----------------------------- | -------------------------------------------- | --------------------------------------------------------------------------- |
+| `SavedChartConfig`            | `common-utils/src/types.ts`                  | Stored config for a dashboard tile (source, select, where, groupBy, etc.)   |
+| `ChartConfigWithOptDateRange` | `common-utils/src/types.ts`                  | Runtime config with optional date range appended                            |
+| `SavedSearch`                 | `api/src/models/savedSearch.ts`              | Persisted query with source, select, where, whereLanguage, orderBy, filters |
+| `ChSql`                       | `common-utils/src/clickhouse/index.ts`       | Parameterized SQL template (`{ sql, params }`)                              |
+| `renderChartConfig()`         | `common-utils/src/core/renderChartConfig.ts` | Converts config → `ChSql` (the SQL generation engine)                       |
+| `parameterizedQueryToSql()`   | `common-utils/src/clickhouse/index.ts`       | Fills parameters into `ChSql` → executable SQL string                       |
 
 ### Extraction Points for DFE Rules
 
@@ -1949,8 +1980,8 @@ including aggregation functions, group-by clauses, and filters.
 }
 ```
 
-**Advantage**: Structured, machine-readable, includes aggregation semantics.
-The DFE rule engine can interpret the config directly without parsing SQL.
+**Advantage**: Structured, machine-readable, includes aggregation semantics. The
+DFE rule engine can interpret the config directly without parsing SQL.
 
 #### 2. Saved Search Config (Structured)
 
@@ -2024,14 +2055,15 @@ router.post('/dfe/export-sql', async (req, res) => {
   const sql = format(parameterizedQueryToSql(chSql));
 
   return res.json({
-    sql,              // Formatted, executable SQL
-    config,           // Original structured config (for DFE to interpret)
-    source: {         // Source metadata for CH connection mapping
+    sql, // Formatted, executable SQL
+    config, // Original structured config (for DFE to interpret)
+    source: {
+      // Source metadata for CH connection mapping
       name: source.name,
       kind: source.kind,
       tableName: source.from.tableName,
     },
-    connectionId: source.connection,  // CH connection for this team
+    connectionId: source.connection, // CH connection for this team
   });
 });
 ```
@@ -2040,8 +2072,8 @@ This endpoint:
 
 - Uses the exact same `renderChartConfig()` pipeline that HyperDX uses
   internally — the SQL is identical to what the user saw
-- Returns both the structured config AND the rendered SQL — the DFE rule
-  engine can use whichever is more convenient
+- Returns both the structured config AND the rendered SQL — the DFE rule engine
+  can use whichever is more convenient
 - Includes source metadata so the DFE side knows which CH table and connection
   to target
 - Is fully additive — new file in `dfe/routers/`, wired via the conditional
@@ -2049,8 +2081,8 @@ This endpoint:
 
 ### Frontend: Export to DFE Rule Button
 
-The user-facing flow adds an "Export to DFE Rule" action in the HyperDX UI
-that sends the current query to the DFE rules system.
+The user-facing flow adds an "Export to DFE Rule" action in the HyperDX UI that
+sends the current query to the DFE rules system.
 
 ```mermaid
 sequenceDiagram
@@ -2121,8 +2153,8 @@ Add an "Export to DFE Rule" menu item to the existing chart context menu
 are small UI additions (a menu item in an existing dropdown) that call the DFE
 export endpoint.
 
-Since these are in rendering code (not structural), upstream merge conflicts
-are unlikely. The same `DFE START / DFE END` comment pattern keeps changes
+Since these are in rendering code (not structural), upstream merge conflicts are
+unlikely. The same `DFE START / DFE END` comment pattern keeps changes
 identifiable.
 
 ### DFE Rule Engine Consumption
@@ -2156,17 +2188,17 @@ to make the query recurring. Two strategies:
 
 1. **SQL rewriting** — parse the SQL and replace timestamp literals with
    placeholders. Straightforward since HyperDX always generates timestamp
-   filters in a predictable pattern (`TimestampTime >= '...' AND
-   TimestampTime < '...'`)
+   filters in a predictable pattern
+   (`TimestampTime >= '...' AND TimestampTime < '...'`)
 
-2. **Config-based** — use the structured `ChartConfig` instead of raw SQL.
-   The config includes `granularity` and the date range is a separate field,
-   so the DFE engine can call `renderChartConfig()` itself (if using a
-   Node.js sidecar) or build SQL from the structured fields directly
+2. **Config-based** — use the structured `ChartConfig` instead of raw SQL. The
+   config includes `granularity` and the date range is a separate field, so the
+   DFE engine can call `renderChartConfig()` itself (if using a Node.js sidecar)
+   or build SQL from the structured fields directly
 
-The structured config approach is more robust for long-term maintenance, but
-the SQL rewriting approach is simpler to implement initially and doesn't
-require the Python side to understand HyperDX's config schema.
+The structured config approach is more robust for long-term maintenance, but the
+SQL rewriting approach is simpler to implement initially and doesn't require the
+Python side to understand HyperDX's config schema.
 
 ---
 
@@ -2234,8 +2266,8 @@ name: Upstream Sync
 
 on:
   schedule:
-    - cron: '0 6 * * 1-5'   # Weekdays at 6am UTC
-  workflow_dispatch:          # Manual trigger
+    - cron: '0 6 * * 1-5' # Weekdays at 6am UTC
+  workflow_dispatch: # Manual trigger
 
 jobs:
   sync:
@@ -2302,44 +2334,44 @@ jobs:
 
 ### Merge Conflict Detection and Handling
 
-Based on our additive-only strategy, conflicts should be extremely rare. The
-CI pipeline includes specific checks for our known risk areas:
+Based on our additive-only strategy, conflicts should be extremely rare. The CI
+pipeline includes specific checks for our known risk areas:
 
 ```yaml
-      - name: Post-merge DFE integrity check
-        run: |
-          # 1. Verify our DFE conditional block still exists in api-app.ts
-          grep -q "DFE START" packages/api/src/api-app.ts || \
-            echo "::warning::DFE block missing from api-app.ts"
+- name: Post-merge DFE integrity check
+  run: |
+    # 1. Verify our DFE conditional block still exists in api-app.ts
+    grep -q "DFE START" packages/api/src/api-app.ts || \
+      echo "::warning::DFE block missing from api-app.ts"
 
-          # 2. Verify all DFE files are intact
-          test -d packages/api/src/dfe || \
-            echo "::error::dfe/ directory missing"
+    # 2. Verify all DFE files are intact
+    test -d packages/api/src/dfe || \
+      echo "::error::dfe/ directory missing"
 
-          # 3. Check for new getTeam() calls (multi-tenancy risk)
-          NEW_GETTEAM=$(git diff HEAD~1..HEAD --name-only | \
-            xargs grep -l "getTeam()" 2>/dev/null || true)
-          if [ -n "$NEW_GETTEAM" ]; then
-            echo "::warning::New getTeam() calls found: $NEW_GETTEAM"
-          fi
+    # 3. Check for new getTeam() calls (multi-tenancy risk)
+    NEW_GETTEAM=$(git diff HEAD~1..HEAD --name-only | \
+      xargs grep -l "getTeam()" 2>/dev/null || true)
+    if [ -n "$NEW_GETTEAM" ]; then
+      echo "::warning::New getTeam() calls found: $NEW_GETTEAM"
+    fi
 
-          # 4. Check for new route prefixes not in Casbin map
-          NEW_ROUTES=$(git diff HEAD~1..HEAD -- 'packages/api/src/routers/' | \
-            grep -E "^\+.*router\.(get|post|put|patch|delete)" || true)
-          if [ -n "$NEW_ROUTES" ]; then
-            echo "::warning::New routes added — verify Casbin mapping"
-          fi
+    # 4. Check for new route prefixes not in Casbin map
+    NEW_ROUTES=$(git diff HEAD~1..HEAD -- 'packages/api/src/routers/' | \
+      grep -E "^\+.*router\.(get|post|put|patch|delete)" || true)
+    if [ -n "$NEW_ROUTES" ]; then
+      echo "::warning::New routes added — verify Casbin mapping"
+    fi
 ```
 
 Expected failure frequency based on HyperDX's commit history:
 
-| Scenario | Frequency | Resolution |
-| --- | --- | --- |
-| Clean merge, all tests pass | ~95% of syncs | Fully automated |
-| Clean merge, test regression (upstream bug) | ~3% | Report upstream, skip or pin |
-| Conflict in `api-app.ts` (middleware restructure) | ~1-2 per year | Rebase DFE block (5 min) |
-| New routes need Casbin mapping | ~2-3 per year | Update `dfe/middleware/casbin-authz.ts` |
-| New `getTeam()` calls need review | ~1-2 per year | Review for multi-tenancy safety |
+| Scenario                                          | Frequency     | Resolution                              |
+| ------------------------------------------------- | ------------- | --------------------------------------- |
+| Clean merge, all tests pass                       | ~95% of syncs | Fully automated                         |
+| Clean merge, test regression (upstream bug)       | ~3%           | Report upstream, skip or pin            |
+| Conflict in `api-app.ts` (middleware restructure) | ~1-2 per year | Rebase DFE block (5 min)                |
+| New routes need Casbin mapping                    | ~2-3 per year | Update `dfe/middleware/casbin-authz.ts` |
+| New `getTeam()` calls need review                 | ~1-2 per year | Review for multi-tenancy safety         |
 
 ### Version Pinning and Release Cadence
 
@@ -2352,8 +2384,8 @@ Upstream main ──→ Auto-sync PR ──→ DFE main ──→ Staging ──
 ```
 
 **Tagging convention**: DFE releases are tagged as `dfe/vX.Y.Z` where `X.Y.Z`
-matches the upstream HyperDX version at the time of the fork point. For
-example, if we fork from HyperDX v2.8.0 and add our DFE layer, the tag is
+matches the upstream HyperDX version at the time of the fork point. For example,
+if we fork from HyperDX v2.8.0 and add our DFE layer, the tag is
 `dfe/v2.8.0-dfe.1`. Subsequent DFE-only changes increment the DFE suffix:
 `dfe/v2.8.0-dfe.2`. When upstream v2.9.0 merges cleanly, the next tag is
 `dfe/v2.9.0-dfe.1`.
