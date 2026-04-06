@@ -131,7 +131,7 @@ function AIAssistant({
         >
           <Text size="xs" pt="2px">
             New AI Assistant available, enable with configuring the{' '}
-            <code>ANTHROPIC_API_KEY</code> environment variable on the HyperI
+            <code>ANTHROPIC_API_KEY</code> environment variable on the DFE
             server.
           </Text>
         </Alert>
@@ -229,7 +229,7 @@ function DBChartExplorerPage() {
   return (
     <Box data-testid="chart-explorer-page" p="sm">
       <Head>
-        <title>Chart Explorer - HyperI</title>
+        <title>Chart Explorer - DFE</title>
       </Head>
       <AIAssistant
         setConfig={setChartConfig}

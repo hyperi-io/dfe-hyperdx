@@ -7,12 +7,12 @@ import { ibmPlexMono, inter, roboto, robotoMono } from '@/fonts';
 // This ensures CSS variables are applied during server-side rendering
 // to prevent hydration mismatch with button styling
 function getThemeClass(): string {
-  const envTheme = process.env.NEXT_PUBLIC_THEME ?? 'hyperi';
+  const envTheme = process.env.NEXT_PUBLIC_THEME ?? 'dfe';
   // Default to hyperdx if not set or invalid
   const themeName =
-    envTheme === 'hyperdx' || envTheme === 'clickstack' || envTheme === 'hyperi'
+    envTheme === 'hyperdx' || envTheme === 'clickstack' || envTheme === 'dfe'
       ? envTheme
-      : 'hyperi';
+      : 'dfe';
   return `theme-${themeName}`;
 }
 

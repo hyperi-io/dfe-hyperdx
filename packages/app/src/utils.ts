@@ -463,21 +463,20 @@ export const COLORS = [
  * Returns 'clickstack' if theme-clickstack class is present, 'hyperdx' otherwise.
  * Note: classList.contains() is O(1) and fast - no caching needed.
  */
-function detectActiveTheme(): 'clickstack' | 'hyperdx' | 'hyperi' {
+function detectActiveTheme(): 'clickstack' | 'hyperdx' | 'dfe' {
   if (typeof window === 'undefined') {
     // SSR: default to hyperdx (can't detect theme without DOM)
-    return 'hyperi';
+    return 'dfe';
   }
 
   try {
-    const isHyperI =
-      document.documentElement.classList.contains('theme-hyperi');
+    const isDFE = document.documentElement.classList.contains('theme-dfe');
     const isClickStack =
       document.documentElement.classList.contains('theme-clickstack');
-    return isHyperI ? 'hyperi' : isClickStack ? 'clickstack' : 'hyperdx';
+    return isDFE ? 'dfe' : isClickStack ? 'clickstack' : 'hyperdx';
   } catch {
     // Fallback if DOM access fails
-    return 'hyperi';
+    return 'dfe';
   }
 }
 

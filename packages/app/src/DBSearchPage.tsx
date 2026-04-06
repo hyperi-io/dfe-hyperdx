@@ -125,9 +125,9 @@ import {
   getRelativeTimeOptionLabel,
   LIVE_TAIL_DURATION_MS,
 } from './components/TimePicker/utils';
+import { CreateRuleFromSearch } from './dfe/components/CreateRuleFromSearch';
 import { useTableMetadata } from './hooks/useMetadata';
 import { useSqlSuggestions } from './hooks/useSqlSuggestions';
-import { CreateRuleFromSearch } from './hyperi/components/CreateRuleFromSearch';
 import {
   parseAsSortingStateString,
   parseAsStringWithNewLines,
@@ -1574,7 +1574,7 @@ function DBSearchPage() {
     >
       <Head>
         <title>
-          {savedSearch ? `${savedSearch.name} Search` : 'Search'} - HyperI
+          {savedSearch ? `${savedSearch.name} Search` : 'Search'} - DFE
         </title>
       </Head>
       <OnboardingModal />

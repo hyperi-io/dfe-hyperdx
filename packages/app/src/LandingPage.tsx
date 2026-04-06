@@ -1,2 +1,2 @@
-import LandingPage from '@/hyperi/components/LandingPage';
+import LandingPage from '@/dfe/components/LandingPage';
 export default LandingPage;

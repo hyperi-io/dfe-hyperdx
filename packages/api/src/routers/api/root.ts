@@ -208,7 +208,7 @@ router.get('/ext/silence-alert/:token', async (req, res) => {
   return res.send(`
   <html>
     <head>
-      <title>HyperI</title>
+      <title>DFE</title>
       <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css" />
     </head>
     <body>
@@ -218,7 +218,7 @@ router.get('/ext/silence-alert/:token', async (req, res) => {
             ? '<p><strong>Link is invalid or expired.</strong> Please try again.</p>'
             : '<p><strong>Alert silenced.</strong> You can close this window now.</p>'
         }
-        <a href="${config.FRONTEND_URL}">Back to HyperI</a>
+        <a href="${config.FRONTEND_URL}">Back to DFE</a>
       </main>
     </body>
   </html>`);

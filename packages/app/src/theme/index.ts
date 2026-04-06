@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 import { clickstackTheme } from './themes/clickstack';
+import { dfeTheme } from './themes/dfe';
 import { hyperdxTheme } from './themes/hyperdx';
-import { hyperiTheme } from './themes/hyperi';
 import { ThemeConfig, ThemeName } from './types';
 
 /**
@@ -52,7 +52,7 @@ const faviconConfigSchema = z.object({
 });
 
 const themeConfigSchema = z.object({
-  name: z.enum(['hyperdx', 'clickstack', 'hyperi']),
+  name: z.enum(['hyperdx', 'clickstack', 'dfe']),
   displayName: z.string().min(1),
   cssClass: z.string().min(1),
   favicon: faviconConfigSchema,
@@ -109,7 +109,7 @@ function validateThemeConfig(
 try {
   validateThemeConfig(hyperdxTheme, 'hyperdx');
   validateThemeConfig(clickstackTheme, 'clickstack');
-  validateThemeConfig(hyperiTheme, 'hyperi');
+  validateThemeConfig(dfeTheme, 'dfe');
 } catch (error) {
   // Log error but don't crash - fallback to default theme
   console.error(
@@ -126,7 +126,7 @@ try {
 export const themes: Record<ThemeName, ThemeConfig> = {
   hyperdx: hyperdxTheme,
   clickstack: clickstackTheme,
-  hyperi: hyperiTheme,
+  dfe: dfeTheme,
 };
 
 // Check if we're in development/local mode
