@@ -49,6 +49,8 @@
     "dev:compose": "docker compose -f docker-compose.dev.yml",
     "dev:hyperi": "yarn build:common-utils && dotenvx run --convention=nextjs -- docker compose --env-file .env.dfe -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml up -d && yarn app:dev:dfe && docker compose --env-file .env.dfe -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml down",
     "lint": "npx nx run-many -t ci:lint",
+    "format": "prettier --check .",
+    "tsc": "cd packages/api && npx tsc --noEmit && cd ../app && npx tsc --noEmit && cd ../common-utils && npx tsc --noEmit",
     "audit": "bash scripts/audit.sh",
     "version": "make version",
     "release": "npx changeset tag && npx changeset publish"

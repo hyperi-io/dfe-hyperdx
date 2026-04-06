@@ -34,7 +34,7 @@
   },
   "scripts": {
     "setup": "yarn install && husky install",
-    "build": "nx run-many -t build",
+    "build": "dotenvx run --env-file .env.dfe -- nx run-many -t build",
     "build:common-utils": "nx run @hyperdx/common-utils:dev:build",
     "app:dev": "concurrently -k -n 'API,APP,ALERTS-TASK,COMMON-UTILS' -c 'green.bold,blue.bold,yellow.bold,magenta' 'nx run @hyperdx/api:dev' 'nx run @hyperdx/app:dev' 'nx run @hyperdx/api:dev-task check-alerts' 'nx run @hyperdx/common-utils:dev'",
     "app:dev:dfe": "concurrently -k -n 'API,APP,COMMON-UTILS' -c 'green.bold,blue.bold,magenta' 'nx run @hyperdx/api:dev' 'nx run @hyperdx/app:dev' 'nx run @hyperdx/common-utils:dev'",
@@ -47,8 +47,10 @@
     "dev:local": "IS_LOCAL_APP_MODE='DANGEROUSLY_is_local_app_mode💀' yarn dev",
     "dev:down": "docker compose -f docker-compose.dev.yml down",
     "dev:compose": "docker compose -f docker-compose.dev.yml",
-    "dev:hyperi": "yarn build:common-utils && dotenvx run --convention=nextjs -- docker compose -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml up -d && yarn app:dev:dfe && docker compose -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml down",
+    "dev:hyperi": "yarn build:common-utils && dotenvx run --convention=nextjs -- docker compose --env-file .env.dfe -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml up -d && yarn app:dev:dfe && docker compose --env-file .env.dfe -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml down",
     "lint": "npx nx run-many -t ci:lint",
+    "format": "prettier --check .",
+    "tsc": "cd packages/api && npx tsc --noEmit && cd ../app && npx tsc --noEmit && cd ../common-utils && npx tsc --noEmit",
     "audit": "bash scripts/audit.sh",
     "version": "make version",
     "release": "npx changeset tag && npx changeset publish"
