@@ -17,9 +17,9 @@ test:
 build:
   enabled: true
   strategies:
-  - native
+    - native
 publish:
   enabled: true
   target: internal
 typescript:
-  package_manager: auto
+  package_manager: yarn
