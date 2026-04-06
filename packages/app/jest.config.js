@@ -3,6 +3,7 @@ const { createJsWithTsPreset } = require('ts-jest');
 const tsJestTransformCfg = createJsWithTsPreset({
   tsconfig: {
     jsx: 'react-jsx',
+    isolatedModules: true,
   },
 });
 
