@@ -118,16 +118,16 @@ export function processRowToWhereClause(
         }
 
         default: {
-          let val: string | number | boolean | bigint | null = value;
+          let scalar: string | number | boolean | bigint | null = value;
           if (value != null && typeof value === 'object') {
-            val = JSON.stringify(value);
+            scalar = JSON.stringify(value);
           }
           // Handle nullish values
-          if (val == null) {
+          if (scalar == null) {
             return SqlString.format(`isNull(?)`, [SqlString.raw(valueExpr)]);
           }
           // Handle the case when string is too long
-          if (typeof val === 'string' && val.length > MAX_STRING_LENGTH) {
+          if (typeof scalar === 'string' && scalar.length > MAX_STRING_LENGTH) {
             return SqlString.format(
               // We need to slice since md5 can be slow on big payloads
               // which will block the main thread on search table render
@@ -135,13 +135,13 @@ export function processRowToWhereClause(
               `lower(hex(MD5(leftUTF8(?, 1000))))=?`,
               [
                 SqlString.raw(valueExpr),
-                MD5(val.substring(0, 1000)).toString(),
+                MD5(scalar.substring(0, 1000)).toString(),
               ],
             );
           }
           return SqlString.format(`?=?`, [
             SqlString.raw(valueExpr), // don't escape expressions
-            val,
+            scalar,
           ]);
         }
       }
