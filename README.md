@@ -38,7 +38,7 @@ When updating this repository:
 ```sh
 # From root
 yarn # only necessary the first time or if there have been an update to the dependencies
-yarn dev:hyperi
+yarn dev:dfe
 ```
 
 - Frontend will be available on http://localhost:8080/

@@ -15,11 +15,11 @@ metadata:
   namespace: monitoring
   annotations:
     # oauth2-proxy integration
-    nginx.ingress.kubernetes.io/auth-url: "https://$host/oauth2/auth"
-    nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/start?rd=$escaped_request_uri"
+    nginx.ingress.kubernetes.io/auth-url: 'https://$host/oauth2/auth'
+    nginx.ingress.kubernetes.io/auth-signin: 'https://$host/oauth2/start?rd=$escaped_request_uri'
 
     # Forward OIDC identity headers to upstream
-    nginx.ingress.kubernetes.io/auth-response-headers: "X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Groups"
+    nginx.ingress.kubernetes.io/auth-response-headers: 'X-Auth-Request-User,X-Auth-Request-Email,X-Auth-Request-Groups'
 
     # Map auth response headers to X-Forwarded-* headers
     nginx.ingress.kubernetes.io/configuration-snippet: |

@@ -12,9 +12,9 @@ import {
 } from '@mantine/core';
 
 /**
- * HyperI Theme
+ * DFE Theme
  *
- * A distinct visual identity for HyperI branding.
+ * A distinct visual identity for DFE branding.
  * Primary color: Blue
  * Style: Modern, professional
  */

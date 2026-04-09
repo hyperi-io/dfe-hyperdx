@@ -184,7 +184,7 @@ export const UserPreferencesModal = ({
 
         {/* Font selection is only available for HyperDX theme */}
         {/* ClickStack theme always uses Inter font and doesn't show this setting */}
-        {!(themeName === 'clickstack' || themeName === 'hyperi') && (
+        {!(themeName === 'clickstack' || themeName === 'dfe') && (
           <SettingContainer
             label="Font"
             description="If using custom font, make sure it's installed on your system"

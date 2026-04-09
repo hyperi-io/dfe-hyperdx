@@ -977,7 +977,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
   return (
     <Box p="sm" data-testid="dashboard-page">
       <Head>
-        <title>Dashboard – HyperI</title>
+        <title>Dashboard – DFE</title>
       </Head>
       <OnboardingModal />
       <EditTileModal

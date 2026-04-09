@@ -15,7 +15,7 @@ The DFE compose override replaces MongoDB with FerretDB + PostgreSQL.
 
 ```bash
 # Start ClickHouse + FerretDB (replaces mongo) & start app and frontend
-yarn dev:hyperi
+yarn dev:dfe
 ```
 
 You can access the app via http:localhost:8080

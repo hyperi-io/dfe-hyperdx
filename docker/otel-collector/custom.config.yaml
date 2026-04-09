@@ -20,7 +20,7 @@ exporters:
   otlphttp/json:
     endpoint: http://otel-collector-json:4318
     headers:
-      authorization: "super-secure-ingestion-api-key"
+      authorization: 'super-secure-ingestion-api-key'
     compression: gzip
 service:
   pipelines:

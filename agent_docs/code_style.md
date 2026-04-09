@@ -1,6 +1,7 @@
 # Code Style & Best Practices
 
-> **Note**: Pre-commit hooks handle formatting automatically. Focus on implementation patterns.
+> **Note**: Pre-commit hooks handle formatting automatically. Focus on
+> implementation patterns.
 
 ## TypeScript
 
@@ -25,17 +26,18 @@
 
 ## Mantine UI Components
 
-The project uses Mantine UI with **custom variants** defined in `packages/app/src/theme/mantineTheme.ts`.
+The project uses Mantine UI with **custom variants** defined in
+`packages/app/src/theme/mantineTheme.ts`.
 
 ### Button & ActionIcon Variants (REQUIRED)
 
 **ONLY use these variants for Button and ActionIcon components:**
 
-| Variant | Use Case | Example |
-|---------|----------|---------|
-| `variant="primary"` | Primary actions (Submit, Save, Create, Run) | `<Button variant="primary">Save</Button>` |
+| Variant               | Use Case                                             | Example                                       |
+| --------------------- | ---------------------------------------------------- | --------------------------------------------- |
+| `variant="primary"`   | Primary actions (Submit, Save, Create, Run)          | `<Button variant="primary">Save</Button>`     |
 | `variant="secondary"` | Secondary actions (Cancel, Clear, auxiliary actions) | `<Button variant="secondary">Cancel</Button>` |
-| `variant="danger"` | Destructive actions (Delete, Remove, Rotate API Key) | `<Button variant="danger">Delete</Button>` |
+| `variant="danger"`    | Destructive actions (Delete, Remove, Rotate API Key) | `<Button variant="danger">Delete</Button>`    |
 
 ### DO NOT USE (Forbidden Patterns)
 
@@ -63,7 +65,8 @@ The following patterns are **NOT ALLOWED** for Button and ActionIcon:
 <ActionIcon variant="danger">...</ActionIcon>
 ```
 
-**Note**: `variant="filled"` is still valid for **form inputs** (Select, TextInput, etc.), just not for Button/ActionIcon.
+**Note**: `variant="filled"` is still valid for **form inputs** (Select,
+TextInput, etc.), just not for Button/ActionIcon.
 
 ### Icon-Only Buttons → ActionIcon
 
@@ -94,4 +97,3 @@ This pattern cannot be enforced by ESLint and requires manual code review.
 
 - Clear, descriptive names following package conventions
 - Avoid "temp", "refactored", "improved" in permanent filenames
-

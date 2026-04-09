@@ -9,15 +9,15 @@
  */
 
 @use './hyperdx/tokens' as hyperdx-tokens;
-@use './hyperi/tokens' as hyperi-tokens;
+@use './dfe/tokens' as dfe-tokens;
 @use './clickstack/tokens' as clickstack-tokens;
 
-/* Dark Mode (default fallback) - uses HyperI tokens */
+/* Dark Mode (default fallback) - uses DFE tokens */
 [data-mantine-color-scheme='dark'] {
-  @include hyperi-tokens.dark-mode-tokens;
+  @include dfe-tokens.dark-mode-tokens;
 }
 
-/* Light Mode (fallback) - uses HyperI tokens */
+/* Light Mode (fallback) - uses DFE tokens */
 [data-mantine-color-scheme='light'] {
-  @include hyperi-tokens.light-mode-tokens;
+  @include dfe-tokens.light-mode-tokens;
 }

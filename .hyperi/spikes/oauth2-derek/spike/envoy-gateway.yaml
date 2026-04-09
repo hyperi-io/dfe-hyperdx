@@ -49,7 +49,7 @@ metadata:
   namespace: monitoring
 type: Opaque
 stringData:
-  client-secret: "<your-oidc-client-secret>"
+  client-secret: '<your-oidc-client-secret>'
 
 ---
 # ---------------------------------------------------------------------------
@@ -74,13 +74,13 @@ spec:
   oidc:
     provider:
       # --- Entra ID ---
-      issuer: "https://login.microsoftonline.com/<tenant-id>/v2.0"
+      issuer: 'https://login.microsoftonline.com/<tenant-id>/v2.0'
       # --- Okta ---
       # issuer: "https://<org>.okta.com"
       # --- Google ---
       # issuer: "https://accounts.google.com"
 
-    clientID: "<app-client-id>"
+    clientID: '<app-client-id>'
     clientSecret:
       name: hyperdx-oidc-secret
     scopes:
@@ -89,8 +89,8 @@ spec:
       - profile
       # Okta: add "groups" scope
       # Entra ID: groups come via token config, no extra scope needed
-    redirectURL: "https://observability.hypersec.io/oauth2/callback"
-    logoutPath: "/oauth2/logout"
+    redirectURL: 'https://observability.hypersec.io/oauth2/callback'
+    logoutPath: '/oauth2/logout'
 
 ---
 # ---------------------------------------------------------------------------
@@ -181,15 +181,15 @@ spec:
     name: hyperdx-gateway
   type: JSONPatch
   jsonPatches:
-    - type: "type.googleapis.com/envoy.config.listener.v3.Listener"
+    - type: 'type.googleapis.com/envoy.config.listener.v3.Listener'
       name: monitoring/hyperdx-gateway/https
       operation:
         op: add
-        path: "/filter_chains/0/filters/0/typed_config/http_filters/0"
+        path: '/filter_chains/0/filters/0/typed_config/http_filters/0'
         value:
           name: envoy.filters.http.lua
           typed_config:
-            "@type": "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua"
+            '@type': 'type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua'
             inline_code: |
               -- Extract OIDC claims from JWT and set as X-Forwarded-* headers
               -- These headers are read by the HyperDX oidc-connection middleware

@@ -4,7 +4,7 @@ import cx from 'classnames';
 import { Badge } from '@mantine/core';
 import { IconChevronDown, IconChevronUp } from '@tabler/icons-react';
 
-import { AppNavContext } from '@/hyperi-components/AppNav';
+import { AppNavContext } from '@/dfe/components/AppNav';
 
 import styles from './HyperDxNavItems.module.scss';
 
