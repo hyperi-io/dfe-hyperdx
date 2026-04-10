@@ -12,6 +12,9 @@
   "targetDefaults": {
     "build": {
       "dependsOn": ["^build"]
+    },
+    "ci:lint": {
+      "dependsOn": ["^build"]
     }
   },
   "tasksRunnerOptions": {

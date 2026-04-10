@@ -51,7 +51,7 @@
     "lint": "npx nx run-many --targets=ci:lint",
     "test": "npx nx run-many --targets=ci:unit",
     "format": "prettier --write .",
-    "tsc": "cd packages/api && npx tsc --noEmit && cd ../app && npx tsc --noEmit && cd ../common-utils && npx tsc --noEmit",
+    "tsc": "npx nx run @hyperdx/common-utils:build && cd packages/common-utils && npx tsc --noEmit && cd ../api && npx tsc --noEmit && cd ../app && npx tsc --noEmit",
     "typecheck": "yarn tsc",
     "audit": "bash scripts/audit.sh",
     "version": "make version",
