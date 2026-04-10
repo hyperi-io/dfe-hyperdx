@@ -41,9 +41,25 @@ function buildJSONExtractStringQuery(
 
   const baseColumn = parsedJsonRootPath[parsedJsonRootPath.length - 1];
   const jsonPathArgs = nestedPath.map(p => `'${p}'`).join(', ');
-  // JSONExtractString requires String input; native JSON columns (e.g. _tags) must be
-  // serialized with toString() first. toString is harmless for String-typed JSON text columns.
+  // JSONExtractString expects String; native JSON columns need toString first.
   return `JSONExtractString(toString(${baseColumn}), ${jsonPathArgs})`;
+}
+
+/** ClickHouse JSON type does not support col['k'] (that is arrayElement); use JSONExtractString. */
+function buildNativeJsonColumnSqlExpression(
+  keyPath: string[],
+  jsonColumns: string[],
+): string | null {
+  if (keyPath.length === 0 || !jsonColumns.includes(keyPath[0])) {
+    return null;
+  }
+  const root = keyPath[0];
+  const nested = keyPath.slice(1);
+  if (nested.length === 0) {
+    return `toString(${root})`;
+  }
+  const jsonPathArgs = nested.map(p => `'${p}'`).join(', ');
+  return `JSONExtractString(toString(${root}), ${jsonPathArgs})`;
 }
 
 import { RowSidePanelContext } from './DBRowSidePanel';
@@ -220,10 +236,11 @@ export function DBRowJsonViewer({
                   : fieldPath;
               }
             } else {
-              // Regular JSON column or non-JSON field
-              filterFieldPath = isJsonColumn
-                ? `toString(${fieldPath})`
-                : fieldPath;
+              filterFieldPath =
+                buildNativeJsonColumnSqlExpression(
+                  keyPath,
+                  jsonColumns ?? [],
+                ) ?? (isJsonColumn ? `toString(${fieldPath})` : fieldPath);
             }
 
             onPropertyAddClick(filterFieldPath, value);
@@ -257,6 +274,12 @@ export function DBRowJsonViewer({
               if (jsonQuery) {
                 searchFieldPath = jsonQuery;
               }
+            } else {
+              searchFieldPath =
+                buildNativeJsonColumnSqlExpression(
+                  keyPath,
+                  jsonColumns ?? [],
+                ) ?? fieldPath;
             }
 
             let defaultWhere = `${searchFieldPath} = ${
@@ -298,6 +321,12 @@ export function DBRowJsonViewer({
               if (jsonQuery) {
                 chartFieldPath = jsonQuery;
               }
+            } else {
+              chartFieldPath =
+                buildNativeJsonColumnSqlExpression(
+                  keyPath,
+                  jsonColumns ?? [],
+                ) ?? fieldPath;
             }
 
             router.push(
@@ -324,6 +353,10 @@ export function DBRowJsonViewer({
           if (jsonQuery) {
             columnFieldPath = jsonQuery;
           }
+        } else {
+          columnFieldPath =
+            buildNativeJsonColumnSqlExpression(keyPath, jsonColumns ?? []) ??
+            fieldPath;
         }
 
         const isIncluded = displayedColumns?.includes(columnFieldPath);
