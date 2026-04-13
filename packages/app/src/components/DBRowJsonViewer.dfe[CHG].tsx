@@ -30,6 +30,8 @@ import {
 import HyperJson, { GetLineActions, LineAction } from '@/components/HyperJson';
 import { mergePath } from '@/utils';
 
+import { RowSidePanelContext } from './DBRowSidePanel';
+
 function buildJSONExtractStringQuery(
   keyPath: string[],
   parsedJsonRootPath: string[],
@@ -61,8 +63,6 @@ function buildNativeJsonColumnSqlExpression(
   const jsonPathArgs = nested.map(p => `'${p}'`).join(', ');
   return `JSONExtractString(toString(${root}), ${jsonPathArgs})`;
 }
-
-import { RowSidePanelContext } from './DBRowSidePanel';
 
 function filterObjectRecursively(obj: any, filter: string): any {
   if (typeof obj !== 'object' || obj === null || filter === '') {
