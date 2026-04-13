@@ -112,6 +112,11 @@ describe('convertCHDataTypeToJSType - unit - type', () => {
     expect(res).toBe(JSDataType.JSON);
   });
 
+  it('Nullable(JSON) type', () => {
+    const res = convertCHDataTypeToJSType('Nullable(JSON)');
+    expect(res).toBe(JSDataType.JSON);
+  });
+
   it('Dynamic type', () => {
     const dataType = 'Dynamic';
     const res = convertCHDataTypeToJSType(dataType);

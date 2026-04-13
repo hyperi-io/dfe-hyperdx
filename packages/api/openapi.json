@@ -40,27 +40,49 @@
       },
       "AlertInterval": {
         "type": "string",
-        "enum": ["1m", "5m", "15m", "30m", "1h", "6h", "12h", "1d"],
+        "enum": [
+          "1m",
+          "5m",
+          "15m",
+          "30m",
+          "1h",
+          "6h",
+          "12h",
+          "1d"
+        ],
         "description": "Evaluation interval."
       },
       "AlertThresholdType": {
         "type": "string",
-        "enum": ["above", "below"],
+        "enum": [
+          "above",
+          "below"
+        ],
         "description": "Threshold comparison direction."
       },
       "AlertSource": {
         "type": "string",
-        "enum": ["saved_search", "tile"],
+        "enum": [
+          "saved_search",
+          "tile"
+        ],
         "description": "Alert source type."
       },
       "AlertState": {
         "type": "string",
-        "enum": ["ALERT", "OK", "INSUFFICIENT_DATA", "DISABLED"],
+        "enum": [
+          "ALERT",
+          "OK",
+          "INSUFFICIENT_DATA",
+          "DISABLED"
+        ],
         "description": "Current alert state."
       },
       "AlertChannelType": {
         "type": "string",
-        "enum": ["webhook"],
+        "enum": [
+          "webhook"
+        ],
         "description": "Channel type."
       },
       "AlertSilenced": {
@@ -86,7 +108,10 @@
       },
       "AlertChannelWebhook": {
         "type": "object",
-        "required": ["type", "webhookId"],
+        "required": [
+          "type",
+          "webhookId"
+        ],
         "properties": {
           "type": {
             "$ref": "#/components/schemas/AlertChannelType"
@@ -274,7 +299,12 @@
       },
       "ChartSeries": {
         "type": "object",
-        "required": ["sourceId", "aggFn", "where", "groupBy"],
+        "required": [
+          "sourceId",
+          "aggFn",
+          "where",
+          "groupBy"
+        ],
         "properties": {
           "sourceId": {
             "type": "string",
@@ -309,7 +339,10 @@
           "whereLanguage": {
             "type": "string",
             "description": "Query language used in the where clause",
-            "enum": ["lucene", "sql"],
+            "enum": [
+              "lucene",
+              "sql"
+            ],
             "example": "lucene"
           },
           "groupBy": {
@@ -318,7 +351,10 @@
             "items": {
               "type": "string"
             },
-            "example": ["service", "host"]
+            "example": [
+              "service",
+              "host"
+            ]
           },
           "metricName": {
             "type": "string",
@@ -328,14 +364,22 @@
           "metricDataType": {
             "type": "string",
             "description": "Type of metric data",
-            "enum": ["sum", "gauge", "histogram"],
+            "enum": [
+              "sum",
+              "gauge",
+              "histogram"
+            ],
             "example": "gauge"
           }
         }
       },
       "SeriesQueryRequest": {
         "type": "object",
-        "required": ["series", "startTime", "endTime"],
+        "required": [
+          "series",
+          "startTime",
+          "endTime"
+        ],
         "properties": {
           "series": {
             "type": "array",
@@ -381,7 +425,10 @@
           "seriesReturnType": {
             "type": "string",
             "description": "Format of the returned data",
-            "enum": ["ratio", "column"],
+            "enum": [
+              "ratio",
+              "column"
+            ],
             "example": "column"
           }
         }
@@ -410,7 +457,10 @@
             "items": {
               "type": "string"
             },
-            "example": ["api", "prod-host-1"]
+            "example": [
+              "api",
+              "prod-host-1"
+            ]
           }
         }
       },
@@ -427,7 +477,13 @@
       },
       "NumberFormatOutput": {
         "type": "string",
-        "enum": ["currency", "percent", "byte", "time", "number"],
+        "enum": [
+          "currency",
+          "percent",
+          "byte",
+          "time",
+          "number"
+        ],
         "description": "Output format type (currency, percent, byte, time, number)."
       },
       "AggregationFunction": {
@@ -448,7 +504,10 @@
       },
       "QueryLanguage": {
         "type": "string",
-        "enum": ["sql", "lucene"],
+        "enum": [
+          "sql",
+          "lucene"
+        ],
         "description": "Query language for the where clause."
       },
       "MetricDataType": {
@@ -464,12 +523,18 @@
       },
       "TimeSeriesDisplayType": {
         "type": "string",
-        "enum": ["stacked_bar", "line"],
+        "enum": [
+          "stacked_bar",
+          "line"
+        ],
         "description": "Visual representation type for the time series."
       },
       "SortOrder": {
         "type": "string",
-        "enum": ["desc", "asc"],
+        "enum": [
+          "desc",
+          "asc"
+        ],
         "description": "Sort order for table rows."
       },
       "NumberFormat": {
@@ -518,11 +583,19 @@
       },
       "TimeChartSeries": {
         "type": "object",
-        "required": ["type", "sourceId", "aggFn", "where", "groupBy"],
+        "required": [
+          "type",
+          "sourceId",
+          "aggFn",
+          "where",
+          "groupBy"
+        ],
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["time"],
+            "enum": [
+              "time"
+            ],
             "example": "time"
           },
           "sourceId": {
@@ -569,7 +642,9 @@
             },
             "maxItems": 10,
             "description": "Fields to group results by (creates separate series for each group)",
-            "example": ["host"]
+            "example": [
+              "host"
+            ]
           },
           "numberFormat": {
             "$ref": "#/components/schemas/NumberFormat"
@@ -592,11 +667,19 @@
       },
       "TableChartSeries": {
         "type": "object",
-        "required": ["type", "sourceId", "aggFn", "where", "groupBy"],
+        "required": [
+          "type",
+          "sourceId",
+          "aggFn",
+          "where",
+          "groupBy"
+        ],
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["table"],
+            "enum": [
+              "table"
+            ],
             "example": "table"
           },
           "sourceId": {
@@ -638,7 +721,9 @@
               "type": "string"
             },
             "maxItems": 10,
-            "example": ["errorType"]
+            "example": [
+              "errorType"
+            ]
           },
           "sortOrder": {
             "$ref": "#/components/schemas/SortOrder",
@@ -662,11 +747,18 @@
       },
       "NumberChartSeries": {
         "type": "object",
-        "required": ["type", "sourceId", "aggFn", "where"],
+        "required": [
+          "type",
+          "sourceId",
+          "aggFn",
+          "where"
+        ],
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["number"],
+            "enum": [
+              "number"
+            ],
             "example": "number"
           },
           "sourceId": {
@@ -717,11 +809,18 @@
       },
       "SearchChartSeries": {
         "type": "object",
-        "required": ["type", "sourceId", "fields", "where"],
+        "required": [
+          "type",
+          "sourceId",
+          "fields",
+          "where"
+        ],
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["search"],
+            "enum": [
+              "search"
+            ],
             "example": "search"
           },
           "sourceId": {
@@ -735,7 +834,11 @@
               "type": "string"
             },
             "description": "List of field names to display in the search results table",
-            "example": ["timestamp", "level", "message"]
+            "example": [
+              "timestamp",
+              "level",
+              "message"
+            ]
           },
           "where": {
             "type": "string",
@@ -751,11 +854,16 @@
       },
       "MarkdownChartSeries": {
         "type": "object",
-        "required": ["type", "content"],
+        "required": [
+          "type",
+          "content"
+        ],
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["markdown"],
+            "enum": [
+              "markdown"
+            ],
             "example": "markdown"
           },
           "content": {
@@ -797,7 +905,14 @@
       "TileInput": {
         "type": "object",
         "description": "Dashboard tile/chart configuration for creation",
-        "required": ["name", "x", "y", "w", "h", "series"],
+        "required": [
+          "name",
+          "x",
+          "y",
+          "w",
+          "h",
+          "series"
+        ],
         "properties": {
           "name": {
             "type": "string",
@@ -852,7 +967,9 @@
           },
           {
             "type": "object",
-            "required": ["id"],
+            "required": [
+              "id"
+            ],
             "properties": {
               "id": {
                 "type": "string",
@@ -866,11 +983,18 @@
       "FilterInput": {
         "type": "object",
         "description": "Dashboard filter key that can be added to a dashboard",
-        "required": ["type", "name", "expression", "sourceId"],
+        "required": [
+          "type",
+          "name",
+          "expression",
+          "sourceId"
+        ],
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["QUERY_EXPRESSION"]
+            "enum": [
+              "QUERY_EXPRESSION"
+            ]
           },
           "name": {
             "type": "string",
@@ -906,7 +1030,9 @@
           },
           {
             "type": "object",
-            "required": ["id"],
+            "required": [
+              "id"
+            ],
             "properties": {
               "id": {
                 "type": "string",
@@ -946,7 +1072,10 @@
               "maxLength": 32
             },
             "maxItems": 50,
-            "example": ["production", "monitoring"]
+            "example": [
+              "production",
+              "monitoring"
+            ]
           },
           "filters": {
             "type": "array",
@@ -959,7 +1088,10 @@
       },
       "CreateDashboardRequest": {
         "type": "object",
-        "required": ["name", "tiles"],
+        "required": [
+          "name",
+          "tiles"
+        ],
         "properties": {
           "name": {
             "type": "string",
@@ -979,7 +1111,9 @@
               "maxLength": 32
             },
             "maxItems": 50,
-            "example": ["development"]
+            "example": [
+              "development"
+            ]
           },
           "filters": {
             "type": "array",
@@ -992,7 +1126,10 @@
       },
       "UpdateDashboardRequest": {
         "type": "object",
-        "required": ["name", "tiles"],
+        "required": [
+          "name",
+          "tiles"
+        ],
         "properties": {
           "name": {
             "type": "string",
@@ -1013,7 +1150,10 @@
               "maxLength": 32
             },
             "maxItems": 50,
-            "example": ["production", "updated"]
+            "example": [
+              "production",
+              "updated"
+            ]
           },
           "filters": {
             "type": "array",
@@ -1052,7 +1192,10 @@
       },
       "QuerySetting": {
         "type": "object",
-        "required": ["setting", "value"],
+        "required": [
+          "setting",
+          "value"
+        ],
         "properties": {
           "setting": {
             "type": "string",
@@ -1066,7 +1209,10 @@
       },
       "SourceFrom": {
         "type": "object",
-        "required": ["databaseName", "tableName"],
+        "required": [
+          "databaseName",
+          "tableName"
+        ],
         "properties": {
           "databaseName": {
             "type": "string",
@@ -1080,7 +1226,9 @@
       },
       "HighlightedAttributeExpression": {
         "type": "object",
-        "required": ["sqlExpression"],
+        "required": [
+          "sqlExpression"
+        ],
         "properties": {
           "sqlExpression": {
             "type": "string",
@@ -1100,7 +1248,10 @@
       },
       "AggregatedColumn": {
         "type": "object",
-        "required": ["mvColumn", "aggFn"],
+        "required": [
+          "mvColumn",
+          "aggFn"
+        ],
         "properties": {
           "sourceColumn": {
             "type": "string",
@@ -1182,7 +1333,12 @@
       },
       "SourceKind": {
         "type": "string",
-        "enum": ["log", "trace", "session", "metric"],
+        "enum": [
+          "log",
+          "trace",
+          "session",
+          "metric"
+        ],
         "description": "The type of data source."
       },
       "LogSource": {
@@ -1205,7 +1361,9 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["log"]
+            "enum": [
+              "log"
+            ]
           },
           "connection": {
             "type": "string"
@@ -1328,7 +1486,9 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["trace"]
+            "enum": [
+              "trace"
+            ]
           },
           "connection": {
             "type": "string"
@@ -1468,14 +1628,18 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["metric"]
+            "enum": [
+              "metric"
+            ]
           },
           "connection": {
             "type": "string"
           },
           "from": {
             "type": "object",
-            "required": ["databaseName"],
+            "required": [
+              "databaseName"
+            ],
             "properties": {
               "databaseName": {
                 "type": "string"
@@ -1553,7 +1717,9 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["session"]
+            "enum": [
+              "session"
+            ]
           },
           "connection": {
             "type": "string"
@@ -1628,7 +1794,9 @@
         "summary": "Get Alert",
         "description": "Retrieves a specific alert by ID",
         "operationId": "getAlert",
-        "tags": ["Alerts"],
+        "tags": [
+          "Alerts"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -1702,7 +1870,9 @@
         "summary": "Update Alert",
         "description": "Updates an existing alert",
         "operationId": "updateAlert",
-        "tags": ["Alerts"],
+        "tags": [
+          "Alerts"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -1791,7 +1961,9 @@
         "summary": "Delete Alert",
         "description": "Deletes an alert",
         "operationId": "deleteAlert",
-        "tags": ["Alerts"],
+        "tags": [
+          "Alerts"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -1844,7 +2016,9 @@
         "summary": "List Alerts",
         "description": "Retrieves a list of all alerts for the authenticated team",
         "operationId": "listAlerts",
-        "tags": ["Alerts"],
+        "tags": [
+          "Alerts"
+        ],
         "responses": {
           "200": {
             "description": "Successfully retrieved alerts",
@@ -1901,7 +2075,9 @@
         "summary": "Create Alert",
         "description": "Creates a new alert",
         "operationId": "createAlert",
-        "tags": ["Alerts"],
+        "tags": [
+          "Alerts"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -1970,7 +2146,9 @@
         "summary": "Query Chart Series Data",
         "description": "Retrieves time series data based on configured series parameters",
         "operationId": "queryChartSeries",
-        "tags": ["Charts"],
+        "tags": [
+          "Charts"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2006,14 +2184,18 @@
                         "sourceId": "65f5e4a3b9e77c001a123456",
                         "aggFn": "count",
                         "where": "SeverityText:error",
-                        "groupBy": ["service"]
+                        "groupBy": [
+                          "service"
+                        ]
                       },
                       {
                         "sourceId": "65f5e4a3b9e77c001a123456",
                         "aggFn": "avg",
                         "field": "duration",
                         "where": "SeverityText:error",
-                        "groupBy": ["service"]
+                        "groupBy": [
+                          "service"
+                        ]
                       }
                     ]
                   }
@@ -2099,17 +2281,23 @@
                         {
                           "ts_bucket": 1647014400000,
                           "series_0.data": 15,
-                          "group": ["api"]
+                          "group": [
+                            "api"
+                          ]
                         },
                         {
                           "ts_bucket": 1647014400000,
                           "series_0.data": 8,
-                          "group": ["frontend"]
+                          "group": [
+                            "frontend"
+                          ]
                         },
                         {
                           "ts_bucket": 1647018000000,
                           "series_0.data": 22,
-                          "group": ["api"]
+                          "group": [
+                            "api"
+                          ]
                         }
                       ]
                     }
@@ -2207,7 +2395,9 @@
         "summary": "List Dashboards",
         "description": "Retrieves a list of all dashboards for the authenticated team",
         "operationId": "listDashboards",
-        "tags": ["Dashboards"],
+        "tags": [
+          "Dashboards"
+        ],
         "responses": {
           "200": {
             "description": "Successfully retrieved dashboards",
@@ -2245,7 +2435,10 @@
                               ]
                             }
                           ],
-                          "tags": ["infrastructure", "monitoring"],
+                          "tags": [
+                            "infrastructure",
+                            "monitoring"
+                          ],
                           "filters": [
                             {
                               "id": "65f5e4a3b9e77c001a301001",
@@ -2273,13 +2466,18 @@
                                   "sourceId": "65f5e4a3b9e77c001a111112",
                                   "aggFn": "count",
                                   "where": "level:error",
-                                  "groupBy": ["service"],
+                                  "groupBy": [
+                                    "service"
+                                  ],
                                   "sortOrder": "desc"
                                 }
                               ]
                             }
                           ],
-                          "tags": ["api", "monitoring"],
+                          "tags": [
+                            "api",
+                            "monitoring"
+                          ],
                           "filters": [
                             {
                               "id": "65f5e4a3b9e77c001a301002",
@@ -2306,7 +2504,9 @@
         "summary": "Create Dashboard",
         "description": "Creates a new dashboard",
         "operationId": "createDashboard",
-        "tags": ["Dashboards"],
+        "tags": [
+          "Dashboards"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2337,7 +2537,10 @@
                         ]
                       }
                     ],
-                    "tags": ["api", "monitoring"],
+                    "tags": [
+                      "api",
+                      "monitoring"
+                    ],
                     "filters": [
                       {
                         "type": "QUERY_EXPRESSION",
@@ -2381,13 +2584,18 @@
                             "sourceId": "65f5e4a3b9e77c001a111111",
                             "aggFn": "count",
                             "where": "level:error",
-                            "groupBy": ["errorType"],
+                            "groupBy": [
+                              "errorType"
+                            ],
                             "sortOrder": "desc"
                           }
                         ]
                       }
                     ],
-                    "tags": ["service-health", "production"],
+                    "tags": [
+                      "service-health",
+                      "production"
+                    ],
                     "filters": [
                       {
                         "type": "QUERY_EXPRESSION",
@@ -2436,7 +2644,10 @@
                             ]
                           }
                         ],
-                        "tags": ["api", "monitoring"],
+                        "tags": [
+                          "api",
+                          "monitoring"
+                        ],
                         "filters": [
                           {
                             "id": "65f5e4a3b9e77c001a301004",
@@ -2500,7 +2711,9 @@
         "summary": "Get Dashboard",
         "description": "Retrieves a specific dashboard by ID",
         "operationId": "getDashboard",
-        "tags": ["Dashboards"],
+        "tags": [
+          "Dashboards"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -2568,7 +2781,10 @@
                             ]
                           }
                         ],
-                        "tags": ["infrastructure", "monitoring"],
+                        "tags": [
+                          "infrastructure",
+                          "monitoring"
+                        ],
                         "filters": [
                           {
                             "id": "65f5e4a3b9e77c001a301003",
@@ -2617,7 +2833,9 @@
         "summary": "Update Dashboard",
         "description": "Updates an existing dashboard",
         "operationId": "updateDashboard",
-        "tags": ["Dashboards"],
+        "tags": [
+          "Dashboards"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -2677,7 +2895,10 @@
                         ]
                       }
                     ],
-                    "tags": ["production", "updated"],
+                    "tags": [
+                      "production",
+                      "updated"
+                    ],
                     "filters": [
                       {
                         "id": "65f5e4a3b9e77c001a301005",
@@ -2743,7 +2964,10 @@
                             ]
                           }
                         ],
-                        "tags": ["production", "updated"],
+                        "tags": [
+                          "production",
+                          "updated"
+                        ],
                         "filters": [
                           {
                             "id": "65f5e4a3b9e77c001a301005",
@@ -2818,7 +3042,9 @@
         "summary": "Delete Dashboard",
         "description": "Deletes a dashboard",
         "operationId": "deleteDashboard",
-        "tags": ["Dashboards"],
+        "tags": [
+          "Dashboards"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -2877,7 +3103,9 @@
         "summary": "List Sources",
         "description": "Retrieves a list of all sources for the authenticated team",
         "operationId": "listSources",
-        "tags": ["Sources"],
+        "tags": [
+          "Sources"
+        ],
         "responses": {
           "200": {
             "description": "Successfully retrieved sources",

@@ -140,6 +140,42 @@ describe('DBRowJsonViewer', () => {
     expect(mockToggleColumn).toHaveBeenCalledWith("LogAttributes['field1']");
   });
 
+  describe('native ClickHouse JSON columns (jsonColumns)', () => {
+    const nativeJsonData = {
+      _json: { _source: 'simple_fetcher_to_loader_kafka' },
+    };
+
+    it('uses JSONExtractString for nested fields (not bracket / arrayElement)', () => {
+      renderWithMantine(
+        <RowSidePanelContext.Provider value={defaultContext}>
+          <DBRowJsonViewer data={nativeJsonData} jsonColumns={['_json']} />
+        </RowSidePanelContext.Provider>,
+      );
+      // Tree starts expanded (viewer defaults); do not click parent — that toggles collapse.
+      clickLineButton('_source', 'Search');
+
+      expect(mockGenerateSearchUrl).toHaveBeenCalledWith({
+        where:
+          "JSONExtractString(toString(_json), '_source') = 'simple_fetcher_to_loader_kafka'",
+        whereLanguage: 'sql',
+      });
+    });
+
+    it('adds filters with JSONExtractString for nested native JSON fields', () => {
+      renderWithMantine(
+        <RowSidePanelContext.Provider value={defaultContext}>
+          <DBRowJsonViewer data={nativeJsonData} jsonColumns={['_json']} />
+        </RowSidePanelContext.Provider>,
+      );
+      clickLineButton('_source', 'Add to Filters');
+
+      expect(mockOnPropertyAddClick).toHaveBeenCalledWith(
+        "JSONExtractString(toString(_json), '_source')",
+        'simple_fetcher_to_loader_kafka',
+      );
+    });
+  });
+
   describe('timestamp fields', () => {
     it.each([['Timestamp'], ['TimestampTime']])(
       'formats %s field correctly',

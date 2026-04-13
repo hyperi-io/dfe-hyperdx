@@ -398,8 +398,6 @@ export class Metadata {
     column: string;
     maxKeys?: number;
   } & TableConnection) {
-    // HDX-2480 delete line below to reenable json filters
-    return []; // Need to disable JSON keys for the time being.
     const cacheKey = metricName
       ? `${connectionId}.${databaseName}.${tableName}.${column}.${metricName}.keys`
       : `${connectionId}.${databaseName}.${tableName}.${column}.keys`;
@@ -535,8 +533,6 @@ export class Metadata {
     });
 
     for (const c of columns) {
-      // HDX-2480 delete condition below to reenable json filters
-      if (c.type === 'JSON') continue;
       fields.push({
         path: [c.name],
         type: c.type,
