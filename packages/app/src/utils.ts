@@ -460,7 +460,7 @@ export const COLORS = [
 
 /**
  * Detects the active theme by checking for theme classes on documentElement.
- * Returns 'clickstack' if theme-clickstack class is present, 'hyperdx' otherwise.
+ * Returns theme from documentElement classes, or 'dfe' when none match.
  * Note: classList.contains() is O(1) and fast - no caching needed.
  */
 function detectActiveTheme(): 'clickstack' | 'hyperdx' | 'dfe' {
@@ -473,7 +473,7 @@ function detectActiveTheme(): 'clickstack' | 'hyperdx' | 'dfe' {
     const isDFE = document.documentElement.classList.contains('theme-dfe');
     const isClickStack =
       document.documentElement.classList.contains('theme-clickstack');
-    return isDFE ? 'dfe' : isClickStack ? 'clickstack' : 'hyperdx';
+    return isDFE ? 'dfe' : isClickStack ? 'clickstack' : 'dfe';
   } catch {
     // Fallback if DOM access fails
     return 'dfe';

@@ -129,6 +129,9 @@ export const themes: Record<ThemeName, ThemeConfig> = {
   dfe: dfeTheme,
 };
 
+/** When NEXT_PUBLIC_THEME is missing or invalid, and for safe runtime fallbacks. */
+export const FALLBACK_THEME: ThemeName = 'dfe';
+
 // Check if we're in development/local mode
 export const IS_DEV =
   process.env.NODE_ENV === 'development' ||
@@ -173,28 +176,28 @@ export function safeLocalStorageRemove(key: string): void {
   }
 }
 
-// Default theme (validated against registry, falls back to hyperdx)
+// Default theme (validated against registry, falls back to FALLBACK_THEME)
 const envTheme = process.env.NEXT_PUBLIC_THEME;
 let resolvedDefaultTheme: ThemeName = isValidThemeName(envTheme)
   ? envTheme
-  : 'hyperdx';
+  : FALLBACK_THEME;
 
 // Validate that the resolved default theme exists and is valid
 if (!themes[resolvedDefaultTheme]) {
   console.warn(
-    `[Theme Validation] Theme "${resolvedDefaultTheme}" from NEXT_PUBLIC_THEME not found in registry. Falling back to "hyperdx".`,
+    `[Theme Validation] Theme "${resolvedDefaultTheme}" from NEXT_PUBLIC_THEME not found in registry. Falling back to "${FALLBACK_THEME}".`,
   );
-  resolvedDefaultTheme = 'hyperdx';
+  resolvedDefaultTheme = FALLBACK_THEME;
 } else {
   // Validate the theme config structure
   try {
     validateThemeConfig(themes[resolvedDefaultTheme], resolvedDefaultTheme);
   } catch (error) {
     console.error(
-      `[Theme Validation] Theme "${resolvedDefaultTheme}" failed validation. Falling back to "hyperdx".`,
+      `[Theme Validation] Theme "${resolvedDefaultTheme}" failed validation. Falling back to "${FALLBACK_THEME}".`,
       error,
     );
-    resolvedDefaultTheme = 'hyperdx';
+    resolvedDefaultTheme = FALLBACK_THEME;
     // In production, throw to prevent deployment with invalid configs
     if (process.env.NODE_ENV === 'production') {
       throw error;
@@ -211,7 +214,7 @@ export const DEFAULT_THEME: ThemeName = resolvedDefaultTheme;
  * Priority:
  * 1. localStorage: hdx-dev-theme (persisted via explicit UI action)
  * 2. Environment variable: NEXT_PUBLIC_THEME
- * 3. Default: hyperdx
+ * 3. Default: FALLBACK_THEME (dfe)
  */
 export function getDevThemeName(): ThemeName {
   if (typeof window === 'undefined') {
@@ -229,7 +232,7 @@ export function getDevThemeName(): ThemeName {
 
 // Get theme configuration by name
 export function getTheme(name: ThemeName = DEFAULT_THEME): ThemeConfig {
-  const theme = themes[name] || themes.hyperdx;
+  const theme = themes[name] || themes[FALLBACK_THEME];
 
   // Runtime validation - ensure theme is valid before returning
   // This catches cases where theme config was corrupted after module load
@@ -237,11 +240,10 @@ export function getTheme(name: ThemeName = DEFAULT_THEME): ThemeConfig {
     validateThemeConfig(theme, name);
   } catch (error) {
     console.error(
-      `[Theme Validation] Theme "${name}" failed runtime validation. Falling back to "hyperdx".`,
+      `[Theme Validation] Theme "${name}" failed runtime validation. Falling back to "${FALLBACK_THEME}".`,
       error,
     );
-    // Return hyperdx theme as safe fallback
-    return themes.hyperdx;
+    return themes[FALLBACK_THEME];
   }
 
   return theme;
