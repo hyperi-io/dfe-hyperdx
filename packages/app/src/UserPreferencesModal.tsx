@@ -19,8 +19,9 @@ import { isValidThemeName, themes } from './theme';
 import { UserPreferences, useUserPreferences } from './useUserPreferences';
 
 const OPTIONS_COLOR_MODE = [
-  { label: 'Dark', value: 'dark' },
+  { label: 'System', value: 'system' },
   { label: 'Light', value: 'light' },
+  { label: 'Dark', value: 'dark' },
 ];
 
 // Brand theme options (generated from theme registry)
@@ -42,7 +43,7 @@ const SettingContainer = ({
     <Group align="center" justify="space-between">
       <div style={{ flex: 1 }}>
         {label}
-        {description && (
+        {!!description && (
           <Text size="xs" mt={2}>
             {description}
           </Text>
@@ -121,7 +122,7 @@ export const UserPreferencesModal = ({
         />
         <SettingContainer
           label="Color Mode"
-          description="Switch between light and dark mode"
+          description="Use system setting, or choose light or dark"
         >
           <Select
             value={userPreferences.colorMode}

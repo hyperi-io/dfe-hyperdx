@@ -2,12 +2,10 @@ import React, { useEffect } from 'react';
 import type { NextPage } from 'next';
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
-import { NextAdapter } from 'next-query-params';
+import { env } from 'next-runtime-env';
 import randomUUID from 'crypto-randomuuid';
 import { enableMapSet } from 'immer';
-import { QueryParamProvider } from 'use-query-params';
 import HyperDX from '@hyperdx/browser';
-import { ColorSchemeScript } from '@mantine/core';
 import {
   MutationCache,
   QueryCache,
@@ -16,7 +14,7 @@ import {
 } from '@tanstack/react-query';
 
 import { DynamicFavicon } from '@/components/DynamicFavicon';
-import { IS_LOCAL_MODE } from '@/config';
+import { IS_LOCAL_MODE, parseResourceAttributes } from '@/config';
 import {
   DEFAULT_FONT_VAR,
   FONT_VAR_MAP,
@@ -25,18 +23,22 @@ import {
 import { ibmPlexMono, inter, roboto, robotoMono } from '@/fonts';
 import { AppThemeProvider, useAppTheme } from '@/theme/ThemeProvider';
 import { ThemeWrapper } from '@/ThemeWrapper';
-import { useConfirmModal } from '@/useConfirm';
-import { QueryParamProvider as HDXQueryParamProvider } from '@/useQueryParam';
-import { useUserPreferences } from '@/useUserPreferences';
+import { NextApiConfigResponseData } from '@/types';
+import { ConfirmProvider } from '@/useConfirm';
+import {
+  SystemColorSchemeScript,
+  useResolvedColorScheme,
+  useUserPreferences,
+} from '@/useUserPreferences';
 
 import '@mantine/core/styles.css';
-import '@mantine/notifications/styles.css';
 import '@mantine/dates/styles.css';
 import '@mantine/dropzone/styles.css';
-import '@styles/globals.css';
+import '@mantine/notifications/styles.css';
 import '@styles/app.scss';
-import 'uplot/dist/uPlot.min.css';
+import '@styles/globals.css';
 import '@xyflow/react/dist/style.css';
+import 'uplot/dist/uPlot.min.css';
 
 // Polyfill crypto.randomUUID for non-HTTPS environments
 if (typeof crypto !== 'undefined' && !crypto.randomUUID) {
@@ -66,7 +68,6 @@ type AppPropsWithLayout = AppProps & {
 // Component that renders Head content requiring user preferences
 // Must be rendered inside AppThemeProvider to avoid hydration mismatch
 function AppHeadContent() {
-  const { userPreferences } = useUserPreferences();
   const { theme } = useAppTheme();
 
   return (
@@ -74,11 +75,7 @@ function AppHeadContent() {
       <title>{theme.displayName}</title>
       <meta name="viewport" content="width=device-width, initial-scale=0.75" />
       <meta name="google" content="notranslate" />
-      <ColorSchemeScript
-        forceColorScheme={
-          userPreferences.colorMode === 'dark' ? 'dark' : 'light'
-        }
-      />
+      <SystemColorSchemeScript />
     </Head>
   );
 }
@@ -88,24 +85,23 @@ function AppHeadContent() {
 function AppContent({
   Component,
   pageProps,
-  confirmModal,
 }: {
   Component: NextPageWithLayout;
   pageProps: AppProps['pageProps'];
-  confirmModal: React.ReactNode;
 }) {
   const { userPreferences } = useUserPreferences();
+  const resolvedColorScheme = useResolvedColorScheme();
   const { themeName } = useAppTheme();
 
   // ClickStack theme always uses Inter font - user preference is ignored
   // HyperDX theme allows user to select font preference
+  // DFE: fixed data-UI font (Inter - tabular numerals, dense-table legible).
+  // Martel Sans is brand/marketing only, not the console. TODO: source the
+  // family from the shared @dfe/design-tokens package (hyperi-graphics SSoT).
   const isDFETheme = themeName === 'dfe';
   const isClickStackTheme = themeName === 'clickstack';
-  const effectiveFont = isDFETheme
-    ? 'Martel Sans'
-    : isClickStackTheme
-      ? 'Inter'
-      : userPreferences.font;
+  const effectiveFont =
+    isDFETheme || isClickStackTheme ? 'Inter' : userPreferences.font;
   const selectedMantineFont = effectiveFont
     ? MANTINE_FONT_MAP[effectiveFont] || undefined
     : undefined;
@@ -123,17 +119,16 @@ function AppContent({
   return (
     <ThemeWrapper
       fontFamily={selectedMantineFont}
-      colorScheme={userPreferences.colorMode === 'dark' ? 'dark' : 'light'}
+      colorScheme={resolvedColorScheme}
     >
-      {getLayout(<Component {...pageProps} />)}
-      {confirmModal}
+      <ConfirmProvider>
+        {getLayout(<Component {...pageProps} />)}
+      </ConfirmProvider>
     </ThemeWrapper>
   );
 }
 
 export default function MyApp({ Component, pageProps }: AppPropsWithLayout) {
-  const confirmModal = useConfirmModal();
-
   // port to react query ? (needs to wrap with QueryClientProvider)
   useEffect(() => {
     if (IS_LOCAL_MODE) {
@@ -141,29 +136,34 @@ export default function MyApp({ Component, pageProps }: AppPropsWithLayout) {
     }
     fetch('/api/config')
       .then(res => res.json())
-      .then(_jsonData => {
+      .then((_jsonData?: NextApiConfigResponseData) => {
         if (_jsonData?.apiKey) {
-          let hostname;
-          try {
-            const url = new URL(_jsonData.apiServerUrl);
-            hostname = url.hostname;
-          } catch (err) {
-            // ignore
-          }
+          const frontendAttrs = parseResourceAttributes(
+            env('NEXT_PUBLIC_OTEL_RESOURCE_ATTRIBUTES') ?? '',
+          );
           HyperDX.init({
             apiKey: _jsonData.apiKey,
             consoleCapture: true,
             maskAllInputs: true,
             maskAllText: true,
+            // service.version is applied last so it always reflects the
+            // NEXT_PUBLIC_APP_VERSION and cannot be overridden by
+            // NEXT_PUBLIC_OTEL_RESOURCE_ATTRIBUTES.
+            otelResourceAttributes: {
+              ...frontendAttrs,
+              'service.version': process.env.NEXT_PUBLIC_APP_VERSION,
+            },
             service: _jsonData.serviceName,
             // tracePropagationTargets: [new RegExp(hostname ?? 'localhost', 'i')],
             url: _jsonData.collectorUrl,
+            tracesUrl: _jsonData.collectorTracesUrl,
+            logsUrl: _jsonData.collectorLogsUrl,
           });
         } else {
-          console.warn('No API key found');
+          console.warn('No API key found to enable OTEL exporter');
         }
       })
-      .catch(err => {
+      .catch(() => {
         // ignore
       });
   }, []);
@@ -189,17 +189,9 @@ export default function MyApp({ Component, pageProps }: AppPropsWithLayout) {
       <AppThemeProvider>
         <AppHeadContent />
         <DynamicFavicon />
-        <HDXQueryParamProvider>
-          <QueryParamProvider adapter={NextAdapter}>
-            <QueryClientProvider client={queryClient}>
-              <AppContent
-                Component={Component}
-                pageProps={pageProps}
-                confirmModal={confirmModal}
-              />
-            </QueryClientProvider>
-          </QueryParamProvider>
-        </HDXQueryParamProvider>
+        <QueryClientProvider client={queryClient}>
+          <AppContent Component={Component} pageProps={pageProps} />
+        </QueryClientProvider>
       </AppThemeProvider>
     </React.Fragment>
   );

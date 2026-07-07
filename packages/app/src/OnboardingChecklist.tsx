@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import Link from 'next/link';
-import { differenceInDays } from 'date-fns';
 import {
   ActionIcon,
   Badge,
@@ -21,6 +20,7 @@ import {
 
 import { useQueriedChartConfig } from './hooks/useChartConfig';
 import api from './api';
+import { NOW } from './config';
 import { useConnections } from './connection';
 import { useSources } from './source';
 import { useLocalStorage } from './utils';
@@ -34,8 +34,6 @@ interface OnboardingStep {
   href?: string;
   onClick?: () => void;
 }
-
-const NOW = Date.now();
 const OnboardingChecklist = ({
   onAddDataClick,
 }: {
@@ -88,7 +86,13 @@ const OnboardingChecklist = ({
   );
   const { data: sourceRowsData, isLoading: isSourceRowsLoading } =
     useQueriedChartConfig(sourceRowsConfig, {
-      enabled: shouldShow,
+      // Skip the chart query when there's no connection to query against.
+      // Without this guard, the query fires with `connection: ''` (see
+      // sourceRowsConfig above), which sends a clickhouse-proxy request
+      // with no `x-hyperdx-connection-id` header and fails Zod validation
+      // on the API. This blocks brand-new teams (< 3 days old) from using
+      // the team settings page until they manually add a connection.
+      enabled: shouldShow && !!firstConnection?.id,
     });
   const hasData = sourceRowsData?.data?.[0]?.total_rows > 0;
   // const hasData = false;
@@ -179,7 +183,7 @@ const OnboardingChecklist = ({
         </ActionIcon>
       </Group>
 
-      <Collapse in={!isCollapsed}>
+      <Collapse expanded={!isCollapsed}>
         <Stack gap="xs">
           {steps.map((step, index) => {
             const StepContent = (

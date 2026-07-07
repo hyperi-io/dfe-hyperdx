@@ -1,3 +1,5 @@
+import { ColumnMeta } from '@/clickhouse';
+import { ClickhouseClient } from '@/clickhouse/node';
 import {
   isUnsupportedCountFunction,
   optimizeGetKeyValuesCalls,
@@ -6,15 +8,13 @@ import {
   tryOptimizeConfigWithMaterializedViewWithExplanations,
 } from '@/core/materializedViews';
 import { Metadata } from '@/core/metadata';
+import { isBuilderChartConfig } from '@/guards';
 import {
   ChartConfigWithOptDateRange,
   MaterializedViewConfiguration,
-  QuerySettings,
-  TSource,
+  SourceKind,
+  TLogSource,
 } from '@/types';
-
-import { ColumnMeta } from '..';
-import { ClickhouseClient } from '../node';
 
 describe('materializedViews', () => {
   const metadata: Metadata = {
@@ -83,7 +83,7 @@ describe('materializedViews', () => {
   const SOURCE = {
     from: { databaseName: 'default', tableName: 'otel_spans' },
     materializedViews: [MV_CONFIG_METRIC_ROLLUP_1M],
-  } as TSource;
+  } as TLogSource;
 
   describe('tryConvertConfigToMaterializedViewSelect', () => {
     it('should return empty object if selecting a string instead of an array of aggregates', async () => {
@@ -276,6 +276,112 @@ describe('materializedViews', () => {
           {
             valueExpression: 'quantile__Duration',
             aggFn: 'quantileMerge',
+            level: 0.95,
+          },
+        ],
+        timestampValueExpression: 'Timestamp',
+        where: '',
+        connection: 'test-connection',
+      });
+      expect(result.errors).toBeUndefined();
+    });
+
+    it('should normalize a quantiles AggregateFunction to quantileMerge', async () => {
+      const quantilesMetadata: Metadata = {
+        getColumn: jest.fn().mockImplementation(({ column }) => {
+          if (column === 'quantile__Duration') {
+            return {
+              type: 'AggregateFunction(quantiles(0.9, 0.95), UInt64)',
+            } as unknown as ColumnMeta;
+          }
+          return undefined;
+        }),
+      } as unknown as Metadata;
+
+      const chartConfig: ChartConfigWithOptDateRange = {
+        from: {
+          databaseName: 'default',
+          tableName: 'otel_spans',
+        },
+        select: [
+          {
+            valueExpression: 'Duration',
+            aggFn: 'quantile',
+            level: 0.95,
+          },
+        ],
+        where: '',
+        connection: 'test-connection',
+      };
+
+      const result = await tryConvertConfigToMaterializedViewSelect(
+        chartConfig,
+        MV_CONFIG_METRIC_ROLLUP_1M,
+        quantilesMetadata,
+      );
+
+      expect(result.optimizedConfig).toEqual({
+        from: {
+          databaseName: 'default',
+          tableName: 'metrics_rollup_1m',
+        },
+        select: [
+          {
+            valueExpression: 'quantile__Duration',
+            aggFn: 'quantileMerge',
+            level: 0.95,
+          },
+        ],
+        timestampValueExpression: 'Timestamp',
+        where: '',
+        connection: 'test-connection',
+      });
+      expect(result.errors).toBeUndefined();
+    });
+
+    it('should normalize a quantilesTDigest AggregateFunction to quantileTDigestMerge', async () => {
+      const quantilesTDigestMetadata: Metadata = {
+        getColumn: jest.fn().mockImplementation(({ column }) => {
+          if (column === 'quantile__Duration') {
+            return {
+              type: 'AggregateFunction(quantilesTDigest(0.9, 0.95), UInt64)',
+            } as unknown as ColumnMeta;
+          }
+          return undefined;
+        }),
+      } as unknown as Metadata;
+
+      const chartConfig: ChartConfigWithOptDateRange = {
+        from: {
+          databaseName: 'default',
+          tableName: 'otel_spans',
+        },
+        select: [
+          {
+            valueExpression: 'Duration',
+            aggFn: 'quantile',
+            level: 0.95,
+          },
+        ],
+        where: '',
+        connection: 'test-connection',
+      };
+
+      const result = await tryConvertConfigToMaterializedViewSelect(
+        chartConfig,
+        MV_CONFIG_METRIC_ROLLUP_1M,
+        quantilesTDigestMetadata,
+      );
+
+      expect(result.optimizedConfig).toEqual({
+        from: {
+          databaseName: 'default',
+          tableName: 'metrics_rollup_1m',
+        },
+        select: [
+          {
+            valueExpression: 'quantile__Duration',
+            aggFn: 'quantileTDigestMerge',
             level: 0.95,
           },
         ],
@@ -1094,7 +1200,7 @@ describe('materializedViews', () => {
         {} as any,
         {
           from: { databaseName: 'default', tableName: 'table_without_mv' },
-        } as TSource,
+        } as TLogSource,
       );
 
       expect(actual).toEqual(chartConfig);
@@ -1509,7 +1615,7 @@ describe('materializedViews', () => {
           {} as any,
           {
             from: { databaseName: 'default', tableName: 'table_without_mv' },
-          } as TSource,
+          } as TLogSource,
         );
 
       expect(result).toEqual({
@@ -1713,7 +1819,10 @@ describe('materializedViews', () => {
     it('should optimize a config with the MV that will scan the fewest rows, if multiple MVs could be used', async () => {
       mockClickHouseClient.testChartConfigValidity.mockImplementation(
         ({ config }) => {
-          if (config.from.tableName === 'db_statement_rollup_1s') {
+          if (
+            isBuilderChartConfig(config) &&
+            config.from.tableName === 'db_statement_rollup_1s'
+          ) {
             return Promise.resolve({
               isValid: true,
               rowEstimate: 1000,
@@ -1913,6 +2022,7 @@ describe('materializedViews', () => {
 
       const keys = ['environment', 'service', 'status_code'];
       const source = {
+        kind: SourceKind.Log,
         from: { databaseName: 'default', tableName: 'logs' },
         materializedViews: [MV_CONFIG_LOGS_1M],
       };
@@ -1955,6 +2065,7 @@ describe('materializedViews', () => {
 
       const keys = ['environment', 'service', 'region'];
       const source = {
+        kind: SourceKind.Log,
         from: { databaseName: 'default', tableName: 'logs' },
         materializedViews: [MV_CONFIG_LOGS_1M, MV_CONFIG_LOGS_1H],
       };
@@ -1964,7 +2075,10 @@ describe('materializedViews', () => {
           Promise.resolve({
             isValid: true,
             rowEstimate:
-              config.from.tableName === 'logs_rollup_1h' ? 500 : 1000,
+              isBuilderChartConfig(config) &&
+              config.from.tableName === 'logs_rollup_1h'
+                ? 500
+                : 1000,
           }),
       );
 
@@ -2016,6 +2130,7 @@ describe('materializedViews', () => {
 
       const keys = ['environment', 'unsupported_key'];
       const source = {
+        kind: SourceKind.Log,
         from: { databaseName: 'default', tableName: 'logs' },
         materializedViews: [MV_CONFIG_LOGS_1M],
       };
@@ -2115,6 +2230,7 @@ describe('materializedViews', () => {
 
       const keys = ['environment'];
       const source = {
+        kind: SourceKind.Log,
         from: { databaseName: 'default', tableName: 'logs' },
         materializedViews: [MV_CONFIG_LOGS_1M, MV_CONFIG_LOGS_1H],
       };
@@ -2124,7 +2240,10 @@ describe('materializedViews', () => {
           Promise.resolve({
             isValid: true,
             rowEstimate:
-              config.from.tableName === 'logs_rollup_1h' ? 500 : 1000,
+              isBuilderChartConfig(config) &&
+              config.from.tableName === 'logs_rollup_1h'
+                ? 500
+                : 1000,
           }),
       );
 
@@ -2336,6 +2455,7 @@ describe('materializedViews', () => {
 
       const keys = ['environment', 'service', 'status_code'];
       const source = {
+        kind: SourceKind.Log,
         from: { databaseName: 'default', tableName: 'logs' },
         materializedViews: [MV_CONFIG_LOGS_1M],
       };
@@ -2389,6 +2509,7 @@ describe('materializedViews', () => {
 
       const keys = ['environment', 'service'];
       const source = {
+        kind: SourceKind.Log,
         from: { databaseName: 'default', tableName: 'logs' },
         materializedViews: [MV_CONFIG_WITH_DIFFERENT_TIMESTAMP],
         timestampValueExpression: 'source_timestamp',

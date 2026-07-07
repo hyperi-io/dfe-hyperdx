@@ -3,8 +3,7 @@ import {
   ResponseJSON,
   tableExpr,
 } from '@hyperdx/common-utils/dist/clickhouse';
-import { SourceKind } from '@hyperdx/common-utils/dist/types';
-import { TSource } from '@hyperdx/common-utils/dist/types';
+import { SourceKind, TMetricSource } from '@hyperdx/common-utils/dist/types';
 import { useQuery } from '@tanstack/react-query';
 
 import { getClickhouseClient } from '@/clickhouse';
@@ -128,9 +127,9 @@ const extractAttributeKeys = (
 
 interface MetricResourceAttrsProps {
   databaseName: string;
-  metricType: string;
-  metricName: string;
-  tableSource: TSource | undefined;
+  metricType?: string;
+  metricName?: string;
+  tableSource: TMetricSource | undefined;
   isSql: boolean;
 }
 
@@ -155,6 +154,7 @@ export const useFetchMetricResourceAttrs = ({
     databaseName &&
       tableName &&
       metricType &&
+      metricName &&
       tableSource &&
       tableSource?.kind === SourceKind.Metric,
   );
@@ -162,7 +162,7 @@ export const useFetchMetricResourceAttrs = ({
   return useQuery({
     queryKey: ['metric-attributes', metricType, metricName, isSql, tableSource],
     queryFn: async ({ signal }) => {
-      if (!shouldFetch) {
+      if (!shouldFetch || !metricName) {
         return [];
       }
 

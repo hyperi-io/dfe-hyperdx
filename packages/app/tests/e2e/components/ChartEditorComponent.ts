@@ -2,23 +2,41 @@
  * ChartEditorComponent - Reusable component for chart/tile editor
  * Used for creating and configuring dashboard tiles and chart explorer
  */
+import { DisplayType } from '@hyperdx/common-utils/dist/types';
 import { Locator, Page } from '@playwright/test';
 
 import { getSqlEditor } from '../utils/locators';
 
+import { WebhookAlertModalComponent } from './WebhookAlertModalComponent';
+
 export class ChartEditorComponent {
   readonly page: Page;
+  readonly addNewWebhookButton: Locator;
+  readonly webhookAlertModal: WebhookAlertModalComponent;
+
   private readonly chartNameInput: Locator;
+  private readonly chartTypeInput: Locator;
   private readonly sourceSelector: Locator;
   private readonly metricSelector: Locator;
+  private readonly aggFnSelect: Locator;
+  private readonly addAlertButton: Locator;
+  private readonly removeAlertButton: Locator;
+  private readonly webhookSelector: Locator;
   private readonly runQueryButton: Locator;
   private readonly saveButton: Locator;
 
   constructor(page: Page) {
     this.page = page;
     this.chartNameInput = page.getByTestId('chart-name-input');
+    this.chartTypeInput = page.getByTestId('chart-type-input');
     this.sourceSelector = page.getByTestId('source-selector');
     this.metricSelector = page.getByTestId('metric-name-selector');
+    this.aggFnSelect = page.getByTestId('agg-fn-select');
+    this.addAlertButton = page.getByTestId('alert-button');
+    this.removeAlertButton = page.getByTestId('remove-alert-button');
+    this.webhookSelector = page.getByTestId('select-webhook');
+    this.addNewWebhookButton = page.getByTestId('add-new-webhook-button');
+    this.webhookAlertModal = new WebhookAlertModalComponent(page);
     this.runQueryButton = page.getByTestId('chart-run-query-button');
     this.saveButton = page.getByTestId('chart-save-button');
   }
@@ -28,6 +46,13 @@ export class ChartEditorComponent {
    */
   async setChartName(name: string) {
     await this.chartNameInput.fill(name);
+  }
+
+  /**
+   * Set chart type
+   */
+  async setChartType(name: DisplayType) {
+    await this.chartTypeInput.getByRole('tab', { name }).click();
   }
 
   /**
@@ -44,8 +69,13 @@ export class ChartEditorComponent {
    */
   async selectSource(sourceName: string) {
     await this.sourceSelector.click();
-    // Use getByRole for more reliable selection
-    const sourceOption = this.page.getByRole('option', { name: sourceName });
+    // Use getByRole for more reliable selection. exact: true avoids matching
+    // sources whose names are prefixes of others (e.g. "E2E Traces MV" vs
+    // "E2E Traces MV AutoPopulate").
+    const sourceOption = this.page.getByRole('option', {
+      name: sourceName,
+      exact: true,
+    });
     if ((await sourceOption.getAttribute('data-combobox-active')) != 'true') {
       await sourceOption.click({ timeout: 5000 });
     }
@@ -79,14 +109,94 @@ export class ChartEditorComponent {
   }
 
   /**
+   * Select an aggregation function from the dropdown
+   */
+  async selectAggFn(label: string) {
+    await this.aggFnSelect.click();
+    await this.page.getByRole('option', { name: label }).click();
+  }
+
+  /**
+   * Get the currently selected aggregation function value
+   */
+  async getSelectedAggFn(): Promise<string | null> {
+    return this.aggFnSelect.inputValue();
+  }
+
+  /**
+   * Check if an aggregation function option is available in the dropdown
+   */
+  async isAggFnOptionAvailable(label: string): Promise<boolean> {
+    await this.aggFnSelect.click();
+    const option = this.page.getByRole('option', { name: label });
+    const visible = await option.isVisible().catch(() => false);
+    // Close the dropdown
+    await this.page.keyboard.press('Escape');
+    return visible;
+  }
+
+  async clickAddAlert() {
+    await this.addAlertButton.click();
+    this.addNewWebhookButton.waitFor({
+      state: 'visible',
+      timeout: 2000,
+    });
+  }
+
+  async clickRemoveAlert() {
+    await this.removeAlertButton.click();
+    this.removeAlertButton.waitFor({
+      state: 'hidden',
+      timeout: 2000,
+    });
+  }
+
+  async selectWebhook(webhookName: string) {
+    if ((await this.webhookSelector.inputValue()) === webhookName) {
+      return;
+    }
+    await this.webhookSelector.click();
+    await this.page
+      .getByRole('option', { name: webhookName })
+      .click({ timeout: 5000 });
+  }
+
+  /**
    * Run the query and wait for it to complete
    */
-  async runQuery() {
+  async runQuery(waitForRecharts: boolean = true) {
     await this.runQueryButton.click();
-    // need to wait for the recharts graph to render
-    await this.page
-      .locator('.recharts-responsive-container')
-      .waitFor({ state: 'visible', timeout: 10000 });
+    if (waitForRecharts) {
+      // need to wait for the recharts graph to render
+      await this.page
+        .locator('.recharts-responsive-container')
+        .first()
+        .waitFor({ state: 'visible', timeout: 10000 });
+    }
+  }
+
+  /**
+   * Switch the chart editor from Builder to SQL mode.
+   */
+  async switchToSqlMode() {
+    const sqlLabel = this.page.locator(
+      '.mantine-SegmentedControl-label:has-text("SQL")',
+    );
+    await sqlLabel.waitFor({ state: 'visible', timeout: 5000 });
+    await sqlLabel.click();
+  }
+
+  /**
+   * Type a SQL query into the CodeMirror SQL editor.
+   * Call switchToSqlMode() first to make the SQL editor visible.
+   */
+  async typeSqlQuery(sql: string) {
+    // Target the cm-content (editable area) inside the SQL template editor.
+    // Use first() because the "Generated SQL" accordion may add another
+    // cm-editor further down the DOM.
+    const sqlContent = this.page.locator('.cm-editor .cm-content').first();
+    await sqlContent.click();
+    await this.page.keyboard.type(sql);
   }
 
   /**
@@ -158,6 +268,370 @@ export class ChartEditorComponent {
     await this.save();
   }
 
+  /**
+   * Select a threshold type in the tile alert editor.
+   * Pass the option value (e.g. 'between', 'above', 'below').
+   * Scoped to [data-testid="alert-details"].
+   */
+  async selectTileAlertThresholdType(value: string) {
+    await this.page
+      .getByTestId('alert-details')
+      .locator('select')
+      .first()
+      .selectOption(value);
+  }
+
+  /**
+   * Set the lower threshold value in the tile alert editor.
+   * Mantine v9 NumberInput renders as <input inputmode="decimal"> (not type="number"),
+   * so getByRole('spinbutton') does not match. We use the inputmode attribute instead.
+   */
+  async setTileAlertThreshold(value: number) {
+    const input = this.page
+      .getByTestId('alert-details')
+      .locator('input[inputmode="decimal"]')
+      .first();
+    await input.fill(String(value));
+    await input.blur();
+  }
+
+  /**
+   * Set the upper threshold (thresholdMax) in the tile alert editor.
+   * Only visible after selecting a range threshold type (e.g. 'between').
+   * Mantine v9 NumberInput renders as <input inputmode="decimal"> (not type="number"),
+   * so getByRole('spinbutton') does not match. We use the inputmode attribute instead.
+   */
+  async setTileAlertThresholdMax(value: number) {
+    const input = this.page
+      .getByTestId('alert-details')
+      .locator('input[inputmode="decimal"]')
+      .nth(1);
+    await input.fill(String(value));
+    await input.blur();
+  }
+
+  /**
+   * Set the note field in the tile alert editor.
+   */
+  async setTileAlertNote(note: string) {
+    const noteInput = this.page.getByTestId('alert-note-input');
+    await noteInput.fill(note);
+  }
+
+  // ---- Row Click Action drawer helpers ----
+
+  /**
+   * Open the "Row Click Action" drawer. Only available on Table tiles.
+   */
+  async openRowClickDrawer() {
+    await this.page.getByTestId('onclick-drawer-trigger').click();
+    await this.rowClickDrawer.waitFor({ state: 'visible', timeout: 5000 });
+  }
+
+  /**
+   * Switch the Row Click Action mode (SegmentedControl).
+   */
+  async setRowClickMode(mode: 'Default' | 'Search' | 'Dashboard' | 'External') {
+    await this.page
+      .getByTestId('onclick-mode-segmented')
+      .getByText(mode, { exact: true })
+      .click();
+  }
+
+  /**
+   * Fill the External URL template input in the drawer. Call
+   * setRowClickMode('External') first to make the input visible.
+   */
+  async fillRowClickExternalUrl(urlTemplate: string) {
+    await this.page.getByTestId('onclick-external-url-input').fill(urlTemplate);
+  }
+
+  /**
+   * Select a target (source/dashboard or "Template") from the Row Click
+   * Action drawer's Select dropdown. Pass the exact option label — for
+   * example "Template", "E2E Logs", or a specific dashboard name.
+   */
+  async selectRowClickTarget(label: string) {
+    await this.page.getByTestId('onclick-target-select').click();
+    await this.page.getByRole('option', { name: label, exact: true }).click();
+  }
+
+  /**
+   * Fill the Template text input in the drawer. Call selectRowClickTarget('Template')
+   * first to make the template input visible (this is the default state after
+   * switching to Search or Dashboard mode, but calling it explicitly is safe).
+   */
+  async fillRowClickTemplate(template: string) {
+    await this.page.getByTestId('onclick-template-input').fill(template);
+  }
+
+  /**
+   * Select SQL or Lucene on the WHERE template's language select inside the drawer.
+   */
+  async setRowClickWhereLanguage(language: 'SQL' | 'Lucene') {
+    const select = this.rowClickDrawer
+      .getByTestId('where-language-switch')
+      .getByLabel('Query language');
+    await select.click();
+    await this.page
+      .getByRole('option', { name: language, exact: true })
+      .click();
+  }
+
+  /**
+   * Fill the WHERE template input in the drawer. Handles both SQL (CodeMirror)
+   * and Lucene (textarea) variants of SearchWhereInput.
+   */
+  async fillRowClickWhereTemplate(
+    template: string,
+    language: 'sql' | 'lucene',
+  ) {
+    if (language === 'sql') {
+      const editor = this.rowClickDrawer
+        .locator('.cm-editor .cm-content')
+        .first();
+      await editor.click();
+      await this.page.keyboard.type(template);
+    } else {
+      const textarea = this.rowClickDrawer.locator('textarea').first();
+      await textarea.fill(template);
+    }
+  }
+
+  /**
+   * Click the drawer's Apply button and wait for the drawer to close.
+   */
+  async applyRowClickDrawer() {
+    await this.page.getByTestId('onclick-apply-button').click();
+    await this.rowClickDrawer.waitFor({ state: 'hidden', timeout: 5000 });
+  }
+
+  /**
+   * Add a row of filter templates to the Row Click drawer by clicking
+   * "Add filter" and filling the expression and template inputs for the
+   * newly-added row (placed at position `index`).
+   */
+  async addOnClickFilterTemplate(
+    index: number,
+    expression: string,
+    template: string,
+  ) {
+    await this.rowClickDrawer
+      .getByRole('button', { name: 'Add filter' })
+      .click();
+    await this.rowClickDrawer
+      .getByTestId('onclick-filter-expression-input')
+      .nth(index)
+      .fill(expression);
+    await this.rowClickDrawer
+      .getByTestId('onclick-filter-template-input')
+      .nth(index)
+      .fill(template);
+  }
+
+  /**
+   * Read the current value of the expression input for the filter at
+   * position `index` within the Row Click drawer.
+   */
+  onClickFilterExpressionInput(index: number) {
+    return this.rowClickDrawer
+      .getByTestId('onclick-filter-expression-input')
+      .nth(index);
+  }
+
+  /**
+   * Read the current value of the template input for the filter at
+   * position `index` within the Row Click drawer.
+   */
+  onClickFilterTemplateInput(index: number) {
+    return this.rowClickDrawer
+      .getByTestId('onclick-filter-template-input')
+      .nth(index);
+  }
+
+  get rowClickDrawer() {
+    return this.page.getByTestId('onclick-drawer');
+  }
+
+  /**
+   * Click Apply in the open Display Settings drawer and wait for it to close.
+   */
+  async applyDisplaySettings() {
+    const drawer = this.page.getByRole('dialog', { name: 'Display Settings' });
+    await drawer.getByRole('button', { name: 'Apply', exact: true }).click();
+    await drawer.waitFor({ state: 'hidden', timeout: 5000 });
+  }
+
+  /**
+   * Open the Display Settings drawer and wait for it to become visible.
+   */
+  async openDisplaySettings() {
+    await this.page
+      .getByRole('button', { name: 'Display Settings', exact: true })
+      .click();
+    const drawer = this.page.getByRole('dialog', { name: 'Display Settings' });
+    await drawer.waitFor({ state: 'visible', timeout: 5000 });
+  }
+
+  /**
+   * Toggle the "Display Group By Columns on Left" checkbox in the open
+   * Display Settings drawer to the given state.
+   */
+  async setGroupByColumnsOnLeft(checked: boolean) {
+    const drawer = this.page.getByRole('dialog', { name: 'Display Settings' });
+    const checkbox = drawer.getByLabel('Display Group By Columns on Left');
+    const isChecked = await checkbox.isChecked();
+    if (isChecked !== checked) {
+      await checkbox.click();
+    }
+  }
+
+  /**
+   * Click the "Add Series" button to add a new series to the chart.
+   */
+  async addSeries() {
+    await this.page
+      .getByRole('button', { name: 'Add Series', exact: true })
+      .click();
+  }
+
+  /**
+   * Click the "Duplicate" button on the series at zero-based `index` to insert
+   * a copy of it directly below.
+   */
+  async duplicateSeries(index: number) {
+    await this.page.getByTestId('series-duplicate-button').nth(index).click();
+  }
+
+  /**
+   * Toggle the "As Ratio" switch. Only visible when the chart has exactly
+   * two series.
+   */
+  async toggleAsRatio() {
+    await this.page.getByRole('switch', { name: 'As Ratio' }).click();
+  }
+
+  /**
+   * Set the alias for a series by zero-based index. Useful for giving two
+   * default `count()` series distinct column names in a multi-series table.
+   */
+  async setSeriesAlias(index: number, alias: string) {
+    await this.page.getByTestId('series-alias-input').nth(index).fill(alias);
+  }
+
+  /**
+   * Read the column header texts from the first <table> in the tile editor
+   * preview panel. Waits for the table to be visible before reading.
+   */
+  async getPreviewTableHeaders(): Promise<string[]> {
+    const modalBody = this.page.locator('.mantine-Modal-body');
+    const table = modalBody.locator('table').first();
+    await table.waitFor({ state: 'visible', timeout: 15000 });
+    const headers = await table.locator('thead tr th').allTextContents();
+    return headers.map(h => h.trim());
+  }
+
+  /**
+   * Return the trimmed text of every td at `columnIndex` across all visible
+   * data rows of the first table in the tile editor preview panel. Scopes to
+   * `tr[data-index]` so the row virtualizer's padding rows (which contain a
+   * single colSpan td) are skipped. Waits for at least one data row before
+   * reading.
+   */
+  async getPreviewTableCellTexts(columnIndex: number): Promise<string[]> {
+    const modalBody = this.page.locator('.mantine-Modal-body');
+    const table = modalBody.locator('table').first();
+    await table.waitFor({ state: 'visible', timeout: 15000 });
+    await table
+      .locator('tbody tr[data-index]')
+      .first()
+      .waitFor({ state: 'visible', timeout: 15000 });
+    const cells = await table
+      .locator(`tbody tr[data-index] td:nth-child(${columnIndex + 1})`)
+      .allTextContents();
+    return cells.map(c => c.trim());
+  }
+
+  // ---- Number format helpers ----
+
+  /**
+   * Select the "Output format" option in whichever number format drawer is
+   * currently open (Display Settings OR Series Display Settings). Both drawers
+   * embed the same NumberFormatForm with a NativeSelect labeled "Output format".
+   */
+  async setNumberFormatOutput(label: string) {
+    await this.page.getByLabel('Output format').selectOption({ label });
+  }
+
+  /**
+   * Convenience: open Display Settings drawer, set the chart-wide output format
+   * to `label`, then apply and close the drawer.
+   */
+  async setChartWideNumberFormat(label: string) {
+    await this.openDisplaySettings();
+    await this.setNumberFormatOutput(label);
+    await this.applyDisplaySettings();
+  }
+
+  /**
+   * Click the per-series format icon button (nth by seriesIndex, 0-based) and
+   * wait for the "Series Display Settings" drawer to become visible.
+   */
+  async openSeriesNumberFormat(seriesIndex: number) {
+    await this.page
+      .getByRole('button', { name: 'Edit series display format' })
+      .nth(seriesIndex)
+      .click();
+    const drawer = this.page.getByRole('dialog', {
+      name: 'Series Display Settings',
+    });
+    await drawer.waitFor({ state: 'visible', timeout: 5000 });
+  }
+
+  /**
+   * Click the Inherit or Custom segment inside the open
+   * "Series Display Settings" drawer.
+   */
+  async setSeriesFormatMode(mode: 'Inherit' | 'Custom') {
+    const drawer = this.page.getByRole('dialog', {
+      name: 'Series Display Settings',
+    });
+    await drawer.getByText(mode, { exact: true }).click();
+  }
+
+  /**
+   * Click Apply in the open "Series Display Settings" drawer and wait for
+   * the drawer to close.
+   */
+  async applySeriesNumberFormat() {
+    const drawer = this.page.getByRole('dialog', {
+      name: 'Series Display Settings',
+    });
+    await drawer.getByRole('button', { name: 'Apply', exact: true }).click();
+    await drawer.waitFor({ state: 'hidden', timeout: 5000 });
+  }
+
+  /**
+   * Open the per-series format drawer for seriesIndex, switch to Custom mode,
+   * set the output format to `output`, then apply.
+   */
+  async setSeriesNumberFormat(seriesIndex: number, output: string) {
+    await this.openSeriesNumberFormat(seriesIndex);
+    await this.setSeriesFormatMode('Custom');
+    await this.setNumberFormatOutput(output);
+    await this.applySeriesNumberFormat();
+  }
+
+  /**
+   * Open the per-series format drawer for seriesIndex, switch to Inherit
+   * (clears any per-series override), then apply.
+   */
+  async clearSeriesNumberFormat(seriesIndex: number) {
+    await this.openSeriesNumberFormat(seriesIndex);
+    await this.setSeriesFormatMode('Inherit');
+    await this.applySeriesNumberFormat();
+  }
+
   // Getters for assertions
 
   get nameInput() {
@@ -170,6 +644,14 @@ export class ChartEditorComponent {
 
   get metric() {
     return this.metricSelector;
+  }
+
+  get aggFn() {
+    return this.aggFnSelect;
+  }
+
+  get alertButton() {
+    return this.addAlertButton;
   }
 
   get runButton() {

@@ -20,6 +20,9 @@ configureRuntimeEnv();
 const basePath = process.env.NEXT_PUBLIC_HYPERDX_BASE_PATH;
 
 const nextConfig = {
+  // Allow overriding the build/dev output directory to avoid lock conflicts
+  // when running dev and E2E simultaneously (e.g. NEXT_DIST_DIR=.next-e2e)
+  ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   reactCompiler: true,
   basePath: basePath,
   devIndicators: false,
@@ -35,23 +38,43 @@ const nextConfig = {
     '@opentelemetry/auto-instrumentations-node',
     '@hyperdx/node-opentelemetry',
     '@hyperdx/instrumentation-sentry-node',
+    // Outside of Vercel preview deployments, the `/api/[...all]` catch-all
+    // proxies to a separately-deployed API service and never imports the
+    // `@hyperdx/api` package at runtime. Mark it (and its subpaths) as a
+    // CommonJS external so production app builds (Docker fullstack image,
+    // standalone Next output) stay byte-for-byte equivalent to today and
+    // do not pull in passport-saml, mongoose, AWS SDK, etc.
+    ...(process.env.HDX_PREVIEW_INLINE_API !== 'true' ? ['@hyperdx/api'] : []),
   ],
   typescript: {
     tsconfigPath: 'tsconfig.build.json',
   },
-  // NOTE: Using Webpack instead of Turbopack (Next.js 16 default)
+  // Dev uses Turbopack; production build uses Webpack (--webpack).
   // Reason: Turbopack has CSS module parsing issues with nested :global syntax
   // used in styles/SearchPage.module.scss and other SCSS files.
-  // The --webpack flag is added to dev and build scripts in package.json.
-  // TODO: Re-evaluate when Turbopack CSS module support improves
-  // Ignore otel pkgs warnings
-  // https://github.com/open-telemetry/opentelemetry-js/issues/4173#issuecomment-1822938936
+  // TODO: single bundler when Turbopack CSS is solid.
+  // Ignore otel warnings (Webpack): https://github.com/open-telemetry/opentelemetry-js/issues/4173#issuecomment-1822938936
   webpack: (
     config,
     { buildId, dev, isServer, defaultLoaders, nextRuntime, webpack },
   ) => {
     if (isServer) {
       config.ignoreWarnings = [{ module: /opentelemetry/ }];
+
+      if (process.env.HDX_PREVIEW_INLINE_API !== 'true') {
+        config.externals = [
+          ...(config.externals ?? []),
+          ({ request }, callback) => {
+            if (
+              request === '@hyperdx/api' ||
+              request?.startsWith?.('@hyperdx/api/')
+            ) {
+              return callback(null, `commonjs ${request}`);
+            }
+            return callback();
+          },
+        ];
+      }
     }
     return config;
   },

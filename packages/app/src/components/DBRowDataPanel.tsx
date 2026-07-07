@@ -5,7 +5,12 @@ import {
   JSDataType,
   type ResponseJSON,
 } from '@hyperdx/common-utils/dist/clickhouse';
-import { SourceKind, TSource } from '@hyperdx/common-utils/dist/types';
+import {
+  isLogSource,
+  isTraceSource,
+  SourceKind,
+  TSource,
+} from '@hyperdx/common-utils/dist/types';
 import { Box } from '@mantine/core';
 
 import { useQueriedChartConfig } from '@/hooks/useChartConfig';
@@ -14,6 +19,7 @@ import { getDisplayedTimestampValueExpression, getEventBody } from '@/source';
 import { getSelectExpressionsForHighlightedAttributes } from '@/utils/highlightedAttributes';
 
 import { DBRowJsonViewer } from './DBRowJsonViewer';
+import { getActiveInfraCorrelations } from './infraCorrelations';
 
 export enum ROW_DATA_ALIASES {
   TIMESTAMP = '__hdx_timestamp',
@@ -39,11 +45,20 @@ export function useRowData({
 }) {
   const eventBodyExpr = getEventBody(source);
 
-  const searchedTraceIdExpr = source.traceIdExpression;
-  const searchedSpanIdExpr = source.spanIdExpression;
+  const searchedTraceIdExpr =
+    isLogSource(source) || isTraceSource(source)
+      ? source.traceIdExpression
+      : undefined;
+  const searchedSpanIdExpr =
+    isLogSource(source) || isTraceSource(source)
+      ? source.spanIdExpression
+      : undefined;
 
-  const severityTextExpr =
-    source.severityTextExpression || source.statusCodeExpression;
+  const severityTextExpr = isLogSource(source)
+    ? source.severityTextExpression
+    : isTraceSource(source)
+      ? source.statusCodeExpression
+      : undefined;
 
   const selectHighlightedRowAttributes =
     source.kind === SourceKind.Trace || source.kind === SourceKind.Log
@@ -52,12 +67,21 @@ export function useRowData({
         )
       : [];
 
+  // `SELECT *` can fail against a Distributed/Merge table whose underlying
+  // target tables declare different column sets. When the source declares a
+  // "known columns" list (columns known to exist across all target tables) we
+  // select that instead of `*` when fetching full row data.
+  const knownColumns =
+    isLogSource(source) || isTraceSource(source)
+      ? source.knownColumnsListExpression?.trim()
+      : undefined;
+
   const queryResult = useQueriedChartConfig(
     {
       connection: source.connection,
       select: [
         {
-          valueExpression: '*',
+          valueExpression: knownColumns || '*',
         },
         {
           valueExpression: getDisplayedTimestampValueExpression(source),
@@ -95,7 +119,8 @@ export function useRowData({
               },
             ]
           : []),
-        ...(source.serviceNameExpression
+        ...((isLogSource(source) || isTraceSource(source)) &&
+        source.serviceNameExpression
           ? [
               {
                 valueExpression: source.serviceNameExpression,
@@ -103,7 +128,8 @@ export function useRowData({
               },
             ]
           : []),
-        ...(source.resourceAttributesExpression
+        ...('resourceAttributesExpression' in source &&
+        source.resourceAttributesExpression
           ? [
               {
                 valueExpression: source.resourceAttributesExpression,
@@ -111,7 +137,8 @@ export function useRowData({
               },
             ]
           : []),
-        ...(source.eventAttributesExpression
+        ...((isLogSource(source) || isTraceSource(source)) &&
+        source.eventAttributesExpression
           ? [
               {
                 valueExpression: source.eventAttributesExpression,
@@ -177,10 +204,53 @@ export function useRowData({
   };
 }
 
+// Detects whether a normalized row carries resource attributes that match a
+// built-in infrastructure correlation (Kubernetes Pod or Node today), used to
+// conditionally surface the Infrastructure tab/panel. Delegates to the same
+// descriptor list the panel renders from, so the gate and the render never
+// drift apart. Requires the source to expose resource attributes; returns
+// false (rather than throwing) on any gap.
+export function rowHasK8sContext(
+  source: TSource | null | undefined,
+  normalizedRow: Record<string, any> | null | undefined,
+): boolean {
+  try {
+    if (
+      source == null ||
+      !('resourceAttributesExpression' in source) ||
+      !source.resourceAttributesExpression ||
+      !normalizedRow
+    ) {
+      return false;
+    }
+
+    const resourceAttrs = normalizedRow[ROW_DATA_ALIASES.RESOURCE_ATTRIBUTES];
+    return getActiveInfraCorrelations(resourceAttrs).length > 0;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+}
+
 export function getJSONColumnNames(meta: ResponseJSON['meta'] | undefined) {
   return (
     filterColumnMetaByType(meta ?? [], [JSDataType.JSON])?.map(m => m.name) ??
     []
+  );
+}
+
+// Returns the names of Map-typed columns in the result metadata. Used by
+// `mergePath` to keep numeric-looking sub-keys on a Map(String, ...) from
+// collapsing into ClickHouse array-index syntax (`Map[2]`), which the
+// server rejects with
+// `Illegal types of arguments: Map(String, ...), UInt8 for function
+// arrayElement`. HDX-4369.
+export function getMapColumnNames(meta: ResponseJSON['meta'] | undefined) {
+  return (
+    meta
+      // Match both `Map(K, V)` and the bare `Map` (rare; defensive).
+      ?.filter(m => m.type === 'Map' || m.type.startsWith('Map('))
+      .map(m => m.name) ?? []
   );
 }
 
@@ -195,7 +265,7 @@ export function RowDataPanel({
   aliasWith?: WithClause[];
   'data-testid'?: string;
 }) {
-  const { data, isLoading, isError } = useRowData({ source, rowId, aliasWith });
+  const { data } = useRowData({ source, rowId, aliasWith });
 
   const firstRow = useMemo(() => {
     const firstRow = { ...(data?.data?.[0] ?? {}) };
@@ -206,11 +276,16 @@ export function RowDataPanel({
   }, [data]);
 
   const jsonColumns = getJSONColumnNames(data?.meta);
+  const mapColumns = getMapColumnNames(data?.meta);
 
   return (
     <div className="flex-grow-1 overflow-auto" data-testid={dataTestId}>
       <Box mx="md" my="sm">
-        <DBRowJsonViewer data={firstRow} jsonColumns={jsonColumns} />
+        <DBRowJsonViewer
+          data={firstRow}
+          jsonColumns={jsonColumns}
+          mapColumns={mapColumns}
+        />
       </Box>
     </div>
   );

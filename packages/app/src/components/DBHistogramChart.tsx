@@ -1,5 +1,6 @@
 import { useMemo, useRef } from 'react';
 import Link from 'next/link';
+import { omit } from 'lodash';
 import { useHotkeys } from 'react-hotkeys-hook';
 import {
   Bar,
@@ -10,19 +11,18 @@ import {
   YAxis,
 } from 'recharts';
 import { CategoricalChartState } from 'recharts/types/chart/types';
-import { ClickHouseQueryError } from '@hyperdx/common-utils/dist/clickhouse';
-import { ChartConfigWithDateRange } from '@hyperdx/common-utils/dist/types';
-import { Box, Code, Text } from '@mantine/core';
+import { BuilderChartConfigWithDateRange } from '@hyperdx/common-utils/dist/types';
 
 import { buildMVDateRangeIndicator } from '@/ChartUtils';
 import { useQueriedChartConfig } from '@/hooks/useChartConfig';
 import { useMVOptimizationExplanation } from '@/hooks/useMVOptimizationExplanation';
 import { useSource } from '@/source';
-import { omit } from '@/utils';
 
 import ChartContainer from './charts/ChartContainer';
+import ChartErrorState, {
+  ChartErrorStateVariant,
+} from './charts/ChartErrorState';
 import MVOptimizationIndicator from './MaterializedViews/MVOptimizationIndicator';
-import { SQLPreview } from './ChartSQLPreview';
 
 function HistogramChart({
   graphResults,
@@ -191,22 +191,22 @@ const HDXHistogramChartTooltip = (props: any) => {
 
 export default function DBHistogramChart({
   config,
-  onSettled,
   queryKeyPrefix,
   enabled,
   title,
   toolbarPrefix,
   toolbarSuffix,
   showMVOptimizationIndicator = true,
+  errorVariant,
 }: {
-  config: ChartConfigWithDateRange;
-  onSettled?: () => void;
+  config: BuilderChartConfigWithDateRange;
   queryKeyPrefix?: string;
   enabled?: boolean;
   title?: React.ReactNode;
   toolbarPrefix?: React.ReactNode[];
   toolbarSuffix?: React.ReactNode[];
   showMVOptimizationIndicator?: boolean;
+  errorVariant?: ChartErrorStateVariant;
 }) {
   const queriedConfig = omit(config, ['granularity']);
   const { data, isLoading, isError, error } = useQueriedChartConfig(
@@ -274,32 +274,7 @@ export default function DBHistogramChart({
           Loading Chart Data...
         </div>
       ) : isError ? (
-        <div className="h-100 w-100 align-items-center justify-content-center text-muted">
-          <Text ta="center" size="sm" mt="sm">
-            Error loading chart, please check your query or try again later.
-          </Text>
-          <Box mt="sm">
-            <Text my="sm" size="sm" ta="center">
-              Error Message:
-            </Text>
-            <Code
-              block
-              style={{
-                whiteSpace: 'pre-wrap',
-              }}
-            >
-              {error.message}
-            </Code>
-            {error instanceof ClickHouseQueryError && (
-              <>
-                <Text my="sm" size="sm" ta="center">
-                  Sent Query:
-                </Text>
-                <SQLPreview data={error?.query} />
-              </>
-            )}
-          </Box>
-        </div>
+        <ChartErrorState error={error} variant={errorVariant} />
       ) : data?.data.length === 0 ? (
         <div className="d-flex h-100 w-100 align-items-center justify-content-center text-muted">
           No data found within time range.

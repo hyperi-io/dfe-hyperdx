@@ -5,12 +5,13 @@ import { TSource } from '@hyperdx/common-utils/dist/types';
 import { IconArrowsMaximize, IconChevronRight } from '@tabler/icons-react';
 
 import { INTERNAL_ROW_FIELDS } from '@/hooks/useRowWhere';
+import { parseAsStringEncoded } from '@/utils/queryParsers';
 
-import styles from '../../styles/LogTable.module.scss';
+import styles from '@styles/LogTable.module.scss';
 
 // Hook that provides a function to open the sidebar with specific row details
 const useSidebarOpener = () => {
-  const [, setRowId] = useQueryState('rowWhere');
+  const [, setRowId] = useQueryState('rowWhere', parseAsStringEncoded);
   const [, setRowSource] = useQueryState('rowSource');
 
   return useCallback(
@@ -82,22 +83,6 @@ export const ExpandedLogRow = memo(
     );
   },
 );
-
-export interface ExpandableRowTableProps {
-  // Expansion state management
-  expandedRows: Record<string, boolean>;
-  onToggleRowExpansion: (rowId: string) => void;
-  onExpandedRowsChange?: (hasExpandedRows: boolean) => void;
-  collapseAllRows?: boolean;
-  showExpandButton?: boolean;
-
-  // Row data
-  source?: TSource;
-  getRowId: (row: Record<string, any>) => string;
-
-  // Table display
-  highlightedLineId?: string;
-}
 
 // Hook for managing expansion state
 export const useExpandableRows = (
@@ -197,6 +182,7 @@ export const createExpandButtonColumn = (
     );
   },
   size: 32,
+  minSize: 32,
   enableResizing: false,
   enableSorting: false,
   meta: {

@@ -1,14 +1,22 @@
 import { differenceInSeconds } from 'date-fns';
 
-import { BaseClickhouseClient } from '@/clickhouse';
+import { BaseClickhouseClient, ChSql, chSql } from '@/clickhouse';
 import {
-  ChartConfigWithOptDateRange,
+  BuilderChartConfigWithOptDateRange,
   CteChartConfig,
   InternalAggregateFunction,
   InternalAggregateFunctionSchema,
+  isLogSource,
+  isTraceSource,
   MaterializedViewConfiguration,
+  type SQLInterval,
+  TLogSource,
   TSource,
+  TTraceSource,
 } from '@/types';
+
+// Source types that support materialized views
+type TMVSource = TLogSource | TTraceSource;
 
 import { Metadata, TableConnection } from './metadata';
 import {
@@ -18,8 +26,180 @@ import {
   splitAndTrimWithBracket,
 } from './utils';
 
+// ClickHouse named time-bucketing functions and their granularity equivalents.
+const NAMED_BUCKET_FUNCTIONS: Record<string, SQLInterval> = {
+  toStartOfSecond: '1 second',
+  toStartOfMinute: '1 minute',
+  toStartOfFiveMinutes: '5 minute',
+  toStartOfTenMinutes: '10 minute',
+  toStartOfFifteenMinutes: '15 minute',
+  toStartOfHour: '1 hour',
+  toStartOfDay: '1 day',
+};
+
+const VALID_INTERVAL_UNITS = new Set(['second', 'minute', 'hour', 'day']);
+
+const isIdentChar = (ch: string) =>
+  (ch >= 'a' && ch <= 'z') ||
+  (ch >= 'A' && ch <= 'Z') ||
+  (ch >= '0' && ch <= '9') ||
+  ch === '_';
+
+const isWhitespace = (ch: string) =>
+  ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r';
+
+function findToStartOfCalls(
+  input: string,
+): { fn: string; argsInner: string }[] {
+  const out: { fn: string; argsInner: string }[] = [];
+  const n = input.length;
+  let i = 0;
+
+  // Skip the rest of a quoted region starting at `input[start]`.
+  // Returns the index of the character just past the closing quote.
+  const skipQuoted = (start: number, quote: string): number => {
+    let p = start + 1;
+    while (p < n) {
+      const c = input[p];
+      if (c === '\\' && p + 1 < n) {
+        p += 2;
+        continue;
+      }
+      if (c === quote) return p + 1;
+      p++;
+    }
+    return n;
+  };
+
+  while (i < n) {
+    const ch = input[i];
+
+    if (ch === "'" || ch === '"' || ch === '`') {
+      i = skipQuoted(i, ch);
+      continue;
+    }
+
+    // Try to read an identifier starting at a word boundary. A preceding
+    // identifier character would mean we're mid-token (e.g. `fooToStartOf…`).
+    const atBoundary = i === 0 || !isIdentChar(input[i - 1]);
+    if (!atBoundary || !isIdentChar(ch)) {
+      i++;
+      continue;
+    }
+
+    let j = i;
+    while (j < n && isIdentChar(input[j])) j++;
+    const ident = input.substring(i, j);
+
+    if (!ident.startsWith('toStartOf')) {
+      i = j;
+      continue;
+    }
+
+    // Expect '(' (possibly after whitespace) for this to be a call.
+    let k = j;
+    while (k < n && isWhitespace(input[k])) k++;
+    if (input[k] !== '(') {
+      i = j;
+      continue;
+    }
+
+    // Walk to the matching ')', honoring nested parens and quoted regions.
+    const argStart = k + 1;
+    let depth = 1;
+    let p = argStart;
+    while (p < n && depth > 0) {
+      const c = input[p];
+      if (c === "'" || c === '"' || c === '`') {
+        p = skipQuoted(p, c);
+        continue;
+      }
+      if (c === '(') depth++;
+      else if (c === ')') {
+        depth--;
+        if (depth === 0) break;
+      }
+      p++;
+    }
+    if (depth !== 0) break; // unterminated call — stop scanning
+    out.push({ fn: ident, argsInner: input.substring(argStart, p) });
+    i = p + 1;
+  }
+
+  return out;
+}
+
+function parseIntervalLiteral(expr: string): SQLInterval | undefined {
+  const tokens: string[] = [];
+  let cur = '';
+  for (const ch of expr) {
+    if (isWhitespace(ch)) {
+      if (cur) tokens.push(cur);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur) tokens.push(cur);
+
+  if (tokens.length < 3) return undefined;
+  if (tokens[0].toUpperCase() !== 'INTERVAL') return undefined;
+
+  const num = Number.parseInt(tokens[1], 10);
+  if (!Number.isFinite(num) || num <= 0 || String(num) !== tokens[1]) {
+    return undefined;
+  }
+
+  // Accept both singular and plural forms (MINUTE / MINUTES).
+  let unit = tokens[2].toLowerCase();
+  if (unit.endsWith('s')) unit = unit.slice(0, -1);
+  if (!VALID_INTERVAL_UNITS.has(unit)) return undefined;
+
+  return `${num} ${unit}` as SQLInterval;
+}
+
+export function inferGranularityFromMVSelect(
+  asSelect: string,
+): SQLInterval | undefined {
+  for (const { fn, argsInner } of findToStartOfCalls(asSelect)) {
+    if (fn in NAMED_BUCKET_FUNCTIONS) {
+      return NAMED_BUCKET_FUNCTIONS[fn];
+    }
+    if (fn === 'toStartOfInterval') {
+      const args = splitAndTrimWithBracket(argsInner);
+      if (args.length < 2) continue;
+      const parsed = parseIntervalLiteral(args[1]);
+      if (parsed) return parsed;
+    }
+  }
+  return undefined;
+}
+
+export function getNamedBucketFunction(
+  granularity: SQLInterval,
+): string | undefined {
+  for (const [fn, g] of Object.entries(NAMED_BUCKET_FUNCTIONS)) {
+    if (g === granularity) return fn;
+  }
+  return undefined;
+}
+
+export function renderStartOfBucketExpr(
+  granularity: SQLInterval,
+  inner: ChSql,
+): ChSql {
+  const namedFn = getNamedBucketFunction(granularity);
+  if (namedFn) {
+    // namedFn comes from a fixed allow-list (NAMED_BUCKET_FUNCTIONS keys), so
+    // splicing it as raw SQL is safe.
+    return chSql`${{ UNSAFE_RAW_SQL: namedFn }}(${inner})`;
+  }
+  const seconds = convertGranularityToSeconds(granularity);
+  return chSql`toStartOfInterval(${inner}, INTERVAL ${{ Int64: seconds }} SECOND)`;
+}
+
 type SelectItem = Exclude<
-  ChartConfigWithOptDateRange['select'],
+  BuilderChartConfigWithOptDateRange['select'],
   string
 >[number];
 
@@ -58,11 +238,15 @@ async function getQuantileAggregateFunction(
     }
 
     // Use regex to extract the quantile function name inside AggregateFunction(...)
-    // For example, AggregateFunction(quantile(0.95), Int64) --> quantile
+    // For example, AggregateFunction(quantile(0.95), Int64)       --> quantile
     //              AggregateFunction(quantileTDigest(0.95), Int64) --> quantileTDigest
     //              AggregateFunction(quantileDD(0.001, 0.95), Int64) --> quantileDD
+    // The plural `quantiles*` variants return arrays, but a select item carries a
+    // single `level`, so we normalize to the singular form to pull a scalar value.
+    //              AggregateFunction(quantiles(0.9, 0.95), UInt64)        --> quantile
+    //              AggregateFunction(quantilesTDigest(0.9, 0.95), UInt64) --> quantileTDigest
     const match = type.match(/^AggregateFunction\(\s*([^(, ]+)\s*\(/);
-    return match?.[1];
+    return match?.[1]?.replace(/^quantiles/, 'quantile');
   } catch {
     return undefined;
   }
@@ -123,7 +307,7 @@ function getAggregatedColumnConfig(
  **/
 function mvConfigSupportsGranularity(
   mvConfig: MaterializedViewConfiguration,
-  chartConfig: ChartConfigWithOptDateRange,
+  chartConfig: BuilderChartConfigWithOptDateRange,
 ): boolean {
   if (!chartConfig.granularity && !chartConfig.dateRange) {
     return true;
@@ -171,7 +355,7 @@ function countIntervalsInDateRange(
 
 function mvConfigSupportsDateRange(
   mvConfig: MaterializedViewConfiguration,
-  chartConfig: ChartConfigWithOptDateRange,
+  chartConfig: BuilderChartConfigWithOptDateRange,
 ) {
   if (mvConfig.minDate && !chartConfig.dateRange) {
     return false;
@@ -287,7 +471,7 @@ export type MVOptimizationExplanation = {
 };
 
 export async function tryConvertConfigToMaterializedViewSelect<
-  C extends ChartConfigWithOptDateRange | CteChartConfig,
+  C extends BuilderChartConfigWithOptDateRange | CteChartConfig,
 >(
   chartConfig: C,
   mvConfig: MaterializedViewConfiguration,
@@ -377,13 +561,13 @@ export async function tryConvertConfigToMaterializedViewSelect<
 }
 
 /** Attempts to optimize a config with a single MV Config */
-async function tryOptimizeConfig<C extends ChartConfigWithOptDateRange>(
+async function tryOptimizeConfig<C extends BuilderChartConfigWithOptDateRange>(
   config: C,
   metadata: Metadata,
   clickhouseClient: BaseClickhouseClient,
   signal: AbortSignal | undefined,
   mvConfig: MaterializedViewConfiguration,
-  source: Omit<TSource, 'connection'>, // for overlap with ISource type
+  source: Omit<TMVSource, 'connection'>, // for overlap with ISource type
 ) {
   const errors: string[] = [];
   // Attempt to optimize any CTEs that exist in the config
@@ -481,13 +665,13 @@ async function tryOptimizeConfig<C extends ChartConfigWithOptDateRange>(
 
 /** Attempts to optimize a config with each of the provided MV Configs */
 export async function tryOptimizeConfigWithMaterializedViewWithExplanations<
-  C extends ChartConfigWithOptDateRange,
+  C extends BuilderChartConfigWithOptDateRange,
 >(
   config: C,
   metadata: Metadata,
   clickhouseClient: BaseClickhouseClient,
   signal: AbortSignal | undefined,
-  source: Omit<TSource, 'connection'>, // for overlap with ISource type
+  source: Omit<TMVSource, 'connection'>, // for overlap with ISource type
 ): Promise<{
   optimizedConfig?: C;
   explanations: MVOptimizationExplanation[];
@@ -535,13 +719,13 @@ export async function tryOptimizeConfigWithMaterializedViewWithExplanations<
 }
 
 export async function tryOptimizeConfigWithMaterializedView<
-  C extends ChartConfigWithOptDateRange,
+  C extends BuilderChartConfigWithOptDateRange,
 >(
   config: C,
   metadata: Metadata,
   clickhouseClient: BaseClickhouseClient,
   signal: AbortSignal | undefined,
-  source: Omit<TSource, 'connection'>, // for overlap with ISource type
+  source: Omit<TMVSource, 'connection'>, // for overlap with ISource type
 ) {
   const { optimizedConfig } =
     await tryOptimizeConfigWithMaterializedViewWithExplanations(
@@ -580,13 +764,13 @@ function toMvId(
   return `${mv.databaseName}.${mv.tableName}`;
 }
 
-export interface GetKeyValueCall<C extends ChartConfigWithOptDateRange> {
+export interface GetKeyValueCall<C extends BuilderChartConfigWithOptDateRange> {
   chartConfig: C;
   keys: string[];
 }
 
 export async function optimizeGetKeyValuesCalls<
-  C extends ChartConfigWithOptDateRange,
+  C extends BuilderChartConfigWithOptDateRange,
 >({
   chartConfig,
   keys,
@@ -603,7 +787,10 @@ export async function optimizeGetKeyValuesCalls<
   signal?: AbortSignal;
 }): Promise<GetKeyValueCall<C>[]> {
   // Get the MVs from the source
-  const mvs = source?.materializedViews || [];
+  const mvs =
+    ((isTraceSource(source) || isLogSource(source)) &&
+      source?.materializedViews) ||
+    [];
   const mvsById = new Map(mvs.map(mv => [toMvId(mv), mv]));
 
   // Identify keys which can be queried from a materialized view

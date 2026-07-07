@@ -24,5 +24,12 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules"]
+  "//dfe": "DFE: exclude the orphaned .dfe[CHG] page shadow copies. They are NOT wired into any build (pages import the pristine originals, e.g. @/DBSearchPage), and have drifted against upstream 2.29 (reference removed modules/types). Pending a decision to re-derive+wire or delete. Bracket-escaped for minimatch (literal [CHG]).",
+  "exclude": [
+    "node_modules",
+    "**/*.dfe*.ts",
+    "**/*.dfe*.tsx",
+    "src/dfe/components/AppNav/**",
+    "src/dfe/components/SidebarMenu/**"
+  ]
 }

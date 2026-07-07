@@ -18,6 +18,7 @@ export default [
       '**/*.config.js',
       '**/*.config.mjs',
       'jest.config.js',
+      'jest.setup.ts',
     ],
   },
   {
@@ -48,12 +49,7 @@ export default [
       ],
       'n/no-process-exit': 'warn',
       'n/no-missing-import': 'off',
-      'n/no-unpublished-import': [
-        'error',
-        {
-          allowModules: ['supertest'],
-        },
-      ],
+      'n/no-unpublished-import': 'error',
       'n/no-unsupported-features/es-syntax': [
         'error',
         {
@@ -63,6 +59,18 @@ export default [
       'prettier/prettier': 'error',
       'simple-import-sort/imports': 'error',
       'simple-import-sort/exports': 'error',
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '^\\.\\.(/|$)',
+              message:
+                'Use the @/ path alias instead of parent-relative imports (../).',
+            },
+          ],
+        },
+      ],
     },
     languageOptions: {
       parser: tseslint.parser,

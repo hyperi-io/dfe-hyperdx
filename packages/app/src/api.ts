@@ -3,17 +3,28 @@ import type { HTTPError, Options, ResponsePromise } from 'ky';
 import ky from 'ky-universal';
 import type {
   Alert,
+  AlertApiResponse,
+  AlertsApiResponse,
+  InstallationApiResponse,
+  MeApiResponse,
   PresetDashboard,
   PresetDashboardFilter,
-  Team,
+  RotateApiKeyApiResponse,
+  TeamApiResponse,
+  TeamClickHouseSettingsUpdate,
+  TeamInvitationsApiResponse,
+  TeamMembersApiResponse,
+  TeamTagsApiResponse,
+  UpdateClickHouseSettingsApiResponse,
+  WebhookCreateApiResponse,
+  WebhooksApiResponse,
+  WebhookTestApiResponse,
+  WebhookUpdateApiResponse,
 } from '@hyperdx/common-utils/dist/types';
-import type { UseQueryOptions } from '@tanstack/react-query';
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { IS_LOCAL_MODE } from './config';
-import { Dashboard } from './dashboard';
-import type { AlertsPageItem } from './types';
-
+import { getLocalDashboardTags } from './dashboard';
 type ServicesResponse = {
   data: Record<
     string,
@@ -26,13 +37,7 @@ type ServicesResponse = {
   >;
 };
 
-type AlertsResponse = {
-  data: AlertsPageItem[];
-};
-
-type ApiAlertInput = Alert;
-
-export function loginHook(request: Request, options: any, response: Response) {
+function loginHook(request: Request, options: any, response: Response) {
   // marketing pages
   const WHITELIST_PATHS = [
     '/',
@@ -52,7 +57,7 @@ export function loginHook(request: Request, options: any, response: Response) {
   }
 }
 
-export const server = ky.create({
+const server = ky.create({
   prefixUrl: '/api',
   credentials: 'include',
   hooks: {
@@ -72,7 +77,7 @@ export const hdxServer = (
 
 const api = {
   useCreateAlert() {
-    return useMutation<any, Error, ApiAlertInput>({
+    return useMutation<{ data: Alert }, Error, Alert>({
       mutationFn: async alert =>
         server('alerts', {
           method: 'POST',
@@ -81,7 +86,7 @@ const api = {
     });
   },
   useUpdateAlert() {
-    return useMutation<any, Error, { id: string } & ApiAlertInput>({
+    return useMutation<{ data: Alert }, Error, { id: string } & Alert>({
       mutationFn: async alert =>
         server(`alerts/${alert.id}`, {
           method: 'PUT',
@@ -90,88 +95,31 @@ const api = {
     });
   },
   useDeleteAlert() {
-    return useMutation<any, Error, string>({
-      mutationFn: async (alertId: string) =>
-        server(`alerts/${alertId}`, {
+    return useMutation<void, Error, string>({
+      mutationFn: async (alertId: string) => {
+        await server(`alerts/${alertId}`, {
           method: 'DELETE',
-        }),
+        });
+      },
     });
   },
   useSilenceAlert() {
-    return useMutation<any, Error, { alertId: string; mutedUntil: string }>({
-      mutationFn: async ({ alertId, mutedUntil }) =>
-        server(`alerts/${alertId}/silenced`, {
+    return useMutation<void, Error, { alertId: string; mutedUntil: string }>({
+      mutationFn: async ({ alertId, mutedUntil }) => {
+        await server(`alerts/${alertId}/silenced`, {
           method: 'POST',
           json: { mutedUntil },
-        }),
+        });
+      },
     });
   },
   useUnsilenceAlert() {
-    return useMutation<any, Error, string>({
-      mutationFn: async (alertId: string) =>
-        server(`alerts/${alertId}/silenced`, {
+    return useMutation<void, Error, string>({
+      mutationFn: async (alertId: string) => {
+        await server(`alerts/${alertId}/silenced`, {
           method: 'DELETE',
-        }),
-    });
-  },
-  useDashboards(options?: UseQueryOptions<Dashboard[] | null, Error>) {
-    return useQuery({
-      queryKey: [`dashboards`],
-      queryFn: () => {
-        if (IS_LOCAL_MODE) {
-          return null;
-        }
-        return hdxServer(`dashboards`, { method: 'GET' }).json<Dashboard[]>();
+        });
       },
-      ...options,
-    });
-  },
-  useCreateDashboard() {
-    return useMutation({
-      mutationFn: async ({
-        name,
-        charts,
-        query,
-        tags,
-      }: {
-        name: string;
-        charts: any;
-        query: any;
-        tags: any;
-      }) =>
-        hdxServer(`dashboards`, {
-          method: 'POST',
-          json: { name, charts, query, tags },
-        }).json(),
-    });
-  },
-  useUpdateDashboard() {
-    return useMutation({
-      mutationFn: async ({
-        id,
-        name,
-        charts,
-        query,
-        tags,
-      }: {
-        id: string;
-        name: string;
-        charts: any;
-        query: any;
-        tags: any;
-      }) =>
-        hdxServer(`dashboards/${id}`, {
-          method: 'PUT',
-          json: { name, charts, query, tags },
-        }).json(),
-    });
-  },
-  useDeleteDashboard() {
-    return useMutation({
-      mutationFn: async ({ id }: { id: string }) =>
-        hdxServer(`dashboards/${id}`, {
-          method: 'DELETE',
-        }).json(),
     });
   },
   usePresetDashboardFilters(
@@ -185,30 +133,34 @@ const api = {
         hdxServer(`dashboards/preset/${presetDashboard}/filters/`, {
           method: 'GET',
           searchParams: { sourceId },
-        }).json() as Promise<PresetDashboardFilter[]>,
+        }).json<PresetDashboardFilter[]>(),
       enabled: !!sourceId && enabled,
     });
   },
   useCreatePresetDashboardFilter() {
-    return useMutation({
+    return useMutation<PresetDashboardFilter, Error, PresetDashboardFilter>({
       mutationFn: async (filter: PresetDashboardFilter) =>
         hdxServer(`dashboards/preset/${filter.presetDashboard}/filter`, {
           method: 'POST',
           json: { filter },
-        }).json(),
+        }).json<PresetDashboardFilter>(),
     });
   },
   useUpdatePresetDashboardFilter() {
-    return useMutation({
+    return useMutation<PresetDashboardFilter, Error, PresetDashboardFilter>({
       mutationFn: async (filter: PresetDashboardFilter) =>
         hdxServer(`dashboards/preset/${filter.presetDashboard}/filter`, {
           method: 'PUT',
           json: { filter },
-        }).json(),
+        }).json<PresetDashboardFilter>(),
     });
   },
   useDeletePresetDashboardFilter() {
-    return useMutation({
+    return useMutation<
+      PresetDashboardFilter,
+      Error,
+      { id: string; presetDashboard: PresetDashboard }
+    >({
       mutationFn: async ({
         id,
         presetDashboard,
@@ -218,13 +170,23 @@ const api = {
       }) =>
         hdxServer(`dashboards/preset/${presetDashboard}/filter/${id}`, {
           method: 'DELETE',
-        }).json(),
+        }).json<PresetDashboardFilter>(),
     });
   },
+  getAlertsQueryKey: () => ['alerts'] as const,
+  getAlertQueryKey: (alertId: string | undefined) =>
+    ['alert', alertId] as const,
   useAlerts() {
     return useQuery({
-      queryKey: [`alerts`],
-      queryFn: () => hdxServer(`alerts`).json() as Promise<AlertsResponse>,
+      queryKey: api.getAlertsQueryKey(),
+      queryFn: () => hdxServer(`alerts`).json<AlertsApiResponse>(),
+    });
+  },
+  useAlert(alertId: string | undefined) {
+    return useQuery({
+      queryKey: api.getAlertQueryKey(alertId),
+      queryFn: () => hdxServer(`alerts/${alertId}`).json<AlertApiResponse>(),
+      enabled: alertId != null,
     });
   },
   useServices() {
@@ -233,34 +195,39 @@ const api = {
       queryFn: () =>
         hdxServer(`chart/services`, {
           method: 'GET',
-        }).json() as Promise<ServicesResponse>,
+        }).json<ServicesResponse>(),
     });
   },
   useRotateTeamApiKey() {
-    return useMutation<any, Error | HTTPError>({
+    return useMutation<RotateApiKeyApiResponse, Error | HTTPError>({
       mutationFn: async () =>
         hdxServer(`team/apiKey`, {
           method: 'PATCH',
-        }).json(),
+        }).json<RotateApiKeyApiResponse>(),
     });
   },
   useDeleteTeamMember() {
-    return useMutation<any, Error | HTTPError, { userId: string }>({
+    return useMutation<
+      { message: string },
+      Error | HTTPError,
+      { userId: string }
+    >({
       mutationFn: async ({ userId }: { userId: string }) =>
         hdxServer(`team/member/${userId}`, {
           method: 'DELETE',
-        }).json(),
+        }).json<{ message: string }>(),
     });
   },
   useTeamInvitations() {
-    return useQuery<any>({
+    return useQuery<TeamInvitationsApiResponse>({
       queryKey: [`team/invitations`],
-      queryFn: () => hdxServer(`team/invitations`).json(),
+      queryFn: () =>
+        hdxServer(`team/invitations`).json<TeamInvitationsApiResponse>(),
     });
   },
   useSaveTeamInvitation() {
     return useMutation<
-      any,
+      { url: string },
       Error | HTTPError,
       { name?: string; email: string }
     >({
@@ -271,7 +238,7 @@ const api = {
             name,
             email,
           },
-        }).json(),
+        }).json<{ url: string }>(),
     });
   },
   useDeleteTeamInvitation() {
@@ -279,28 +246,28 @@ const api = {
       mutationFn: async ({ id }: { id: string }) =>
         hdxServer(`team/invitation/${id}`, {
           method: 'DELETE',
-        }).json(),
+        }).json<{ message: string }>(),
     });
   },
   useInstallation() {
-    return useQuery<any, Error>({
+    return useQuery<InstallationApiResponse | undefined, Error>({
       queryKey: [`installation`],
       queryFn: () => {
         if (IS_LOCAL_MODE) {
           return;
         }
-        return hdxServer(`installation`).json();
+        return hdxServer(`installation`).json<InstallationApiResponse>();
       },
     });
   },
   useMe() {
-    return useQuery<any>({
+    return useQuery<MeApiResponse | null>({
       queryKey: [`me`],
       queryFn: () => {
         if (IS_LOCAL_MODE) {
           return null;
         }
-        return hdxServer(`me`).json();
+        return hdxServer(`me`).json<MeApiResponse>();
       },
     });
   },
@@ -311,60 +278,50 @@ const api = {
         if (IS_LOCAL_MODE) {
           return null;
         }
-
-        type TeamResponse = Pick<
-          Team,
-          'allowedAuthMethods' | 'apiKey' | 'name'
-        > & {
-          createdAt: string;
-        };
-
-        return hdxServer(`team`).json<TeamResponse>();
+        return hdxServer(`team`).json<TeamApiResponse>();
       },
       retry: 1,
     });
   },
   useTeamMembers() {
-    return useQuery<any>({
+    return useQuery<TeamMembersApiResponse>({
       queryKey: [`team/members`],
-      queryFn: () => hdxServer(`team/members`).json(),
+      queryFn: () => hdxServer(`team/members`).json<TeamMembersApiResponse>(),
     });
   },
   useSetTeamName() {
-    return useMutation<any, HTTPError, { name: string }>({
+    return useMutation<{ name: string }, HTTPError, { name: string }>({
       mutationFn: async ({ name }) =>
         hdxServer(`team/name`, {
           method: 'PATCH',
           json: { name },
-        }).json(),
+        }).json<{ name: string }>(),
     });
   },
   useUpdateClickhouseSettings() {
     return useMutation<
-      any,
+      UpdateClickHouseSettingsApiResponse,
       HTTPError,
-      {
-        searchRowLimit?: number;
-        fieldMetadataDisabled?: boolean;
-        metadataMaxRowsToRead?: number;
-      }
+      TeamClickHouseSettingsUpdate
     >({
       mutationFn: async settings =>
         hdxServer(`team/clickhouse-settings`, {
           method: 'PATCH',
           json: settings,
-        }).json(),
+        }).json<UpdateClickHouseSettingsApiResponse>(),
     });
   },
   useTags() {
     return useQuery({
       queryKey: [`team/tags`],
-      queryFn: () => hdxServer(`team/tags`).json<{ data: string[] }>(),
+      queryFn: IS_LOCAL_MODE
+        ? async () => ({ data: getLocalDashboardTags() })
+        : () => hdxServer(`team/tags`).json<TeamTagsApiResponse>(),
     });
   },
   useSaveWebhook() {
     return useMutation<
-      any,
+      WebhookCreateApiResponse,
       Error | HTTPError,
       {
         service: string;
@@ -384,14 +341,6 @@ const api = {
         queryParams,
         headers,
         body,
-      }: {
-        service: string;
-        url: string;
-        name: string;
-        description: string;
-        queryParams?: Record<string, string>;
-        headers?: Record<string, string>;
-        body?: string;
       }) =>
         hdxServer(`webhooks`, {
           method: 'POST',
@@ -404,12 +353,12 @@ const api = {
             headers: headers || {},
             body,
           },
-        }).json(),
+        }).json<WebhookCreateApiResponse>(),
     });
   },
   useUpdateWebhook() {
     return useMutation<
-      any,
+      WebhookUpdateApiResponse,
       Error | HTTPError,
       {
         id: string;
@@ -431,15 +380,6 @@ const api = {
         queryParams,
         headers,
         body,
-      }: {
-        id: string;
-        service: string;
-        url: string;
-        name: string;
-        description: string;
-        queryParams?: Record<string, string>;
-        headers?: Record<string, string>;
-        body?: string;
       }) =>
         hdxServer(`webhooks/${id}`, {
           method: 'PUT',
@@ -452,21 +392,25 @@ const api = {
             headers: headers || {},
             body,
           },
-        }).json(),
+        }).json<WebhookUpdateApiResponse>(),
     });
   },
   useWebhooks(services: string[]) {
-    return useQuery<any, Error>({
+    return useQuery<WebhooksApiResponse, Error>({
       queryKey: [...services],
       queryFn: () =>
         hdxServer('webhooks', {
           method: 'GET',
           searchParams: [...services.map(service => ['service', service])],
-        }).json(),
+        }).json<WebhooksApiResponse>(),
     });
   },
   useDeleteWebhook() {
-    return useMutation<any, Error | HTTPError, { id: string }>({
+    return useMutation<
+      Record<string, never>,
+      Error | HTTPError,
+      { id: string }
+    >({
       mutationFn: async ({ id }: { id: string }) =>
         hdxServer(`webhooks/${id}`, {
           method: 'DELETE',
@@ -475,7 +419,7 @@ const api = {
   },
   useTestWebhook() {
     return useMutation<
-      any,
+      WebhookTestApiResponse,
       Error | HTTPError,
       {
         service: string;
@@ -483,6 +427,7 @@ const api = {
         queryParams?: Record<string, string>;
         headers?: Record<string, string>;
         body?: string;
+        webhookId?: string;
       }
     >({
       mutationFn: async ({
@@ -491,12 +436,7 @@ const api = {
         queryParams,
         headers,
         body,
-      }: {
-        service: string;
-        url: string;
-        queryParams?: Record<string, string>;
-        headers?: Record<string, string>;
-        body?: string;
+        webhookId,
       }) =>
         hdxServer(`webhooks/test`, {
           method: 'POST',
@@ -506,21 +446,18 @@ const api = {
             queryParams: queryParams || {},
             headers: headers || {},
             body,
+            ...(webhookId && { webhookId }),
           },
-        }).json(),
+        }).json<WebhookTestApiResponse>(),
     });
   },
   useRegisterPassword() {
-    return useMutation({
-      mutationFn: async ({
-        email,
-        password,
-        confirmPassword,
-      }: {
-        email: string;
-        password: string;
-        confirmPassword: string;
-      }) =>
+    return useMutation<
+      { status: string },
+      Error,
+      { email: string; password: string; confirmPassword: string }
+    >({
+      mutationFn: async ({ email, password, confirmPassword }) =>
         hdxServer(`register/password`, {
           method: 'POST',
           json: {
@@ -528,20 +465,16 @@ const api = {
             password,
             confirmPassword,
           },
-        }).json(),
+        }).json<{ status: string }>(),
     });
   },
   useTestConnection() {
-    return useMutation({
-      mutationFn: async ({
-        host,
-        username,
-        password,
-      }: {
-        host: string;
-        username: string;
-        password: string;
-      }) =>
+    return useMutation<
+      { success: boolean; error?: string },
+      Error,
+      { host: string; username: string; password: string }
+    >({
+      mutationFn: async ({ host, username, password }) =>
         hdxServer(`clickhouse-proxy/test`, {
           method: 'POST',
           json: {
@@ -549,8 +482,91 @@ const api = {
             username,
             password,
           },
-        }).json() as Promise<{ success: boolean; error?: string }>,
+        }).json<{ success: boolean; error?: string }>(),
     });
   },
 };
 export default api;
+
+// --------------------------
+// Prometheus API
+// --------------------------
+type PrometheusMetric = Record<string, string>;
+type PrometheusMatrixResult = {
+  metric: PrometheusMetric;
+  values: [number, string][];
+};
+type PrometheusQueryRangeResponse = {
+  status: 'success' | 'error';
+  data?: {
+    resultType: 'matrix';
+    result: PrometheusMatrixResult[];
+  };
+  error?: string;
+};
+type PrometheusLabelValuesResponse = {
+  status: 'success' | 'error';
+  data?: string[];
+  error?: string;
+};
+
+async function prometheusFetch<T>(
+  path: string,
+  searchParams: Record<string, string>,
+): Promise<T> {
+  try {
+    return await server.post(path, { searchParams }).json();
+  } catch (e: any) {
+    // ky throws HTTPError on non-2xx — read the response body for the real error
+    if (e?.response) {
+      try {
+        const body = await e.response.json();
+        if (body?.error) {
+          throw new Error(body.error);
+        }
+      } catch (parseErr) {
+        if (parseErr instanceof Error && parseErr.message !== e.message) {
+          throw parseErr;
+        }
+      }
+    }
+    throw e;
+  }
+}
+
+export const prometheusApi = {
+  queryRange: (params: {
+    query: string;
+    start: number;
+    end: number;
+    step: string;
+    connectionId: string;
+    database?: string;
+    table?: string;
+  }): Promise<PrometheusQueryRangeResponse> =>
+    prometheusFetch('v1/prometheus/query_range', {
+      query: params.query,
+      start: String(params.start),
+      end: String(params.end),
+      step: params.step,
+      connectionId: params.connectionId,
+      ...(params.database ? { database: params.database } : {}),
+      ...(params.table ? { table: params.table } : {}),
+    }),
+
+  labelValues: (params: {
+    label: string;
+    connectionId: string;
+    database?: string;
+    table?: string;
+  }): Promise<PrometheusLabelValuesResponse> =>
+    server
+      .get(`v1/prometheus/label/${params.label}/values`, {
+        searchParams: {
+          connectionId: params.connectionId,
+          ...(params.database ? { database: params.database } : {}),
+          ...(params.table ? { table: params.table } : {}),
+        },
+      })
+      .json(),
+};

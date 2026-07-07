@@ -1,9 +1,15 @@
 import Connection, { IConnection } from '@/models/connection';
 
+// Returns all connections across all teams. Only intended for instance-level
+// operations (e.g. startup auto-provisioning); user-facing routes must use
+// the team-scoped variants below.
 export function getConnections() {
   // Never return password back to the user
-  // Return all connections in current tenant
   return Connection.find({});
+}
+
+export function getConnectionsByTeam(team: string) {
+  return Connection.find({ team });
 }
 
 export function getConnectionById(

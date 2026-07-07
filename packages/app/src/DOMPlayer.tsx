@@ -19,7 +19,7 @@ import { useDebugMode } from '@/utils';
 
 import { FieldExpressionGenerator } from './hooks/useFieldExpressionGenerator';
 
-import styles from '../styles/SessionSubpanelV2.module.scss';
+import styles from '@styles/SessionSubpanelV2.module.scss';
 
 function getPlayerCurrentTime(player: Replayer) {
   return Math.max(player.getCurrentTime(), 0); //getCurrentTime can be -startTime
@@ -136,8 +136,8 @@ export default function DOMPlayer({
       serviceName,
       sessionId,
       sourceId,
-      startDate: dateRange?.[0] ?? new Date(),
-      endDate: dateRange?.[1] ?? new Date(),
+      startDate: dateRange[0],
+      endDate: dateRange[1],
       limit: 1000000, // large enough to get all events
       onEvent: (event: { b: string; ck: number; tcks: number; t: number }) => {
         try {

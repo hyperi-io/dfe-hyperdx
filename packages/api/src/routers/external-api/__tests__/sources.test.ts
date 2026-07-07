@@ -2,18 +2,25 @@ import { MetricsDataType, SourceKind } from '@hyperdx/common-utils/dist/types';
 import mongoose from 'mongoose';
 import request, { SuperAgentTest } from 'supertest';
 
-import { ITeam } from '@/models/team';
-import { IUser } from '@/models/user';
-
-import * as config from '../../../config';
+import * as config from '@/config';
 import {
   DEFAULT_DATABASE,
   DEFAULT_LOGS_TABLE,
   getLoggedInAgent,
   getServer,
-} from '../../../fixtures';
-import Connection, { IConnection } from '../../../models/connection';
-import { Source } from '../../../models/source';
+} from '@/fixtures';
+import Connection, { IConnection } from '@/models/connection';
+import {
+  ISource,
+  LogSource,
+  MetricSource,
+  SessionSource,
+  Source,
+  TraceSource,
+} from '@/models/source';
+import { ITeam } from '@/models/team';
+import { IUser } from '@/models/user';
+import { mapGranularityToExternalFormat } from '@/routers/external-api/v2/sources';
 
 describe('External API v2 Sources', () => {
   const server = getServer();
@@ -72,7 +79,7 @@ describe('External API v2 Sources', () => {
     });
 
     it('should return a single log source', async () => {
-      const logSource = await Source.create({
+      const logSource = await LogSource.create({
         kind: SourceKind.Log,
         team: team._id,
         name: 'Test Log Source',
@@ -93,6 +100,7 @@ describe('External API v2 Sources', () => {
         name: 'Test Log Source',
         kind: SourceKind.Log,
         connection: connection._id.toString(),
+        disabled: false,
         from: {
           databaseName: DEFAULT_DATABASE,
           tableName: DEFAULT_LOGS_TABLE,
@@ -107,7 +115,7 @@ describe('External API v2 Sources', () => {
     });
 
     it('should return a single trace source', async () => {
-      const traceSource = await Source.create({
+      const traceSource = await TraceSource.create({
         kind: SourceKind.Trace,
         team: team._id,
         name: 'Test Trace Source',
@@ -116,6 +124,7 @@ describe('External API v2 Sources', () => {
           tableName: 'otel_traces',
         },
         timestampValueExpression: 'Timestamp',
+        defaultTableSelectExpression: '*',
         durationExpression: 'Duration',
         durationPrecision: 3,
         traceIdExpression: 'TraceId',
@@ -144,6 +153,19 @@ describe('External API v2 Sources', () => {
             tableName: 'traces_mv',
             dimensionColumns: 'ServiceName',
             minGranularity: '1 minute',
+            timestampColumn: 'Timestamp',
+            aggregatedColumns: [
+              {
+                mvColumn: 'count',
+                aggFn: 'count',
+              },
+            ],
+          },
+          {
+            databaseName: DEFAULT_DATABASE,
+            tableName: 'traces_mv_15s',
+            dimensionColumns: 'ServiceName',
+            minGranularity: '15 second',
             timestampColumn: 'Timestamp',
             aggregatedColumns: [
               {
@@ -167,6 +189,7 @@ describe('External API v2 Sources', () => {
       expect(response.body.data[0]).toEqual({
         id: traceSource._id.toString(),
         name: 'Test Trace Source',
+        disabled: false,
         from: {
           databaseName: DEFAULT_DATABASE,
           tableName: 'otel_traces',
@@ -174,6 +197,7 @@ describe('External API v2 Sources', () => {
         kind: SourceKind.Trace,
         connection: connection._id.toString(),
         timestampValueExpression: 'Timestamp',
+        defaultTableSelectExpression: '*',
         durationExpression: 'Duration',
         durationPrecision: 3,
         traceIdExpression: 'TraceId',
@@ -200,7 +224,20 @@ describe('External API v2 Sources', () => {
             databaseName: DEFAULT_DATABASE,
             tableName: 'traces_mv',
             dimensionColumns: 'ServiceName',
-            minGranularity: '1 minute',
+            minGranularity: '1m',
+            timestampColumn: 'Timestamp',
+            aggregatedColumns: [
+              {
+                mvColumn: 'count',
+                aggFn: 'count',
+              },
+            ],
+          },
+          {
+            databaseName: DEFAULT_DATABASE,
+            tableName: 'traces_mv_15s',
+            dimensionColumns: 'ServiceName',
+            minGranularity: '15s',
             timestampColumn: 'Timestamp',
             aggregatedColumns: [
               {
@@ -220,7 +257,7 @@ describe('External API v2 Sources', () => {
     });
 
     it('should return a single metric source', async () => {
-      const metricSource = await Source.create({
+      const metricSource = await MetricSource.create({
         kind: SourceKind.Metric,
         team: team._id,
         name: 'Test Metric Source',
@@ -246,6 +283,7 @@ describe('External API v2 Sources', () => {
         name: 'Test Metric Source',
         kind: SourceKind.Metric,
         connection: connection._id.toString(),
+        disabled: false,
         from: {
           databaseName: DEFAULT_DATABASE,
           tableName: '',
@@ -262,7 +300,7 @@ describe('External API v2 Sources', () => {
     });
 
     it('should return a single session source', async () => {
-      const traceSource = await Source.create({
+      const traceSource = await TraceSource.create({
         kind: SourceKind.Trace,
         team: team._id,
         name: 'Trace Source for Session',
@@ -271,6 +309,7 @@ describe('External API v2 Sources', () => {
           tableName: 'otel_traces',
         },
         timestampValueExpression: 'Timestamp',
+        defaultTableSelectExpression: '*',
         durationExpression: 'Duration',
         durationPrecision: 3,
         traceIdExpression: 'TraceId',
@@ -281,17 +320,18 @@ describe('External API v2 Sources', () => {
         connection: connection._id,
       });
 
-      const sessionSource = await Source.create({
+      const sessionSource = await SessionSource.create({
         kind: SourceKind.Session,
-        team: team._id,
+        team: team._id.toString(),
         name: 'Test Session Source',
         from: {
           databaseName: DEFAULT_DATABASE,
           tableName: 'rrweb_events',
         },
+        timestampValueExpression: 'Timestamp',
         traceSourceId: traceSource._id.toString(),
-        connection: connection._id,
-      });
+        connection: connection._id.toString(),
+      } satisfies Omit<Extract<ISource, { kind: SourceKind.Session }>, 'id'>);
 
       const response = await authRequest('get', BASE_URL).expect(200);
 
@@ -305,17 +345,19 @@ describe('External API v2 Sources', () => {
         name: 'Test Session Source',
         kind: SourceKind.Session,
         connection: connection._id.toString(),
+        disabled: false,
         from: {
           databaseName: DEFAULT_DATABASE,
           tableName: 'rrweb_events',
         },
         traceSourceId: traceSource._id.toString(),
         querySettings: [],
+        timestampValueExpression: 'Timestamp',
       });
     });
 
     it('should return multiple sources of different kinds', async () => {
-      const logSource = await Source.create({
+      const logSource = await LogSource.create({
         kind: SourceKind.Log,
         team: team._id,
         name: 'Logs',
@@ -328,7 +370,7 @@ describe('External API v2 Sources', () => {
         connection: connection._id,
       });
 
-      const traceSource = await Source.create({
+      const traceSource = await TraceSource.create({
         kind: SourceKind.Trace,
         team: team._id,
         name: 'Traces',
@@ -337,6 +379,7 @@ describe('External API v2 Sources', () => {
           tableName: 'otel_traces',
         },
         timestampValueExpression: 'Timestamp',
+        defaultTableSelectExpression: '*',
         durationExpression: 'Duration',
         durationPrecision: 3,
         traceIdExpression: 'TraceId',
@@ -347,7 +390,7 @@ describe('External API v2 Sources', () => {
         connection: connection._id,
       });
 
-      const metricSource = await Source.create({
+      const metricSource = await MetricSource.create({
         kind: SourceKind.Metric,
         team: team._id,
         name: 'Metrics',
@@ -380,7 +423,7 @@ describe('External API v2 Sources', () => {
 
     it("should only return sources for the authenticated user's team", async () => {
       // Create a source for the current team
-      const currentTeamSource = await Source.create({
+      const currentTeamSource = await LogSource.create({
         kind: SourceKind.Log,
         team: team._id,
         name: 'Current Team Source',
@@ -403,7 +446,7 @@ describe('External API v2 Sources', () => {
         password: config.CLICKHOUSE_PASSWORD,
       });
 
-      await Source.create({
+      await LogSource.create({
         kind: SourceKind.Log,
         team: otherTeamId,
         name: 'Other Team Source',
@@ -425,7 +468,7 @@ describe('External API v2 Sources', () => {
     });
 
     it('should format sources according to SourceSchema', async () => {
-      await Source.create({
+      await LogSource.create({
         kind: SourceKind.Log,
         team: team._id,
         name: 'Test Source',
@@ -456,7 +499,7 @@ describe('External API v2 Sources', () => {
 
     it('should filter out sources that fail schema validation', async () => {
       // Create a valid source
-      const validSource = await Source.create({
+      const validSource = await LogSource.create({
         kind: SourceKind.Log,
         team: team._id,
         name: 'Valid Source',
@@ -489,5 +532,168 @@ describe('External API v2 Sources', () => {
       expect(response.body.data).toHaveLength(1);
       expect(response.body.data[0].id).toBe(validSource._id.toString());
     });
+
+    describe('section field', () => {
+      const SECTION = 'Control Plane Prod';
+
+      it('returns the section on a source that has one', async () => {
+        const logSource = await LogSource.create({
+          kind: SourceKind.Log,
+          team: team._id,
+          name: 'Sectioned Log Source',
+          section: SECTION,
+          from: {
+            databaseName: DEFAULT_DATABASE,
+            tableName: DEFAULT_LOGS_TABLE,
+          },
+          timestampValueExpression: 'Timestamp',
+          defaultTableSelectExpression: '*',
+          connection: connection._id,
+        });
+
+        const response = await authRequest('get', BASE_URL).expect(200);
+
+        expect(response.body.data).toHaveLength(1);
+        expect(response.body.data[0]).toMatchObject({
+          id: logSource._id.toString(),
+          section: SECTION,
+        });
+      });
+
+      it('omits the section on a source that has none', async () => {
+        await LogSource.create({
+          kind: SourceKind.Log,
+          team: team._id,
+          name: 'Unsectioned Log Source',
+          from: {
+            databaseName: DEFAULT_DATABASE,
+            tableName: DEFAULT_LOGS_TABLE,
+          },
+          timestampValueExpression: 'Timestamp',
+          defaultTableSelectExpression: '*',
+          connection: connection._id,
+        });
+
+        const response = await authRequest('get', BASE_URL).expect(200);
+
+        expect(response.body.data).toHaveLength(1);
+        expect(response.body.data[0]).not.toHaveProperty('section');
+      });
+    });
+  });
+
+  describe('backward compatibility with legacy flat-model documents', () => {
+    const BASE_URL = '/api/v2/sources';
+
+    it('returns legacy Session source without timestampValueExpression using default TimestampTime', async () => {
+      // Legacy Session sources were created before timestampValueExpression was
+      // required. applyLegacyDefaults() backfills 'TimestampTime' before
+      // SourceSchema.safeParse(), so these sources still appear in the response.
+      await Source.collection.insertOne({
+        kind: SourceKind.Session,
+        name: 'Legacy Session',
+        team: team._id,
+        connection: connection._id,
+        from: { databaseName: DEFAULT_DATABASE, tableName: 'otel_sessions' },
+        traceSourceId: 'some-trace-source-id',
+        // timestampValueExpression intentionally omitted
+      });
+
+      const response = await authRequest('get', BASE_URL).expect(200);
+
+      expect(response.body.data).toHaveLength(1);
+      expect(response.body.data[0].kind).toBe(SourceKind.Session);
+      // Default is applied at read time, not persisted to the database
+      expect(response.body.data[0].timestampValueExpression).toBe(
+        'TimestampTime',
+      );
+    });
+
+    it('returns Trace source with logSourceId: null (Zod optional accepts null)', async () => {
+      // Old schema had logSourceId: z.string().optional().nullable()
+      // New schema removed .nullable() — however, Zod's optional() in
+      // discriminatedUnion context still accepts null values (they pass
+      // safeParse). This means logSourceId: null is NOT a breaking change.
+      await Source.collection.insertOne({
+        kind: SourceKind.Trace,
+        name: 'Trace with null logSourceId',
+        team: team._id,
+        connection: connection._id,
+        from: { databaseName: DEFAULT_DATABASE, tableName: 'otel_traces' },
+        timestampValueExpression: 'Timestamp',
+        defaultTableSelectExpression: '*',
+        durationExpression: 'Duration',
+        durationPrecision: 3,
+        traceIdExpression: 'TraceId',
+        spanIdExpression: 'SpanId',
+        parentSpanIdExpression: 'ParentSpanId',
+        spanNameExpression: 'SpanName',
+        spanKindExpression: 'SpanKind',
+        logSourceId: null,
+      });
+
+      const response = await authRequest('get', BASE_URL).expect(200);
+
+      // Source IS returned — logSourceId: null passes Zod safeParse
+      expect(response.body.data).toHaveLength(1);
+      expect(response.body.data[0].kind).toBe(SourceKind.Trace);
+      expect(response.body.data[0].logSourceId).toBeNull();
+    });
+
+    it('strips cross-kind fields from legacy flat-model Log source via SourceSchema.safeParse', async () => {
+      // The external API runs SourceSchema.safeParse() which DOES strip
+      // unknown/cross-kind fields (unlike Mongoose toJSON which keeps them).
+      // This is the key difference between internal and external APIs.
+      await Source.collection.insertOne({
+        kind: SourceKind.Log,
+        name: 'Flat Model Log',
+        team: team._id,
+        connection: connection._id,
+        from: { databaseName: DEFAULT_DATABASE, tableName: DEFAULT_LOGS_TABLE },
+        timestampValueExpression: 'Timestamp',
+        defaultTableSelectExpression: 'Body',
+        // Cross-kind fields from old flat model
+        metricTables: { gauge: 'otel_metrics_gauge' },
+        durationExpression: 'Duration',
+      });
+
+      const response = await authRequest('get', BASE_URL).expect(200);
+
+      expect(response.body.data).toHaveLength(1);
+      expect(response.body.data[0].kind).toBe(SourceKind.Log);
+      expect(response.body.data[0].defaultTableSelectExpression).toBe('Body');
+      // Cross-kind fields ARE stripped by SourceSchema.safeParse in the external API
+      expect(response.body.data[0]).not.toHaveProperty('metricTables');
+      expect(response.body.data[0]).not.toHaveProperty('durationExpression');
+    });
+  });
+});
+
+describe('External API v2 Sources Mapping', () => {
+  describe('mapGranularityToExternalFormat', () => {
+    it.each`
+      input         | expected
+      ${'1 second'} | ${'1s'}
+      ${'1 minute'} | ${'1m'}
+      ${'1 hour'}   | ${'1h'}
+      ${'1 day'}    | ${'1d'}
+    `(
+      'maps supported long-form granularity $input to $expected',
+      ({ input, expected }) => {
+        expect(mapGranularityToExternalFormat(input)).toBe(expected);
+      },
+    );
+
+    it.each`
+      input          | expected
+      ${'invalid'}   | ${'invalid'}
+      ${'1m'}        | ${'1m'}
+      ${'2 minutes'} | ${'2 minutes'}
+    `(
+      'passes through unsupported or already-short granularity $input',
+      ({ input, expected }) => {
+        expect(mapGranularityToExternalFormat(input)).toBe(expected);
+      },
+    );
   });
 });

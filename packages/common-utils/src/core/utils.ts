@@ -5,21 +5,29 @@ import { z } from 'zod';
 
 export { default as objectHash } from 'object-hash';
 
+import { isBuilderSavedChartConfig, isRawSqlSavedChartConfig } from '@/guards';
+import { replaceMacros } from '@/macros';
+import { QUERY_PARAMS, RawSqlQueryParam } from '@/rawSqlParams';
 import {
-  ChartConfigWithDateRange,
-  ChartConfigWithOptTimestamp,
+  BuilderChartConfig,
+  BuilderChartConfigWithDateRange,
+  BuilderChartConfigWithOptTimestamp,
+  Connection,
   DashboardFilter,
   DashboardFilterSchema,
   DashboardSchema,
   DashboardTemplateSchema,
   DashboardWithoutId,
+  DisplayType,
   QuerySettings,
+  RawSqlChartConfig,
+  SavedChartConfig,
   SQLInterval,
   TileTemplateSchema,
-  TSourceUnion,
+  TSource,
 } from '@/types';
 
-import { SkipIndexMetadata } from './metadata';
+import { SkipIndexMetadata, TableMetadata } from './metadata';
 
 /** The default maximum number of buckets setting when determining a bucket duration for 'auto' granularity */
 export const DEFAULT_AUTO_GRANULARITY_MAX_BUCKETS = 60;
@@ -94,6 +102,118 @@ export function splitAndTrimWithBracket(input: string): string[] {
 // this will return the first one. We'll want to refine this over time
 export function getFirstTimestampValueExpression(valueExpression: string) {
   return splitAndTrimWithBracket(valueExpression)[0];
+}
+
+type TimestampTypeKind = 'date' | 'datetime' | 'datetime64';
+
+function classifyTimestampType(type: string | undefined): {
+  kind: TimestampTypeKind;
+  precision: number;
+} | null {
+  if (!type) return null;
+  // Strip a single Nullable() wrapper if present.
+  const inner = type.replace(/^Nullable\((.*)\)$/i, '$1').trim();
+
+  if (/^Date(?:32)?$/i.test(inner)) {
+    return { kind: 'date', precision: -1 };
+  }
+  if (/^DateTime$/i.test(inner)) {
+    return { kind: 'datetime', precision: 0 };
+  }
+  // DateTime64(<precision>[, '<timezone>'])
+  const dt64 = inner.match(/^DateTime64\(\s*(\d+)\s*(?:,[^)]*)?\)$/i);
+  if (dt64) {
+    return { kind: 'datetime64', precision: parseInt(dt64[1], 10) };
+  }
+  return null;
+}
+
+/**
+ * Resolve a (possibly multi-column) `timestampValueExpression` to the
+ * single column best suited for time-bucketing.
+ *
+ * When a source's `Timestamp Column` lists multiple columns (e.g.
+ * `"EventDate, EventTime"` for partition-pruning), the histogram bucket
+ * should be built from the highest-precision DateTime/DateTime64 token,
+ * not from the first one. Picking a `Date` for the bucket collapses an
+ * entire day into a single bar at midnight UTC.
+ *
+ * Falls back to the first token with a `console.warn` when no
+ * DateTime-typed token is found (e.g. all `Date`, CTE alias with no
+ * reachable metadata).
+ *
+ * Single-column inputs short-circuit without touching metadata.
+ */
+export async function pickBucketTimestampColumn({
+  timestampValueExpression,
+  metadata,
+  databaseName,
+  tableName,
+  connectionId,
+}: {
+  timestampValueExpression: string;
+  metadata: {
+    getColumn: (args: {
+      databaseName: string;
+      tableName: string;
+      column: string;
+      connectionId: string;
+    }) => Promise<{ type?: string } | undefined>;
+  };
+  databaseName: string;
+  tableName: string;
+  connectionId: string;
+}): Promise<string> {
+  const tokens = splitAndTrimWithBracket(timestampValueExpression);
+  if (tokens.length <= 1) {
+    return tokens[0] ?? timestampValueExpression;
+  }
+
+  if (!databaseName || !tableName) {
+    return tokens[0];
+  }
+
+  type Candidate = {
+    token: string;
+    kind: TimestampTypeKind;
+    precision: number;
+  };
+  const candidates: Candidate[] = [];
+
+  for (const token of tokens) {
+    let column: { type?: string } | undefined;
+    try {
+      column = await metadata.getColumn({
+        databaseName,
+        tableName,
+        column: token,
+        connectionId,
+      });
+    } catch {
+      // Column lookup failures shouldn't block rendering; treat the token
+      // as unresolvable and keep going.
+      continue;
+    }
+    const classified = classifyTimestampType(column?.type);
+    if (classified && classified.kind !== 'date') {
+      candidates.push({ token, ...classified });
+    }
+  }
+
+  if (candidates.length === 0) {
+    console.warn(
+      `pickBucketTimestampColumn: no DateTime/DateTime64 column found in ` +
+        `"${timestampValueExpression}"; falling back to the first token. ` +
+        `Buckets may collapse if the column is Date-typed.`,
+    );
+    return tokens[0];
+  }
+
+  // Highest precision wins. DateTime64 with higher precision beats
+  // DateTime64 with lower; DateTime64 beats DateTime; on a tie, earlier
+  // token in the expression wins to preserve the existing default.
+  candidates.sort((a, b) => b.precision - a.precision);
+  return candidates[0].token;
 }
 
 /** Returns true if the given expression is a JSON expression, eg. `col.key.nestedKey` or "json_col"."key" */
@@ -457,39 +577,89 @@ type TileTemplate = z.infer<typeof TileTemplateSchema>;
 
 export function convertToDashboardTemplate(
   input: Dashboard,
-  sources: TSourceUnion[],
+  sources: TSource[],
+  connections: Connection[] = [],
+  dashboards: Pick<Dashboard, 'id' | 'name'>[] = [],
 ): DashboardTemplate {
   const output: DashboardTemplate = {
     version: '0.1.0',
     name: input.name,
+    tags: input.tags.length > 0 ? input.tags : undefined,
     tiles: [],
+  };
+
+  // Replace onClick.target.id (a raw source or dashboard ID) with the
+  // corresponding name so the exported template is portable across instances.
+  // Template-mode targets are already name-based and left untouched. If the
+  // referenced source/dashboard no longer exists, drop the onClick entirely —
+  // OnClickTargetSchema requires id.min(1), so we can't emit an empty string.
+  const convertOnClickTargetIdToName = (config: SavedChartConfig) => {
+    const onClick = config.onClick;
+    if (!onClick || onClick.type === 'external' || onClick.target.mode !== 'id')
+      return;
+    const targetId = onClick.target.id;
+    const name =
+      onClick.type === 'search'
+        ? sources.find(source => source.id === targetId)?.name
+        : dashboards.find(dashboard => dashboard.id === targetId)?.name;
+    if (name == null || name === '') {
+      delete config.onClick;
+      return;
+    }
+    config.onClick = {
+      ...onClick,
+      target: { mode: 'id' as const, id: name },
+    };
   };
 
   const convertToTileTemplate = (
     input: Dashboard['tiles'][0],
-    sources: TSourceUnion[],
+    sources: TSource[],
+    connections: Connection[],
   ): TileTemplate => {
     const tile = TileTemplateSchema.strip().parse(structuredClone(input));
-    // Extract name from source or default to '' if not found
-    tile.config.source = (
-      sources.find(source => source.id === tile.config.source) ?? { name: '' }
-    ).name;
+    // Extract name from source/connection or default to '' if not found
+    const tileConfig = tile.config;
+    if (isBuilderSavedChartConfig(tileConfig)) {
+      tileConfig.source = (
+        sources.find(source => source.id === tileConfig.source) ?? { name: '' }
+      ).name;
+    } else if (isRawSqlSavedChartConfig(tileConfig)) {
+      tileConfig.connection = (
+        connections.find(conn => conn.id === tileConfig.connection) ?? {
+          name: '',
+        }
+      ).name;
+      if (tileConfig.source) {
+        tileConfig.source =
+          sources.find(source => source.id === tileConfig.source)?.name ?? '';
+      }
+    }
+    convertOnClickTargetIdToName(tileConfig);
     return tile;
   };
 
   const convertToFilterTemplate = (
     input: DashboardFilter,
-    sources: TSourceUnion[],
+    sources: TSource[],
   ): DashboardFilter => {
     const filter = DashboardFilterSchema.strip().parse(structuredClone(input));
     // Extract name from source or default to '' if not found
     filter.source =
       sources.find(source => source.id === input.source)?.name ?? '';
+    if (input.appliesToSourceIds?.length) {
+      const remapped = input.appliesToSourceIds
+        .map(id => sources.find(source => source.id === id)?.name)
+        .filter((name): name is string => !!name && name.length > 0);
+      filter.appliesToSourceIds = remapped.length > 0 ? remapped : undefined;
+    } else {
+      filter.appliesToSourceIds = undefined;
+    }
     return filter;
   };
 
   for (const tile of input.tiles) {
-    output.tiles.push(convertToTileTemplate(tile, sources));
+    output.tiles.push(convertToTileTemplate(tile, sources, connections));
   }
 
   if (input.filters) {
@@ -497,6 +667,19 @@ export function convertToDashboardTemplate(
     for (const filter of input.filters ?? []) {
       output.filters.push(convertToFilterTemplate(filter, sources));
     }
+  }
+
+  if (input.containers) {
+    output.containers = structuredClone(input.containers);
+  }
+
+  if (input.savedQuery != null) {
+    output.savedQuery = input.savedQuery;
+    output.savedQueryLanguage = input.savedQueryLanguage ?? null;
+  }
+
+  if (input.savedFilterValues && input.savedFilterValues.length > 0) {
+    output.savedFilterValues = structuredClone(input.savedFilterValues);
   }
 
   return output;
@@ -508,7 +691,7 @@ export function convertToDashboardDocument(
   const output: DashboardWithoutId = {
     name: input.name,
     tiles: [],
-    tags: [],
+    tags: input.tags ?? [],
   };
 
   // expecting that input.tiles[0-n].config.source fields are already converted to ids
@@ -534,11 +717,24 @@ export function convertToDashboardDocument(
     }
   }
 
+  if (input.containers) {
+    output.containers = structuredClone(input.containers);
+  }
+
+  if (input.savedQuery != null) {
+    output.savedQuery = input.savedQuery;
+    output.savedQueryLanguage = input.savedQueryLanguage ?? null;
+  }
+
+  if (input.savedFilterValues && input.savedFilterValues.length > 0) {
+    output.savedFilterValues = structuredClone(input.savedFilterValues);
+  }
+
   return output;
 }
 
 export const getFirstOrderingItem = (
-  orderBy: ChartConfigWithDateRange['orderBy'],
+  orderBy: BuilderChartConfigWithDateRange['orderBy'],
 ) => {
   if (!orderBy || orderBy.length === 0) return undefined;
 
@@ -559,7 +755,7 @@ export const removeTrailingDirection = (s: string) => {
 };
 
 export const isTimestampExpressionInFirstOrderBy = (
-  config: ChartConfigWithOptTimestamp,
+  config: BuilderChartConfigWithOptTimestamp,
 ) => {
   const firstOrderingItem = getFirstOrderingItem(config.orderBy);
   if (!firstOrderingItem || config.timestampValueExpression == null)
@@ -580,7 +776,7 @@ export const isTimestampExpressionInFirstOrderBy = (
 };
 
 export const isFirstOrderByAscending = (
-  orderBy: ChartConfigWithDateRange['orderBy'],
+  orderBy: BuilderChartConfigWithDateRange['orderBy'],
 ): boolean => {
   const primaryOrderingItem = getFirstOrderingItem(orderBy);
 
@@ -610,6 +806,9 @@ export function parseToStartOfFunction(
   const toStartOfMatches = expr.match(/(toStartOf\w+)\s*\(/);
 
   if (toStartOfMatches) {
+    const prefix = expr.substring(0, toStartOfMatches.index!);
+    if (prefix.trim() !== '') return undefined;
+
     const [toStartOfSubstring, toStartOfFunction] = toStartOfMatches;
 
     const argsStartIndex =
@@ -787,7 +986,10 @@ export function parseTokenizerFromTextIndex({
     return { key, value };
   });
 
-  const tokenizerArg = args.find(arg => arg.key === 'tokenizer')?.value;
+  const tokenizerArgRaw = args.find(arg => arg.key === 'tokenizer')?.value;
+
+  // Strip surrounding quotes if present (e.g., 'splitByNonAlpha' -> splitByNonAlpha)
+  const tokenizerArg = stripQuotes(tokenizerArgRaw ?? '');
   if (!tokenizerArg) {
     console.error(
       `Invalid tokenizer argument in index type ${typeFull}: ${tokenizerArg}`,
@@ -927,3 +1129,141 @@ export function parseTokenizerFromTextIndex({
       return undefined;
   }
 }
+
+/**
+ * Converts an aliasMap (e.g. from chSqlToAliasMap) to an array of WITH clause entries.
+ * These WITH clauses define aliases as expressions (isSubquery: false),
+ * making them available in WHERE and other clauses.
+ */
+export function aliasMapToWithClauses(
+  aliasMap: Record<string, string | undefined> | undefined,
+): BuilderChartConfig['with'] {
+  if (!aliasMap) {
+    return undefined;
+  }
+
+  const withClauses = Object.entries(aliasMap)
+    .filter(
+      (entry): entry is [string, string] =>
+        entry[1] != null && entry[1].trim() !== '',
+    )
+    .map(([name, value]) => ({
+      name,
+      sql: {
+        sql: value,
+        params: {},
+      },
+      isSubquery: false,
+    }));
+
+  return withClauses.length > 0 ? withClauses : undefined;
+}
+
+const stripQuotes = (s: string) => s.replace(/^["'`]|["'`]$/g, '');
+
+/** Parses and returns the cluster, database, and table from the given distributed table metadata */
+export function getDistributedTableArgs(
+  tableMetadata: TableMetadata,
+): { cluster: string; database: string; table: string } | undefined {
+  const args = tableMetadata.engine_full.match(/Distributed\((.+)\)$/)?.[1];
+  const splitArgs = splitAndTrimWithBracket(args ?? '');
+
+  if (splitArgs.length < 3) {
+    console.error(
+      `Failed to parse engine arguments for Distributed table: ${tableMetadata.engine_full}`,
+    );
+    return undefined;
+  }
+
+  return {
+    cluster: stripQuotes(splitArgs[0]),
+    database: stripQuotes(splitArgs[1]),
+    table: stripQuotes(splitArgs[2]),
+  };
+}
+
+export function displayTypeSupportsRawSqlAlerts(
+  displayType: DisplayType | undefined,
+): boolean {
+  return (
+    displayType === DisplayType.Line ||
+    displayType === DisplayType.StackedBar ||
+    displayType === DisplayType.Number
+  );
+}
+
+export function displayTypeSupportsBuilderAlerts(
+  displayType: DisplayType | undefined,
+): boolean {
+  return (
+    displayType === DisplayType.Line ||
+    displayType === DisplayType.StackedBar ||
+    displayType === DisplayType.Number
+  );
+}
+
+export function displayTypeSupportsPromQLAlerts(
+  displayType: DisplayType | undefined,
+): boolean {
+  // TODO: Support alerts for PromQL (HDX-4636)
+  // This looks funky, just doing it to satisfy knip
+  return displayType ? false : false;
+}
+
+export function validateRawSqlForAlert(chartConfig: RawSqlChartConfig): {
+  errors: string[];
+  warnings: string[];
+} {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  try {
+    if (!isRawSqlSavedChartConfig(chartConfig)) {
+      return { errors, warnings };
+    }
+
+    if (!displayTypeSupportsRawSqlAlerts(chartConfig.displayType)) {
+      errors.push(
+        `Display type ${chartConfig.displayType} does not support raw SQL alerts.`,
+      );
+    }
+
+    const sql = replaceMacros(chartConfig);
+
+    // Interval params are only required for time-series display types (Line, StackedBar).
+    // Number charts don't use interval bucketing.
+    if (isTimeSeriesDisplayType(chartConfig.displayType)) {
+      const hasInterval =
+        sql.includes(
+          QUERY_PARAMS[RawSqlQueryParam.intervalMilliseconds].name,
+        ) || sql.includes(QUERY_PARAMS[RawSqlQueryParam.intervalSeconds].name);
+      if (!hasInterval) {
+        errors.push(
+          `SQL used for alerts must include an interval parameter or macro.`,
+        );
+      }
+    }
+
+    const hasTimeFilter =
+      sql.includes(QUERY_PARAMS[RawSqlQueryParam.startDateMilliseconds].name) &&
+      sql.includes(QUERY_PARAMS[RawSqlQueryParam.endDateMilliseconds].name);
+    if (!hasTimeFilter) {
+      warnings.push(
+        `SQL used for alerts should include start and end date parameters or macros.`,
+      );
+    }
+
+    return { errors, warnings };
+  } catch {
+    // replaceMacros will often fail as users type in the SQL template
+    return { errors, warnings };
+  }
+}
+
+export const isTimeSeriesDisplayType = (
+  displayType: DisplayType | undefined,
+): boolean => {
+  return (
+    displayType === DisplayType.Line || displayType === DisplayType.StackedBar
+  );
+};

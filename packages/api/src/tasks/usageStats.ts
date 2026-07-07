@@ -1,6 +1,10 @@
 import { ResponseJSON } from '@hyperdx/common-utils/dist/clickhouse';
 import { ClickhouseClient } from '@hyperdx/common-utils/dist/clickhouse/node';
-import { MetricsDataType, SourceKind } from '@hyperdx/common-utils/dist/types';
+import {
+  MetricsDataType,
+  SourceKind,
+  TMetricSource,
+} from '@hyperdx/common-utils/dist/types';
 import * as HyperDX from '@hyperdx/node-opentelemetry';
 import ms from 'ms';
 import os from 'os';
@@ -12,26 +16,39 @@ import { Source, SourceDocument } from '@/models/source';
 import Team from '@/models/team';
 import User from '@/models/user';
 
-const logger = pino({
-  level: 'info',
-  transport: {
-    targets: [
-      HyperDX.getPinoTransport('info', {
-        headers: {
-          Authorization: '3f26ffad-14cf-4fb7-9dc9-e64fa0b84ee0', // hyperdx usage stats service api key
-        },
-        baseUrl: 'https://in-otel.hyperdx.io/v1/logs',
-        service: 'hyperdx-oss-usage-stats',
-      }),
-    ],
-  },
-});
+// Lazily construct the pino logger so the thread-stream worker isn't spawned
+// at module-load time. Importing this file (e.g. via api-app.ts during tests)
+// would otherwise create a worker thread that keeps Jest from exiting cleanly.
+// The logger is only instantiated when usage stats are actually reported,
+// which is gated by USAGE_STATS_ENABLED && !IS_CI in api-app.ts.
+let usageStatsLogger: pino.Logger | null = null;
+function getUsageStatsLogger(): pino.Logger {
+  if (!usageStatsLogger) {
+    usageStatsLogger = pino({
+      level: 'info',
+      transport: {
+        targets: [
+          HyperDX.getPinoTransport('info', {
+            headers: {
+              Authorization: '3f26ffad-14cf-4fb7-9dc9-e64fa0b84ee0', // hyperdx usage stats service api key
+            },
+            baseUrl: 'https://in-otel.hyperdx.io/v1/logs',
+            service: 'hyperdx-oss-usage-stats',
+          }),
+        ],
+      },
+    });
+  }
+  return usageStatsLogger;
+}
 
 function extractTableNames(source: SourceDocument): string[] {
   const tables: string[] = [];
   if (source.kind === SourceKind.Metric) {
+    // Cast to TMetricSource to access metricTables after kind narrowing
+    const metricSource = source;
     for (const key of Object.values(MetricsDataType)) {
-      const metricTable = source.metricTables?.[key];
+      const metricTable = metricSource.metricTables?.[key];
       if (!metricTable) continue;
       tables.push(metricTable);
     }
@@ -128,7 +145,7 @@ async function getUsageStats() {
       getClickhouseTableSize(),
     ]);
     const clusterId = team[0]?._id.toString();
-    logger.info(
+    getUsageStatsLogger().info(
       {
         clusterId,
         version: config.CODE_VERSION,

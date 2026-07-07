@@ -16,14 +16,12 @@ import {
   sub,
   subMilliseconds,
 } from 'date-fns';
-import { parseAsFloat, useQueryStates } from 'nuqs';
 import {
-  NumberParam,
-  StringParam,
-  useQueryParam,
-  useQueryParams,
-  withDefault,
-} from 'use-query-params';
+  parseAsFloat,
+  parseAsString,
+  useQueryState,
+  useQueryStates,
+} from 'nuqs';
 import { formatDate } from '@hyperdx/common-utils/dist/core/utils';
 import { DateRange } from '@hyperdx/common-utils/dist/types';
 
@@ -51,6 +49,7 @@ function isInputTimeQueryLive(inputTimeQuery: string) {
 }
 
 export function parseRelativeTimeQuery(interval: number) {
+  // eslint-disable-next-line no-restricted-syntax
   const end = startOfSecond(new Date());
   return [subMilliseconds(end, interval), end];
 }
@@ -62,7 +61,7 @@ export function parseTimeQuery(
   return parseTimeRangeInput(timeQuery, isUTC);
 }
 
-export function parseValidTimeRange(
+function parseValidTimeRange(
   timeQuery: string,
   isUTC: boolean,
 ): [Date, Date] | undefined {
@@ -95,14 +94,10 @@ export function useTimeQuery({
     undefined | string
   >(undefined);
 
-  const [_timeRangeQuery, setTimeRangeQuery] = useQueryParams(
+  const [_timeRangeQuery, setTimeRangeQuery] = useQueryStates(
+    timeRangeQueryStateMap,
     {
-      from: withDefault(NumberParam, undefined),
-      to: withDefault(NumberParam, undefined),
-    },
-    {
-      updateType: 'pushIn',
-      enableBatching: true,
+      history: 'push',
     },
   );
 
@@ -115,14 +110,10 @@ export function useTimeQuery({
   );
 
   // Allow browser back/fwd button to modify the displayed time input value
-  const [inputTimeQuery, setInputTimeQuery] = useQueryParam(
-    'tq',
-    withDefault(StringParam, ''),
-    {
-      updateType: 'pushIn',
-      enableBatching: true,
-    },
-  );
+  const [inputTimeQuery, setInputTimeQuery] = useQueryState('tq', {
+    ...parseAsString.withDefault(''),
+    history: 'push',
+  });
   const prevInputTimeQuery = usePrevious(inputTimeQuery);
 
   useEffect(() => {
@@ -260,6 +251,7 @@ export function useTimeQuery({
     ) {
       // If we haven't set a live tail time range yet, but we're ready and should be in live tail, let's just return one right now
       // this is due to the first interval of live tail not kicking in until 2 seconds after our first render
+      // eslint-disable-next-line no-restricted-syntax
       const end = startOfSecond(new Date());
       const newLiveTailTimeRange: [Date, Date] = [
         sub(end, { minutes: 15 }),
@@ -269,6 +261,7 @@ export function useTimeQuery({
     } else {
       // We're not ready yet, safe to return anything.
       // Downstream querying components need to be disabled on isReady
+      // eslint-disable-next-line no-restricted-syntax
       return [new Date(), new Date()];
     }
   }, [
@@ -292,6 +285,7 @@ export function useTimeQuery({
     );
   }, [isReady, isLiveEnabled, timeRangeQuery, inputTimeQuery]);
   const refreshLiveTailTimeRange = () => {
+    // eslint-disable-next-line no-restricted-syntax
     const end = startOfSecond(new Date());
     setLiveTailTimeRange([sub(end, { minutes: 15 }), end]);
   };
@@ -317,7 +311,7 @@ export function useTimeQuery({
     (newIsLive: boolean) => {
       if (isLive === false && newIsLive) {
         setTempLiveTailTimeRange(undefined);
-        setTimeRangeQuery({ from: undefined, to: undefined });
+        setTimeRangeQuery({ from: null, to: null });
         setDisplayedTimeInputValue(LIVE_TAIL_TIME_QUERY);
         setInputTimeQuery(LIVE_TAIL_TIME_QUERY);
         refreshLiveTailTimeRange();
@@ -529,6 +523,7 @@ export function useNewTimeQuery({
 }
 
 export function getLiveTailTimeRange(): [Date, Date] {
+  // eslint-disable-next-line no-restricted-syntax
   const end = startOfSecond(new Date());
   return [sub(end, { minutes: 15 }), end];
 }

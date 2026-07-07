@@ -1,7 +1,12 @@
 import { useCallback, useMemo } from 'react';
 import { pick } from 'lodash';
 import { parseAsString, useQueryState } from 'nuqs';
-import { DisplayType, type Filter } from '@hyperdx/common-utils/dist/types';
+import {
+  DisplayType,
+  type Filter,
+  pickSampleWeightExpressionProps,
+  SourceKind,
+} from '@hyperdx/common-utils/dist/types';
 import { Drawer, Grid, Text } from '@mantine/core';
 import { IconServer } from '@tabler/icons-react';
 
@@ -25,7 +30,10 @@ export default function ServiceDashboardDbQuerySidePanel({
   service?: string;
   searchedTimeRange: [Date, Date];
 }) {
-  const { data: source } = useSource({ id: sourceId });
+  const { data: source } = useSource({
+    id: sourceId,
+    kinds: [SourceKind.Trace],
+  });
   const { expressions } = useServiceDashboardExpressions({ source });
 
   const [dbQuery, setDbQuery] = useQueryState('dbquery', parseAsString);
@@ -87,7 +95,7 @@ export default function ServiceDashboardDbQuerySidePanel({
             onClose={onClose}
           />
           <DrawerBody>
-            <Grid grow={false} w="100%" maw="100%" overflow="hidden">
+            <Grid grow={false} w="100%" maw="100%">
               <Grid.Col span={6}>
                 <ChartBox style={{ height: 350 }}>
                   {source && expressions && (
@@ -102,6 +110,7 @@ export default function ServiceDashboardDbQuerySidePanel({
                           'connection',
                           'from',
                         ]),
+                        ...pickSampleWeightExpressionProps(source),
                         where: '',
                         whereLanguage: 'sql',
                         select: [
@@ -139,6 +148,7 @@ export default function ServiceDashboardDbQuerySidePanel({
                           'connection',
                           'from',
                         ]),
+                        ...pickSampleWeightExpressionProps(source),
                         where: '',
                         whereLanguage: 'sql',
                         select: [

@@ -1,8 +1,9 @@
 import type {
   BaseResultSet,
+  ClickHouseClient as WebClickHouseClient,
   ClickHouseSettings,
   DataFormat,
-} from '@clickhouse/client-common';
+} from '@clickhouse/client-web';
 import { createClient } from '@clickhouse/client-web';
 
 import {
@@ -11,7 +12,10 @@ import {
   QueryInputs,
 } from './index';
 
-const localModeFetch: typeof fetch = (input, init) => {
+const localModeFetch: typeof fetch = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => {
   if (!init) init = {};
   const url = new URL(
     input instanceof URL ? input : input instanceof Request ? input.url : input,
@@ -26,11 +30,15 @@ const localModeFetch: typeof fetch = (input, init) => {
   delete init.headers?.['authorization'];
   if (username) url.searchParams.set('user', username);
   if (password) url.searchParams.set('password', password);
+  init.credentials = 'omit';
 
   return fetch(`${url.toString()}`, init);
 };
 
-const standardModeFetch: typeof fetch = (input, init) => {
+const standardModeFetch: typeof fetch = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => {
   if (!init) init = {};
   // authorization is handled on the backend, don't send this header
   delete init.headers?.['Authorization'];
@@ -63,6 +71,13 @@ export const testLocalConnection = async ({
 export class ClickhouseClient extends BaseClickhouseClient {
   constructor(options: ClickhouseClientOptions) {
     super(options);
+  }
+
+  // This subclass always builds a web client, so narrow the base class's
+  // platform-agnostic client type to the web-specific one.
+  protected getClient(): WebClickHouseClient {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- subclass always builds a web client
+    return super.getClient() as WebClickHouseClient;
   }
 
   private buildClient() {
@@ -105,6 +120,7 @@ export class ClickhouseClient extends BaseClickhouseClient {
     clickhouse_settings: externalClickhouseSettings,
     connectionId,
     queryId,
+    shouldSkipApplySettings,
   }: QueryInputs<Format>): Promise<BaseResultSet<ReadableStream, Format>> {
     // FIXME: we couldn't initialize the client in the constructor
     // since the window is not avalible
@@ -114,9 +130,20 @@ export class ClickhouseClient extends BaseClickhouseClient {
 
     this.logDebugQuery(query, query_params);
 
-    const clickhouseSettings = this.processClickhouseSettings(
-      externalClickhouseSettings,
-    );
+    let clickhouseSettings: ClickHouseSettings | undefined;
+    // If this is the settings query, we must not process the clickhouse settings, or else we will infinitely recurse
+    if (!shouldSkipApplySettings) {
+      const neutralSettings = await this.processClickhouseSettings({
+        connectionId,
+        externalClickhouseSettings,
+      });
+      // processClickhouseSettings produces @clickhouse/client-common's
+      // ClickHouseSettings. It is structurally identical to the web client's
+      // own (self-bundled, since 1.23) ClickHouseSettings, but the two packages'
+      // copies are distinct nominal types, so bridge explicitly.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- client library type mismatch
+      clickhouseSettings = neutralSettings as ClickHouseSettings;
+    }
 
     const httpHeaders: { [header: string]: string } = {
       ...(connectionId && connectionId !== 'local'

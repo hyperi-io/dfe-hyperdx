@@ -1,4 +1,4 @@
-import { TeamClickHouseSettings } from '@hyperdx/common-utils/dist/types';
+import { TeamClickHouseSettingsUpdate } from '@hyperdx/common-utils/dist/types';
 import mongoose from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -6,7 +6,11 @@ import * as config from '@/config';
 import type { ObjectId } from '@/models';
 import Dashboard from '@/models/dashboard';
 import { SavedSearch } from '@/models/savedSearch';
-import Team from '@/models/team';
+import Team, { type ITeam, type TeamDocument } from '@/models/team';
+
+export function getTeamInviteUrl(token: string) {
+  return `${config.FRONTEND_URL}/join-team?token=${token}`;
+}
 
 const LOCAL_APP_TEAM_ID = '_local_team_';
 export const LOCAL_APP_TEAM = {
@@ -57,9 +61,20 @@ export function getAllTeams(fields?: string[]) {
   return Team.find({}, fields);
 }
 
-export function getTeam(id?: string | ObjectId, fields?: string[]) {
+export function getTeam<const F extends readonly (keyof ITeam)[]>(
+  id: string | ObjectId,
+  fields: F,
+): mongoose.Query<
+  mongoose.HydratedDocument<Pick<ITeam, F[number]>> | null,
+  any
+>;
+export function getTeam(
+  id: string | ObjectId,
+): mongoose.Query<TeamDocument | null, any>;
+export function getTeam(id: string | ObjectId, fields?: readonly string[]) {
   if (config.IS_LOCAL_APP_MODE) {
-    return LOCAL_APP_TEAM;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+    return LOCAL_APP_TEAM as any;
   }
 
   return Team.findOne({}, fields);
@@ -83,9 +98,24 @@ export function setTeamName(teamId: ObjectId, name: string) {
 
 export function updateTeamClickhouseSettings(
   teamId: ObjectId,
-  settings: TeamClickHouseSettings,
+  settings: TeamClickHouseSettingsUpdate,
 ) {
-  return Team.findByIdAndUpdate(teamId, settings, { new: true });
+  const $set: Record<string, any> = {};
+  const $unset: Record<string, any> = {};
+
+  for (const [key, value] of Object.entries(settings)) {
+    if (value === null) {
+      $unset[key] = '';
+    } else if (value !== undefined) {
+      $set[key] = value;
+    }
+  }
+
+  const update: Record<string, any> = {};
+  if (Object.keys($set).length > 0) update.$set = $set;
+  if (Object.keys($unset).length > 0) update.$unset = $unset;
+
+  return Team.findByIdAndUpdate(teamId, update, { new: true });
 }
 
 export async function getTags(teamId: ObjectId) {

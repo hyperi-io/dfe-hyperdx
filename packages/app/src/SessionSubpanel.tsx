@@ -2,15 +2,15 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import cx from 'classnames';
 import throttle from 'lodash/throttle';
 import { parseAsInteger, useQueryState } from 'nuqs';
-import ReactDOM from 'react-dom';
 import { useForm } from 'react-hook-form';
 import { tcFromSource } from '@hyperdx/common-utils/dist/core/metadata';
 import {
   ChartConfigWithOptDateRange,
   DateRange,
-  SearchCondition,
+  pickSampleWeightExpressionProps,
   SearchConditionLanguage,
-  TSource,
+  TSessionSource,
+  TTraceSource,
 } from '@hyperdx/common-utils/dist/types';
 import {
   ActionIcon,
@@ -33,17 +33,17 @@ import {
 
 import DBRowSidePanel from '@/components/DBRowSidePanel';
 import { RowWhereResult, WithClause } from '@/hooks/useRowWhere';
+import { useZIndex, ZIndexContext } from '@/zIndex';
 
-import { SQLInlineEditorControlled } from './components/SQLInlineEditor';
+import SearchWhereInput from './components/SearchInput/SearchWhereInput';
 import useFieldExpressionGenerator from './hooks/useFieldExpressionGenerator';
 import DOMPlayer from './DOMPlayer';
 import Playbar from './Playbar';
-import SearchInputV2 from './SearchInputV2';
 import { SessionEventList } from './SessionEventList';
 import { FormatTime } from './useFormatTime';
 import { formatmmss, useLocalStorage, usePrevious } from './utils';
 
-import styles from '../styles/SessionSubpanelV2.module.scss';
+import styles from '@styles/SessionSubpanelV2.module.scss';
 
 const MemoPlaybar = memo(Playbar);
 
@@ -56,7 +56,7 @@ function useSessionChartConfigs({
   end,
   tab,
 }: {
-  traceSource: TSource;
+  traceSource: TTraceSource;
   rumSessionId: string;
   where: string;
   whereLanguage?: SearchConditionLanguage;
@@ -188,6 +188,8 @@ function useSessionChartConfigs({
       where,
       timestampValueExpression: traceSource.timestampValueExpression,
       implicitColumnExpression: traceSource.implicitColumnExpression,
+      useTextIndexForImplicitColumn: traceSource.useTextIndexForImplicitColumn,
+      ...pickSampleWeightExpressionProps(traceSource),
       connection: traceSource.connection,
       orderBy: `${traceSource.timestampValueExpression} ASC`,
       limit: {
@@ -233,36 +235,27 @@ export default function SessionSubpanel({
   traceSource,
   sessionSource,
   session,
-  onPropertyAddClick,
-  generateChartUrl,
-  generateSearchUrl,
   setDrawerOpen,
   rumSessionId,
   start,
   end,
   initialTs,
-  where,
   whereLanguage = 'lucene',
+  onLanguageChange,
 }: {
-  traceSource: TSource;
-  sessionSource: TSource;
+  traceSource: TTraceSource;
+  sessionSource: TSessionSource;
   session: { serviceName: string };
-  generateSearchUrl?: (query?: string, timeRange?: [Date, Date]) => string;
-  generateChartUrl?: (config: {
-    aggFn: string;
-    field: string;
-    groupBy: string[];
-  }) => string;
-
-  onPropertyAddClick?: (name: string, value: string) => void;
   setDrawerOpen: (open: boolean) => void;
   rumSessionId: string;
   start: Date;
   end: Date;
   initialTs?: number;
-  where?: SearchCondition;
   whereLanguage?: SearchConditionLanguage;
+  onLanguageChange?: (lang: 'sql' | 'lucene') => void;
 }) {
+  const contextZIndex = useZIndex();
+
   const [rowId, setRowId] = useState<string | undefined>(undefined);
   const [aliasWith, setAliasWith] = useState<WithClause[]>([]);
 
@@ -426,6 +419,7 @@ export default function SessionSubpanel({
   const { control, handleSubmit } = useForm({
     values: {
       where: searchedQuery,
+      whereLanguage,
     },
   });
   const handleWhereSubmit = useCallback(
@@ -461,15 +455,18 @@ export default function SessionSubpanel({
     <div className={styles.wrapper}>
       {rowId != null && traceSource && (
         <Portal>
-          <DBRowSidePanel
-            source={traceSource}
-            rowId={rowId}
-            aliasWith={aliasWith}
-            onClose={() => {
-              setDrawerOpen(false);
-              setRowId(undefined);
-            }}
-          />
+          <ZIndexContext.Provider value={contextZIndex}>
+            <DBRowSidePanel
+              source={traceSource}
+              rowId={rowId}
+              aliasWith={aliasWith}
+              isNestedPanel
+              onClose={() => {
+                setDrawerOpen(false);
+                setRowId(undefined);
+              }}
+            />
+          </ZIndexContext.Provider>
         </Portal>
       )}
       <div className={cx(styles.eventList, { 'd-none': playerFullWidth })}>
@@ -478,29 +475,16 @@ export default function SessionSubpanel({
             style={{ zIndex: 100, width: '100%' }}
             onSubmit={handleSubmit(handleWhereSubmit)}
           >
-            {whereLanguage === 'sql' ? (
-              <SQLInlineEditorControlled
-                tableConnection={tcFromSource(traceSource)}
-                control={control}
-                name="where"
-                placeholder="SQL WHERE clause (ex. column = 'foo')"
-                language="sql"
-                size="xs"
-                enableHotkey
-                onSubmit={handleSubmit(handleWhereSubmit)}
-              />
-            ) : (
-              <SearchInputV2
-                tableConnection={tcFromSource(traceSource)}
-                control={control}
-                name="where"
-                language="lucene"
-                size="xs"
-                placeholder="Search your events w/ Lucene ex. column:foo"
-                enableHotkey
-                onSubmit={handleSubmit(handleWhereSubmit)}
-              />
-            )}
+            <SearchWhereInput
+              tableConnection={tcFromSource(traceSource)}
+              control={control}
+              name="where"
+              size="xs"
+              showLabel={false}
+              enableHotkey
+              onSubmit={handleSubmit(handleWhereSubmit)}
+              onLanguageChange={onLanguageChange}
+            />
           </form>
           <Group gap={6}>
             <SegmentedControl

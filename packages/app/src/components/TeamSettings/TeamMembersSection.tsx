@@ -18,11 +18,12 @@ import { notifications } from '@mantine/notifications';
 import { IconLock, IconUserPlus } from '@tabler/icons-react';
 
 import api from '@/api';
+import { useBrandDisplayName } from '@/theme/ThemeProvider';
 
 export default function TeamMembersSection() {
+  const brandName = useBrandDisplayName();
   const hasAdminAccess = true;
 
-  const { data: team } = api.useTeam();
   const {
     data: members,
     isLoading: isLoadingMembers,
@@ -85,8 +86,7 @@ export default function TeamMembersSection() {
                 .catch(() => {
                   notifications.show({
                     color: 'red',
-                    message:
-                      'Something went wrong. Please contact HyperDX team.',
+                    message: `Something went wrong. Please contact ${brandName} team.`,
 
                     autoClose: 5000,
                   });
@@ -94,7 +94,7 @@ export default function TeamMembersSection() {
             } else {
               notifications.show({
                 color: 'red',
-                message: 'Something went wrong. Please contact HyperDX team.',
+                message: `Something went wrong. Please contact ${brandName} team.`,
                 autoClose: 5000,
               });
             }
@@ -143,8 +143,7 @@ export default function TeamMembersSection() {
                 .catch(() => {
                   notifications.show({
                     color: 'red',
-                    message:
-                      'Something went wrong. Please contact HyperDX team.',
+                    message: `Something went wrong. Please contact ${brandName} team.`,
 
                     autoClose: 5000,
                   });
@@ -152,7 +151,7 @@ export default function TeamMembersSection() {
             } else {
               notifications.show({
                 color: 'red',
-                message: 'Something went wrong. Please contact HyperDX team.',
+                message: `Something went wrong. Please contact ${brandName} team.`,
                 autoClose: 5000,
               });
             }
@@ -187,15 +186,14 @@ export default function TeamMembersSection() {
                 .catch(() => {
                   notifications.show({
                     color: 'red',
-                    message:
-                      'Something went wrong. Please contact HyperDX team.',
+                    message: `Something went wrong. Please contact ${brandName} team.`,
                     autoClose: 5000,
                   });
                 });
             } else {
               notifications.show({
                 color: 'red',
-                message: 'Something went wrong. Please contact HyperDX team.',
+                message: `Something went wrong. Please contact ${brandName} team.`,
                 autoClose: 5000,
               });
             }
@@ -206,15 +204,15 @@ export default function TeamMembersSection() {
   };
 
   return (
-    <Box id="team_members">
-      <Text size="md">Team</Text>
+    <Box id="team_members" data-testid="team-members-section">
+      <Text size="md">Team Members</Text>
       <Divider my="md" />
-
       <Card>
         <Card.Section withBorder py="sm" px="lg">
           <Group align="center" justify="space-between">
             <div className="fs-7">Team Members</div>
             <Button
+              data-testid="invite-member-button"
               variant="primary"
               leftSection={<IconUserPlus size={16} />}
               onClick={() => setTeamInviteModalShow(true)}
@@ -228,7 +226,7 @@ export default function TeamMembersSection() {
             <Table.Tbody>
               {!isLoadingMembers &&
                 Array.isArray(members?.data) &&
-                members?.data.map((member: any) => (
+                members?.data.map(member => (
                   <Table.Tr key={member.email}>
                     <Table.Td>
                       <div>
@@ -284,8 +282,8 @@ export default function TeamMembersSection() {
                   </Table.Tr>
                 ))}
               {!isLoadingInvitations &&
-                Array.isArray(invitations.data) &&
-                invitations.data.map((invitation: any) => (
+                Array.isArray(invitations?.data) &&
+                invitations.data.map(invitation => (
                   <Table.Tr key={invitation.email} className="mt-2">
                     <Table.Td>
                       <span className="text-white fw-bold fs-7">
@@ -362,6 +360,7 @@ export default function TeamMembersSection() {
           </Text>
           <Group justify="flex-end" gap="xs">
             <Button
+              data-testid="cancel-delete-member"
               variant="secondary"
               onClick={() =>
                 setDeleteTeamMemberConfirmationModalData({
@@ -374,6 +373,7 @@ export default function TeamMembersSection() {
               Cancel
             </Button>
             <Button
+              data-testid="confirm-delete-member"
               variant="danger"
               onClick={() =>
                 deleteTeamMemberConfirmationModalData.id &&
@@ -409,6 +409,7 @@ function InviteTeamMemberForm({
     >
       <Stack>
         <TextInput
+          data-testid="invite-email-input"
           label="Email"
           name="email"
           type="email"
@@ -422,6 +423,7 @@ function InviteTeamMemberForm({
           The invite link will automatically expire after 30 days.
         </div>
         <Button
+          data-testid="send-invite-button"
           variant="primary"
           type="submit"
           disabled={!email || isSubmitting}

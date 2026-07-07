@@ -1,7 +1,12 @@
 import { useCallback, useMemo, useState } from 'react';
-import { ClickHouseQueryError } from '@hyperdx/common-utils/dist/clickhouse';
+import { isRatioChartConfig } from '@hyperdx/common-utils/dist/core/renderChartConfig';
+import {
+  isBuilderChartConfig,
+  isPromqlChartConfig,
+  isRawSqlChartConfig,
+} from '@hyperdx/common-utils/dist/guards';
 import { ChartConfigWithOptTimestamp } from '@hyperdx/common-utils/dist/types';
-import { Box, Code, Text } from '@mantine/core';
+import { Text } from '@mantine/core';
 import { SortingState } from '@tanstack/react-table';
 
 import {
@@ -11,14 +16,17 @@ import {
 import { Table, TableVariant } from '@/HDXMultiSeriesTableChart';
 import { useMVOptimizationExplanation } from '@/hooks/useMVOptimizationExplanation';
 import useOffsetPaginatedQuery from '@/hooks/useOffsetPaginatedQuery';
-import { useSource } from '@/source';
+import { useOnClickLinkBuilder } from '@/hooks/useOnClickLinkBuilder';
+import { useChartNumberFormats, useSource } from '@/source';
 import { useIntersectionObserver } from '@/utils';
 
 import ChartContainer from './charts/ChartContainer';
+import ChartErrorState, {
+  ChartErrorStateVariant,
+} from './charts/ChartErrorState';
+import { getClientSideSortingFn } from './DBTable/sorting';
 import MVOptimizationIndicator from './MaterializedViews/MVOptimizationIndicator';
-import { SQLPreview } from './ChartSQLPreview';
 
-// TODO: Support clicking in to view matched events
 export default function DBTableChart({
   config,
   getRowSearchLink,
@@ -26,12 +34,13 @@ export default function DBTableChart({
   queryKeyPrefix,
   onSortingChange,
   sort: controlledSort,
-  hiddenColumns = [],
+  hiddenColumns,
   title,
   toolbarPrefix,
   toolbarSuffix,
   showMVOptimizationIndicator = true,
   variant,
+  errorVariant,
 }: {
   config: ChartConfigWithOptTimestamp;
   getRowSearchLink?: (row: any) => string | null;
@@ -45,10 +54,13 @@ export default function DBTableChart({
   toolbarSuffix?: React.ReactNode[];
   showMVOptimizationIndicator?: boolean;
   variant?: TableVariant;
+  errorVariant?: ChartErrorStateVariant;
 }) {
   const [sort, setSort] = useState<SortingState>([]);
 
-  const { data: source } = useSource({ id: config.source });
+  const { data: source } = useSource({
+    id: config.source,
+  });
 
   const effectiveSort = useMemo(
     () => controlledSort || sort,
@@ -66,6 +78,9 @@ export default function DBTableChart({
   );
 
   const queriedConfig = useMemo(() => {
+    if (isRawSqlChartConfig(config)) return config;
+    if (isPromqlChartConfig(config)) return config;
+
     const _config = convertToTableChartConfig(config);
 
     if (effectiveSort.length) {
@@ -79,8 +94,9 @@ export default function DBTableChart({
     return _config;
   }, [config, effectiveSort]);
 
-  const { data: mvOptimizationData } =
-    useMVOptimizationExplanation(queriedConfig);
+  const { data: mvOptimizationData } = useMVOptimizationExplanation(
+    isBuilderChartConfig(queriedConfig) ? queriedConfig : undefined,
+  );
 
   const { data, fetchNextPage, hasNextPage, isLoading, isError, error } =
     useOffsetPaginatedQuery(queriedConfig, {
@@ -91,6 +107,10 @@ export default function DBTableChart({
 
   // Returns an array of aliases, so we can check if something is using an alias
   const aliasMap = useMemo(() => {
+    if (isRawSqlChartConfig(config) || isPromqlChartConfig(config)) {
+      return [];
+    }
+
     // If the config.select is a string, we can't infer this.
     // One day, we could potentially run this through chSqlToAliasMap but AST parsing
     //  doesn't work for most DBTableChart queries.
@@ -103,20 +123,47 @@ export default function DBTableChart({
       }
       return acc;
     }, [] as string[]);
-  }, [config.select]);
+  }, [config]);
+
+  const { formatByColumn } = useChartNumberFormats(queriedConfig, data?.meta);
+
   const columns = useMemo(() => {
     const rows = data?.data ?? [];
     if (rows.length === 0) {
       return [];
     }
 
+    const firstRow = rows.at(0);
+    const allKeys = firstRow ? Object.keys(firstRow) : [];
+
+    // We extract groupBy keys by counting the series columns to avoid parsing
+    // the groupBy string, which may have complex expressions and aliases, making
+    // it difficult to reliably parse out the individual group by keys.
     let groupByKeys: string[] = [];
-    if (queriedConfig.groupBy && typeof queriedConfig.groupBy === 'string') {
-      groupByKeys = queriedConfig.groupBy.split(',').map(v => v.trim());
+    if (
+      isBuilderChartConfig(queriedConfig) &&
+      Array.isArray(queriedConfig.select)
+    ) {
+      const isRatio = isRatioChartConfig(queriedConfig.select, queriedConfig);
+      const seriesCount = isRatio ? 1 : queriedConfig.select.length;
+      const groupByCount = allKeys.length - seriesCount;
+      groupByKeys = groupByCount > 0 ? allKeys.slice(-groupByCount) : [];
     }
 
-    return Object.keys(rows?.[0])
-      .filter(key => !hiddenColumns.includes(key))
+    // Builder table configs may opt to render Group By columns
+    // to the left of series columns.
+    let orderedKeys = [...allKeys];
+    if (
+      isBuilderChartConfig(queriedConfig) &&
+      queriedConfig.groupByColumnsOnLeft &&
+      Array.isArray(queriedConfig.select)
+    ) {
+      const seriesKeys = allKeys.filter(key => !groupByKeys.includes(key));
+      orderedKeys = [...groupByKeys, ...seriesKeys];
+    }
+
+    return orderedKeys
+      .filter(key => !hiddenColumns?.includes(key))
       .map(key => ({
         // If it's an alias, wrap in quotes to support a variety of formats (ex "Time (ms)", "Req/s", etc)
         id: aliasMap.includes(key) ? `"${key}"` : key,
@@ -124,15 +171,10 @@ export default function DBTableChart({
         displayName: key,
         numberFormat: groupByKeys.includes(key)
           ? undefined
-          : config.numberFormat,
+          : (formatByColumn.get(key) ?? queriedConfig.numberFormat),
+        sortingFn: getClientSideSortingFn(data?.meta, key),
       }));
-  }, [
-    config.numberFormat,
-    aliasMap,
-    queriedConfig.groupBy,
-    data,
-    hiddenColumns,
-  ]);
+  }, [data, queriedConfig, hiddenColumns, aliasMap, formatByColumn]);
 
   const toolbarItemsMemo = useMemo(() => {
     const allToolbarItems = [];
@@ -141,7 +183,11 @@ export default function DBTableChart({
       allToolbarItems.push(...toolbarPrefix);
     }
 
-    if (source && showMVOptimizationIndicator) {
+    if (
+      source &&
+      showMVOptimizationIndicator &&
+      isBuilderChartConfig(queriedConfig)
+    ) {
       allToolbarItems.push(
         <MVOptimizationIndicator
           key="db-table-chart-mv-indicator"
@@ -175,6 +221,11 @@ export default function DBTableChart({
     queriedConfig,
   ]);
 
+  const getRowAction = useOnClickLinkBuilder({
+    onClick: config.onClick,
+    dateRange: queriedConfig.dateRange,
+  });
+
   return (
     <ChartContainer title={title} toolbarItems={toolbarItemsMemo}>
       {isLoading && !data ? (
@@ -182,32 +233,7 @@ export default function DBTableChart({
           Loading Chart Data...
         </div>
       ) : isError && error ? (
-        <div className="h-100 w-100 align-items-center justify-content-center text-muted overflow-scroll">
-          <Text ta="center" size="sm" mt="sm">
-            Error loading chart, please check your query or try again later.
-          </Text>
-          <Box mt="sm">
-            <Text my="sm" size="sm" ta="center">
-              Error Message:
-            </Text>
-            <Code
-              block
-              style={{
-                whiteSpace: 'pre-wrap',
-              }}
-            >
-              {error.message}
-            </Code>
-            {error instanceof ClickHouseQueryError && (
-              <>
-                <Text my="sm" size="sm" ta="center">
-                  Sent Query:
-                </Text>
-                <SQLPreview data={error?.query} />
-              </>
-            )}
-          </Box>
-        </div>
+        <ChartErrorState error={error} variant={errorVariant} />
       ) : data?.data.length === 0 ? (
         <div className="d-flex h-100 w-100 align-items-center justify-content-center text-muted">
           No data found within time range.
@@ -216,8 +242,10 @@ export default function DBTableChart({
         <Table
           data={data?.data ?? []}
           columns={columns}
-          getRowSearchLink={getRowSearchLink}
+          getRowAction={getRowAction ?? undefined}
+          getRowSearchLink={getRowAction ? undefined : getRowSearchLink}
           sorting={effectiveSort}
+          enableClientSideSorting={isRawSqlChartConfig(config)}
           onSortingChange={handleSortingChange}
           variant={variant}
           tableBottom={

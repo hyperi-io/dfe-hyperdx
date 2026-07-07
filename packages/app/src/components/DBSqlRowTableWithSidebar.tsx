@@ -1,8 +1,11 @@
 import { useCallback, useState } from 'react';
 import { useQueryState } from 'nuqs';
-import { ClickHouseQueryError } from '@hyperdx/common-utils/dist/clickhouse';
 import {
-  ChartConfigWithDateRange,
+  ClickHouseQueryError,
+  ColumnMetaType,
+} from '@hyperdx/common-utils/dist/clickhouse';
+import {
+  BuilderChartConfigWithDateRange,
   TSource,
 } from '@hyperdx/common-utils/dist/types';
 import { SortingState } from '@tanstack/react-table';
@@ -11,7 +14,9 @@ import { RowWhereResult, WithClause } from '@/hooks/useRowWhere';
 import { useSource } from '@/source';
 import TabBar from '@/TabBar';
 import { useLocalStorage } from '@/utils';
+import { parseAsStringEncoded } from '@/utils/queryParsers';
 
+import { ChartErrorStateVariant } from './charts/ChartErrorState';
 import { useNestedPanelState } from './ContextSidePanel';
 import { RowDataPanel } from './DBRowDataPanel';
 import { RowOverviewPanel } from './DBRowOverviewPanel';
@@ -24,7 +29,7 @@ import { DBRowTableVariant, DBSqlRowTable } from './DBRowTable';
 
 interface Props {
   sourceId: string;
-  config: ChartConfigWithDateRange;
+  config: BuilderChartConfigWithDateRange;
   onError?: (error: Error | ClickHouseQueryError) => void;
   onScroll?: (scrollTop: number) => void;
   onSidebarOpen?: (rowId: string) => void;
@@ -41,6 +46,10 @@ interface Props {
   onSortingChange?: (v: SortingState | null) => void;
   initialSortBy?: SortingState;
   variant?: DBRowTableVariant;
+  enableSmallFirstWindow?: boolean;
+  tableId?: string;
+  errorVariant?: ChartErrorStateVariant;
+  onResolvedColumnsChange?: (meta: ColumnMetaType[]) => void;
 }
 
 export default function DBSqlRowTableWithSideBar({
@@ -60,9 +69,13 @@ export default function DBSqlRowTableWithSideBar({
   onSortingChange,
   initialSortBy,
   variant,
+  enableSmallFirstWindow,
+  tableId,
+  errorVariant,
+  onResolvedColumnsChange,
 }: Props) {
   const { data: sourceData } = useSource({ id: sourceId });
-  const [rowId, setRowId] = useQueryState('rowWhere');
+  const [rowId, setRowId] = useQueryState('rowWhere', parseAsStringEncoded);
   const [rowSource, setRowSource] = useQueryState('rowSource');
   const [aliasWith, setAliasWith] = useState<WithClause[]>([]);
   const { setContextRowId, setContextRowSource } = useNestedPanelState();
@@ -138,6 +151,10 @@ export default function DBSqlRowTableWithSideBar({
         onExpandedRowsChange={onExpandedRowsChange}
         collapseAllRows={collapseAllRows}
         variant={variant}
+        enableSmallFirstWindow={enableSmallFirstWindow}
+        tableId={tableId}
+        errorVariant={errorVariant}
+        onResolvedColumnsChange={onResolvedColumnsChange}
       />
     </RowSidePanelContext.Provider>
   );

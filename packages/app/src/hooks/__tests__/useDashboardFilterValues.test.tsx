@@ -5,15 +5,15 @@ import { Metadata } from '@hyperdx/common-utils/dist/core/metadata';
 import {
   DashboardFilter,
   MetricsDataType,
+  SourceKind,
   TSource,
 } from '@hyperdx/common-utils/dist/types';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 
+import { useDashboardFilterValues } from '@/hooks/useDashboardFilterValues';
+import * as useMetadataModule from '@/hooks/useMetadata';
 import * as sourceModule from '@/source';
-
-import { useDashboardFilterValues } from '../useDashboardFilterValues';
-import * as useMetadataModule from '../useMetadata';
 
 // Mock modules
 jest.mock('@/source');
@@ -34,6 +34,7 @@ describe('useDashboardFilterValues', () => {
   const mockSources: Partial<TSource>[] = [
     {
       id: 'logs-source',
+      kind: SourceKind.Log,
       name: 'Logs',
       timestampValueExpression: 'timestamp',
       connection: 'clickhouse-conn',
@@ -44,6 +45,7 @@ describe('useDashboardFilterValues', () => {
     },
     {
       id: 'traces-source',
+      kind: SourceKind.Trace,
       name: 'Traces',
       timestampValueExpression: 'timestamp',
       connection: 'clickhouse-conn',
@@ -54,6 +56,7 @@ describe('useDashboardFilterValues', () => {
     },
     {
       id: 'metric-source',
+      kind: SourceKind.Metric,
       name: 'Metrics',
       timestampValueExpression: 'timestamp',
       connection: 'clickhouse-conn',
@@ -182,7 +185,7 @@ describe('useDashboardFilterValues', () => {
     expect(result.current.data).toEqual(
       new Map([
         [
-          'SeverityNumber',
+          'filterSevNumber',
           {
             values: ['1', '2'],
             isLoading: false,
@@ -215,26 +218,27 @@ describe('useDashboardFilterValues', () => {
     expect(result.current.data).toEqual(
       new Map([
         [
-          'environment',
+          'filter1',
           {
             values: ['production', 'staging', 'development'],
             isLoading: false,
           },
         ],
         [
-          'service.name',
+          'filter2',
           {
             values: ['frontend', 'backend', 'database'],
             isLoading: false,
           },
         ],
         [
-          'MetricName',
+          'filter3',
           { values: ['CPU_Usage', 'Memory_Usage'], isLoading: false },
         ],
       ]),
     );
 
+    // Only Log and Trace sources use optimizeGetKeyValuesCalls (Metric uses direct fetch)
     expect(optimizeGetKeyValuesCalls).toHaveBeenCalledTimes(3);
     expect(optimizeGetKeyValuesCalls).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -343,6 +347,56 @@ describe('useDashboardFilterValues', () => {
         keys: ['environment', 'status'],
       }),
     );
+  });
+
+  it('should not group filters with different where clauses', async () => {
+    // Arrange
+    const sameSourceFiltersDifferentWhere: DashboardFilter[] = [
+      {
+        id: 'filter1',
+        type: 'QUERY_EXPRESSION',
+        name: 'Environment',
+        expression: 'environment',
+        source: 'logs-source',
+        where: "service_name = 'api'",
+        whereLanguage: 'sql',
+      },
+      {
+        id: 'filter2',
+        type: 'QUERY_EXPRESSION',
+        name: 'Status',
+        expression: 'status',
+        source: 'logs-source',
+        where: "service_name = 'worker'",
+        whereLanguage: 'sql',
+      },
+    ];
+
+    jest.spyOn(sourceModule, 'useSources').mockReturnValue({
+      data: mockSources,
+      isLoading: false,
+    } as any);
+
+    // Act
+    const { result } = renderHook(
+      () =>
+        useDashboardFilterValues({
+          filters: sameSourceFiltersDifferentWhere,
+          dateRange: mockDateRange,
+        }),
+      { wrapper },
+    );
+
+    // Assert
+    await waitFor(() => expect(result.current.isFetching).toBe(false));
+
+    // Filters with different WHERE clauses are separate queries
+    expect(optimizeGetKeyValuesCalls).toHaveBeenCalledTimes(2);
+    expect(mockMetadata.getKeyValues).toHaveBeenCalledTimes(2);
+
+    // Both filters should have their own values keyed by filter ID
+    expect(result.current.data?.has('filter1')).toBe(true);
+    expect(result.current.data?.has('filter2')).toBe(true);
   });
 
   it('should not fetch when filters array is empty', () => {
@@ -495,6 +549,7 @@ describe('useDashboardFilterValues', () => {
           tableName: 'logs',
         },
         id: 'logs-source',
+        kind: SourceKind.Log,
         name: 'Logs',
         timestampValueExpression: 'timestamp',
       },
@@ -590,15 +645,15 @@ describe('useDashboardFilterValues', () => {
     expect(result.current.data).toEqual(
       new Map([
         [
-          'environment',
+          'filter1',
           {
             values: ['production', 'staging', 'development'],
             isLoading: false,
           },
         ],
-        ['log_level', { values: ['info', 'error'], isLoading: false }],
+        ['filter2', { values: ['info', 'error'], isLoading: false }],
         [
-          'service.name',
+          'filter3',
           { values: ['frontend', 'backend', 'database'], isLoading: false },
         ],
       ]),
@@ -694,18 +749,18 @@ describe('useDashboardFilterValues', () => {
       }),
     );
 
-    // Should return combined results
+    // Should return combined results keyed by filter ID
     expect(result.current.data).toEqual(
       new Map([
         [
-          'environment',
+          'filter1',
           {
             values: ['production', 'staging', 'development'],
             isLoading: false,
           },
         ],
         [
-          'service.name',
+          'filter2',
           { values: ['frontend', 'backend', 'database'], isLoading: false },
         ],
       ]),
@@ -757,8 +812,8 @@ describe('useDashboardFilterValues', () => {
     // Assert - Wait for first query to complete
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    // At this point, environment should be loaded but service.name should still be loading
-    expect(result.current.data?.get('environment')).toEqual({
+    // At this point, filter1 (environment) should be loaded but filter2 (service.name) should still be loading
+    expect(result.current.data?.get('filter1')).toEqual({
       values: ['production'],
       isLoading: false,
     });
@@ -775,8 +830,8 @@ describe('useDashboardFilterValues', () => {
     // Now both should be loaded
     expect(result.current.data).toEqual(
       new Map([
-        ['environment', { values: ['production'], isLoading: false }],
-        ['service.name', { values: ['backend'], isLoading: false }],
+        ['filter1', { values: ['production'], isLoading: false }],
+        ['filter2', { values: ['backend'], isLoading: false }],
       ]),
     );
   });
@@ -819,20 +874,65 @@ describe('useDashboardFilterValues', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     await waitFor(() => expect(result.current.isFetching).toBe(false));
 
-    // Should have partial results - environment loaded successfully
-    expect(result.current.data?.get('environment')).toEqual({
+    // Should have partial results - filter1 (environment) loaded successfully
+    expect(result.current.data?.get('filter1')).toEqual({
       values: ['production', 'staging'],
       isLoading: false,
     });
 
-    // service.name should not be in the map because the query failed
-    expect(result.current.data?.has('service.name')).toBe(false);
+    // filter2 (service.name) is still present with empty values (so the UI can
+    // keep the control interactive) and is flagged as errored so callers can
+    // surface a warning.
+    expect(result.current.data?.get('filter2')).toEqual({
+      values: [],
+      isLoading: false,
+    });
+    expect(result.current.erroredFilterIds.has('filter1')).toBe(false);
+    expect(result.current.erroredFilterIds.has('filter2')).toBe(true);
 
     // Overall error state should be true
     expect(result.current.isError).toBe(true);
 
     // Should have called getKeyValues twice
     expect(mockMetadata.getKeyValues).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a filter that returned no values present and interactive', async () => {
+    // Arrange
+    jest.spyOn(sourceModule, 'useSources').mockReturnValue({
+      data: mockSources,
+      isLoading: false,
+    } as any);
+
+    jest
+      .mocked(optimizeGetKeyValuesCalls)
+      .mockImplementationOnce(async ({ chartConfig, keys }) => [
+        { chartConfig, keys },
+      ]);
+
+    // Query succeeds but returns no rows for the requested key.
+    mockMetadata.getKeyValues.mockResolvedValueOnce([]);
+
+    // Act
+    const { result } = renderHook(
+      () =>
+        useDashboardFilterValues({
+          filters: [mockFilters[0]],
+          dateRange: mockDateRange,
+        }),
+      { wrapper },
+    );
+
+    // Assert
+    await waitFor(() => expect(result.current.isFetching).toBe(false));
+
+    // Entry exists with empty values and is not loading → control stays usable.
+    expect(result.current.data?.get('filter1')).toEqual({
+      values: [],
+      isLoading: false,
+    });
+    expect(result.current.erroredFilterIds.has('filter1')).toBe(false);
+    expect(result.current.isError).toBe(false);
   });
 
   it('should keep previous data while fetching new data (placeholderData behavior)', async () => {
@@ -889,7 +989,7 @@ describe('useDashboardFilterValues', () => {
     await waitFor(() => expect(result.current.isFetching).toBe(false));
 
     const initialData = result.current.data;
-    expect(initialData?.get('environment')).toEqual({
+    expect(initialData?.get('filter1')).toEqual({
       values: ['production', 'staging'],
       isLoading: false,
     });
@@ -916,7 +1016,7 @@ describe('useDashboardFilterValues', () => {
     await waitFor(() => expect(result.current.isFetching).toBe(true));
 
     // Verify that previous data is still available during fetch (placeholderData behavior)
-    expect(result.current.data?.get('environment')).toEqual({
+    expect(result.current.data?.get('filter1')).toEqual({
       values: ['production', 'staging'],
       isLoading: false,
     });
@@ -934,7 +1034,7 @@ describe('useDashboardFilterValues', () => {
     await waitFor(() => expect(result.current.isFetching).toBe(false));
 
     // Verify that new data has replaced the old data
-    expect(result.current.data?.get('environment')).toEqual({
+    expect(result.current.data?.get('filter1')).toEqual({
       values: ['development', 'testing'],
       isLoading: false,
     });

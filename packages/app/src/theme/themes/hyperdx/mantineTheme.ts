@@ -4,6 +4,7 @@ import {
   MantineTheme,
   MantineThemeOverride,
   rem,
+  SegmentedControl,
   Select,
   Slider,
   Tabs,
@@ -11,14 +12,17 @@ import {
   Tooltip,
 } from '@mantine/core';
 
-import focusClasses from '../../../../styles/focus.module.scss';
+import componentClasses from '@/theme/themes/components.module.scss';
+import focusClasses from '@styles/focus.module.scss';
+import variantClasses from '@styles/variants.module.scss';
 
-export const makeTheme = ({
+const makeTheme = ({
   fontFamily = '"IBM Plex Sans", monospace',
 }: {
   fontFamily?: string;
 }): MantineThemeOverride => ({
   cursorType: 'pointer',
+  defaultRadius: 'sm',
   fontFamily,
   focusClassName: focusClasses.focusRing,
   primaryColor: 'green',
@@ -118,13 +122,19 @@ export const makeTheme = ({
       },
     }),
     Slider: Slider.extend({
+      vars: () => ({
+        root: {
+          '--slider-color': 'var(--color-slider-bar)',
+        },
+      }),
       styles: {
-        bar: {
-          backgroundColor: 'var(--color-bg-brand)',
-        },
         thumb: {
-          borderColor: 'var(--color-bg-brand)',
+          backgroundColor: 'var(--color-slider-thumb)',
+          borderColor: 'var(--color-slider-thumb-border)',
         },
+      },
+      classNames: {
+        mark: componentClasses.sliderMark,
       },
     }),
     Input: {
@@ -234,6 +244,12 @@ export const makeTheme = ({
       defaultProps: {
         variant: 'primary',
       },
+      classNames: (_theme, props) => {
+        if (props.variant === 'link') {
+          return { root: variantClasses.buttonLink };
+        }
+        return {};
+      },
       vars: (_theme, props) => {
         const baseVars: Record<string, string> = {};
 
@@ -264,30 +280,54 @@ export const makeTheme = ({
           baseVars['--button-color'] = 'var(--mantine-color-red-light-color)';
         }
 
+        if (props.variant === 'subtle') {
+          baseVars['--button-bg'] = 'transparent';
+          baseVars['--button-hover'] = 'var(--color-bg-hover)';
+          baseVars['--button-color'] = 'var(--color-text)';
+          baseVars['--button-bd'] = 'none';
+        }
+
+        if (props.variant === 'link') {
+          baseVars['--button-bg'] = 'transparent';
+          baseVars['--button-hover'] = 'transparent';
+          baseVars['--button-color'] = 'var(--color-text-secondary)';
+          baseVars['--button-bd'] = 'none';
+          baseVars['--button-padding-x'] = '0';
+        }
+
         return { root: baseVars };
       },
     }),
-    SegmentedControl: {
-      styles: {
+    SegmentedControl: SegmentedControl.extend({
+      styles: () => ({
         root: {
           background: 'var(--color-bg-field)',
         },
         indicator: {
           background: 'var(--color-bg-field-highlighted)',
         },
-      },
-    },
+      }),
+    }),
     Tabs: Tabs.extend({
       vars: () => ({
         root: {
           '--tabs-color': 'var(--color-text-brand)',
         },
       }),
+      styles: {
+        tabLabel: { textAlign: 'left' },
+      },
     }),
     ActionIcon: ActionIcon.extend({
       defaultProps: {
         variant: 'subtle',
         color: 'gray',
+      },
+      classNames: (_theme, props) => {
+        if (props.variant === 'link') {
+          return { root: variantClasses.actionIconLink };
+        }
+        return {};
       },
       vars: (_theme, props) => {
         const baseVars: Record<string, string> = {};
@@ -322,6 +362,13 @@ export const makeTheme = ({
           baseVars['--ai-bg'] = 'var(--mantine-color-red-light)';
           baseVars['--ai-hover'] = 'var(--mantine-color-red-light-hover)';
           baseVars['--ai-color'] = 'var(--mantine-color-red-light-color)';
+        }
+
+        if (props.variant === 'link') {
+          baseVars['--ai-bg'] = 'transparent';
+          baseVars['--ai-hover'] = 'transparent';
+          baseVars['--ai-color'] = 'var(--color-text-secondary)';
+          baseVars['--ai-bd'] = 'none';
         }
 
         return { root: baseVars };

@@ -18,24 +18,37 @@ import {
   YAxis,
 } from 'recharts';
 import { AxisDomain } from 'recharts/types/util/types';
+import { convertGranularityToSeconds } from '@hyperdx/common-utils/dist/core/utils';
 import { DisplayType } from '@hyperdx/common-utils/dist/types';
 import { Popover } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
-import { IconCaretDownFilled, IconCaretUpFilled } from '@tabler/icons-react';
 
 import type { NumberFormat } from '@/types';
 import { COLORS, formatNumber, truncateMiddle } from '@/utils';
 
 import {
-  convertGranularityToSeconds,
+  ChartTooltipContainer,
+  ChartTooltipItem,
+} from './components/charts/ChartTooltip';
+import {
+  findNearestSeriesKey,
   LineData,
+  MAX_TIME_CHART_SERIES,
   toStartOfInterval,
 } from './ChartUtils';
 import { FormatTime, useFormatTime } from './useFormatTime';
 
-import styles from '../styles/HDXLineChart.module.scss';
+import styles from '@styles/HDXLineChart.module.scss';
 
 const MAX_LEGEND_ITEMS = 4;
+
+// Vertical pixel distance within which a series' line counts as "near" the
+// cursor for tooltip highlighting. Beyond this, no row is emphasized so the
+// tooltip is not misleading when the pointer is in empty space.
+const NEAREST_SERIES_MAX_DISTANCE_PX = 30;
+
+const Y_AXIS_WIDTH = 40;
+const SINGLE_POINT_BAR_RIGHT_PADDING = 10;
+const SINGLE_POINT_BAR_WIDTH_RATIO = 0.8;
 
 type TooltipPayload = {
   dataKey: string;
@@ -48,75 +61,33 @@ type TooltipPayload = {
   opacity?: number;
 };
 
-const percentFormatter = new Intl.NumberFormat('en-US', {
-  style: 'percent',
-  maximumFractionDigits: 2,
-});
-
-const calculatePercentChange = (current: number, previous: number) => {
-  if (previous === 0) {
-    return current === 0 ? 0 : undefined;
-  }
-  return (current - previous) / previous;
-};
-
-const PercentChange = ({
-  current,
-  previous,
-}: {
-  current: number;
-  previous: number;
-}) => {
-  const percentChange = calculatePercentChange(current, previous);
-  if (percentChange == undefined) {
-    return null;
-  }
-
-  const Icon = percentChange > 0 ? IconCaretUpFilled : IconCaretDownFilled;
-
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 0 }}>
-      (<Icon size={12} />
-      {percentFormatter.format(Math.abs(percentChange))})
-    </span>
-  );
-};
-
 export const TooltipItem = memo(
   ({
     p,
     previous,
     numberFormat,
+    highlighted,
+    dimmed,
   }: {
     p: TooltipPayload;
     previous?: TooltipPayload;
     numberFormat?: NumberFormat;
+    highlighted?: boolean;
+    dimmed?: boolean;
   }) => {
     return (
-      <div className="d-flex gap-2 items-center justify-center">
-        <div>
-          <svg width="12" height="4">
-            <line
-              x1="0"
-              y1="2"
-              x2="12"
-              y2="2"
-              stroke={p.color}
-              opacity={p.opacity}
-              strokeDasharray={p.strokeDasharray}
-            />
-          </svg>
-        </div>
-        <div>
-          <span style={{ color: p.color }}>
-            {truncateMiddle(p.name ?? p.dataKey, 50)}
-          </span>
-          : {numberFormat ? formatNumber(p.value, numberFormat) : p.value}{' '}
-          {previous && (
-            <PercentChange current={p.value} previous={previous?.value} />
-          )}
-        </div>
-      </div>
+      <ChartTooltipItem
+        color={p.color ?? ''}
+        name={p.name ?? p.dataKey}
+        value={p.value}
+        numberFormat={numberFormat}
+        indicator="line"
+        strokeDasharray={p.strokeDasharray}
+        opacity={p.opacity}
+        previous={previous?.value}
+        highlighted={highlighted}
+        dimmed={dimmed}
+      />
     );
   },
 );
@@ -125,6 +96,9 @@ type HDXLineChartTooltipProps = {
   lineDataMap: { [keyName: string]: LineData };
   previousPeriodOffsetSeconds?: number;
   numberFormat?: NumberFormat;
+  numberFormatByKey: Map<string, NumberFormat>;
+  /** Per-series active-point pixel Y, captured by the Area active dots. */
+  activePointYByKeyRef: React.MutableRefObject<Map<string, number>>;
 } & Record<string, any>;
 
 const HDXLineChartTooltip = withErrorBoundary(
@@ -134,8 +108,10 @@ const HDXLineChartTooltip = withErrorBoundary(
       payload,
       label,
       numberFormat,
+      numberFormatByKey,
       lineDataMap,
       previousPeriodOffsetSeconds,
+      activePointYByKeyRef,
     } = props;
     const typedPayload = payload as TooltipPayload[];
 
@@ -145,42 +121,70 @@ const HDXLineChartTooltip = withErrorBoundary(
     );
 
     if (active && payload && payload.length) {
-      return (
-        <div className={styles.chartTooltip}>
-          <div className={styles.chartTooltipHeader}>
-            <FormatTime value={label * 1000} />
-            {previousPeriodOffsetSeconds != null && (
-              <>
-                {' (vs '}
-                <FormatTime
-                  value={(label - previousPeriodOffsetSeconds) * 1000}
-                />
-                {')'}
-              </>
-            )}
-          </div>
-          <div className={styles.chartTooltipContent}>
-            {payload
-              .sort((a: TooltipPayload, b: TooltipPayload) => b.value - a.value)
-              .map((p: TooltipPayload) => {
-                const previousKey = lineDataMap[p.dataKey]?.previousPeriodKey;
-                const isPreviousPeriod = previousKey === p.dataKey;
-                const previousPayload =
-                  !isPreviousPeriod && previousKey
-                    ? payloadByKey.get(previousKey)
-                    : undefined;
+      const header = (
+        <>
+          <FormatTime value={label * 1000} />
+          {previousPeriodOffsetSeconds != null && (
+            <>
+              {' (vs '}
+              <FormatTime
+                value={(label - previousPeriodOffsetSeconds) * 1000}
+              />
+              {')'}
+            </>
+          )}
+        </>
+      );
 
-                return (
-                  <TooltipItem
-                    key={p.dataKey}
-                    p={p}
-                    numberFormat={numberFormat}
-                    previous={previousPayload}
-                  />
-                );
-              })}
-          </div>
-        </div>
+      // `coordinate.y` is the cursor's pixel Y; compare it to each series'
+      // active-dot pixel Y to bold the nearest line. The active dots wrote
+      // their positions earlier in this same render (Recharts renders
+      // graphical items before the tooltip), so the capture is current.
+      const pointerY: number | undefined = props.coordinate?.y;
+      // eslint-disable-next-line react-hooks/refs
+      const activePointYByKey = activePointYByKeyRef?.current ?? undefined;
+      // Only disambiguate when there is more than one series; a single-series
+      // tooltip has nothing to map back to a line.
+      const nearestSeriesKey =
+        typedPayload.length > 1
+          ? findNearestSeriesKey(
+              activePointYByKey,
+              typedPayload.map(p => p.dataKey),
+              pointerY,
+              NEAREST_SERIES_MAX_DISTANCE_PX,
+            )
+          : undefined;
+
+      return (
+        <ChartTooltipContainer header={header}>
+          {payload
+            .sort((a: TooltipPayload, b: TooltipPayload) => b.value - a.value)
+            .map((p: TooltipPayload) => {
+              const previousKey = lineDataMap[p.dataKey]?.previousPeriodKey;
+              const isPreviousPeriod = previousKey === p.dataKey;
+              const previousPayload =
+                !isPreviousPeriod && previousKey
+                  ? payloadByKey.get(previousKey)
+                  : undefined;
+              const valueColumnName =
+                lineDataMap[p.dataKey]?.valueColumnName ?? p.dataKey;
+              const numberFormatForKey =
+                numberFormatByKey.get(valueColumnName) ?? numberFormat;
+
+              return (
+                <TooltipItem
+                  key={p.dataKey}
+                  p={p}
+                  numberFormat={numberFormatForKey}
+                  previous={previousPayload}
+                  highlighted={p.dataKey === nearestSeriesKey}
+                  dimmed={
+                    nearestSeriesKey != null && p.dataKey !== nearestSeriesKey
+                  }
+                />
+              );
+            })}
+        </ChartTooltipContainer>
       );
     }
     return null;
@@ -194,38 +198,6 @@ const HDXLineChartTooltip = withErrorBoundary(
     ),
   },
 );
-
-function CopyableLegendItem({ entry }: any) {
-  return (
-    <span
-      className={styles.legendItem}
-      style={{ color: entry.color }}
-      role="button"
-      onClick={() => {
-        window.navigator.clipboard.writeText(entry.value);
-        notifications.show({ color: 'green', message: `Copied to clipboard` });
-      }}
-      title="Click to expand"
-    >
-      <div className="d-flex gap-1 items-center justify-center">
-        <div>
-          <svg width="12" height="4">
-            <line
-              x1="0"
-              y1="2"
-              x2="12"
-              y2="2"
-              stroke={entry.color}
-              opacity={entry.opacity}
-              strokeDasharray={entry.payload?.strokeDasharray}
-            />
-          </svg>
-        </div>
-        {entry.value}
-      </div>
-    </span>
-  );
-}
 
 function ExpandableLegendItem({
   entry,
@@ -287,7 +259,7 @@ function ExpandableLegendItem({
   );
 }
 
-export const LegendRenderer = memo<{
+const LegendRenderer = memo<{
   payload?: {
     dataKey: string;
     value: string;
@@ -298,19 +270,14 @@ export const LegendRenderer = memo<{
   selectedSeries?: Set<string>;
   onToggleSeries?: (seriesName: string, isShiftKey?: boolean) => void;
 }>(props => {
-  const {
-    payload = [],
-    lineDataMap,
-    allLineData = [],
-    selectedSeries = new Set(),
-    onToggleSeries,
-  } = props;
+  const { payload, lineDataMap, allLineData, selectedSeries, onToggleSeries } =
+    props;
 
-  const hasSelection = selectedSeries.size > 0;
+  const hasSelection = !!selectedSeries && selectedSeries.size > 0;
 
   // Use allLineData to ensure all series are always shown in legend
   const allSeriesPayload = useMemo(() => {
-    if (allLineData.length > 0) {
+    if (allLineData?.length) {
       return allLineData.map(ld => ({
         dataKey: ld.dataKey,
         value: ld.displayName || ld.dataKey,
@@ -318,7 +285,7 @@ export const LegendRenderer = memo<{
         payload: { strokeDasharray: ld.isDashed ? '4 3' : '0' },
       }));
     }
-    return payload;
+    return payload ?? [];
   }, [allLineData, payload]);
 
   const sortedLegendItems = useMemo(() => {
@@ -349,7 +316,7 @@ export const LegendRenderer = memo<{
   return (
     <div className={styles.legend}>
       {shownItems.map((entry, index) => {
-        const isSelected = selectedSeries.has(entry.value);
+        const isSelected = !!selectedSeries?.has(entry.value);
         const isDisabled = hasSelection && !isSelected;
         return (
           <ExpandableLegendItem
@@ -371,7 +338,7 @@ export const LegendRenderer = memo<{
           <Popover.Dropdown p="xs">
             <div className={styles.legendTooltipContent}>
               {restItems.map((entry, index) => {
-                const isSelected = selectedSeries.has(entry.value);
+                const isSelected = !!selectedSeries?.has(entry.value);
                 const isDisabled = hasSelection && !isSelected;
                 return (
                   <ExpandableLegendItem
@@ -393,7 +360,99 @@ export const LegendRenderer = memo<{
   );
 });
 
-export const HARD_LINES_LIMIT = 60;
+export const HARD_LINES_LIMIT = MAX_TIME_CHART_SERIES;
+
+const StackedBarWithOverlap = (props: BarProps) => {
+  const { x, y, width, height, fill } = props;
+  // Add a tiny bit to the height to create overlap. Otherwise there's a gap
+  return (
+    <rect
+      x={x}
+      y={y}
+      width={width}
+      height={height && height > 0 ? height + 0.5 : 0}
+      fill={fill}
+    />
+  );
+};
+
+type CaptureActiveDotProps = {
+  /** Shared ref the tooltip reads to find the series nearest the cursor. */
+  captureRef: React.MutableRefObject<Map<string, number>>;
+  cx?: number;
+  cy?: number;
+  dataKey?: string | number;
+  r?: number;
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+};
+
+/**
+ * Active dot for an Area series. Records the active point's pixel Y (`cy`)
+ * into `captureRef`, keyed by dataKey, then draws the same dot Recharts
+ * renders by default. Recharts clones this element with the active-point
+ * props (cx, cy, dataKey, r, fill, stroke, strokeWidth) during the render
+ * that precedes the tooltip, so the ref is current when the tooltip reads
+ * it to find the series nearest the cursor.
+ */
+function CaptureActiveDot({
+  captureRef,
+  cx,
+  cy,
+  dataKey,
+  r,
+  fill,
+  stroke,
+  strokeWidth,
+}: CaptureActiveDotProps) {
+  if (dataKey != null && typeof cy === 'number' && Number.isFinite(cy)) {
+    // Written synchronously during render so the tooltip, which Recharts
+    // renders after the graphical items in the same commit, reads the
+    // current frame's positions rather than the previous frame's.
+    // eslint-disable-next-line react-hooks/refs
+    captureRef.current.set(String(dataKey), cy);
+  }
+  if (typeof cx !== 'number' || typeof cy !== 'number') {
+    return null;
+  }
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={r}
+      fill={fill}
+      stroke={stroke}
+      strokeWidth={strokeWidth}
+    />
+  );
+}
+
+/**
+ * Compute the unique set of hexes referenced by `<linearGradient>` defs
+ * inside MemoChart. Exported so a unit test can pin the dedup-and-union
+ * behavior without standing up a full recharts render (which jsdom
+ * struggles with at the container-sized SVG layer).
+ *
+ * Includes every categorical hex up front so any positional `<Area>`
+ * fill resolves, then unions in semantic hexes returned by the
+ * `getChartColor{Info,Success,Warning,Error}` helpers; those land in
+ * `lineData[].color` and would otherwise be missing a matching def.
+ * `undefined` colors are filtered so `c.replace('#', '')` can't throw
+ * on a future caller that leaves a series color unset.
+ */
+export function collectMemoChartGradientHexes(
+  lineData: { color?: string }[],
+): string[] {
+  return Array.from(
+    new Set([
+      ...COLORS,
+      ...lineData
+        .map(ld => ld.color)
+        .filter((c): c is string => typeof c === 'string'),
+    ]),
+  );
+}
 
 export const MemoChart = memo(function MemoChart({
   graphResults,
@@ -404,7 +463,9 @@ export const MemoChart = memo(function MemoChart({
   referenceLines,
   logReferenceTimestamp,
   displayType = DisplayType.Line,
-  numberFormat,
+  axisNumberFormat,
+  fallbackNumberFormat,
+  tooltipNumberFormatsByKey,
   isLoading,
   timestampKey = 'ts_bucket',
   onTimeRangeSelect,
@@ -414,6 +475,7 @@ export const MemoChart = memo(function MemoChart({
   onToggleSeries,
   granularity,
   dateRangeEndInclusive = true,
+  fitYAxisToData = false,
 }: {
   graphResults: any[];
   setIsClickActive: (v: any) => void;
@@ -422,7 +484,9 @@ export const MemoChart = memo(function MemoChart({
   lineData: LineData[];
   referenceLines?: React.ReactNode;
   displayType?: DisplayType;
-  numberFormat?: NumberFormat;
+  axisNumberFormat?: NumberFormat;
+  fallbackNumberFormat?: NumberFormat;
+  tooltipNumberFormatsByKey: Map<string, NumberFormat>;
   logReferenceTimestamp?: number;
   isLoading?: boolean;
   timestampKey?: string;
@@ -433,14 +497,36 @@ export const MemoChart = memo(function MemoChart({
   onToggleSeries?: (seriesName: string, isShiftKey?: boolean) => void;
   granularity: string;
   dateRangeEndInclusive?: boolean;
+  /**
+   * When true, the y-axis lower bound is the minimum of the displayed data
+   * (with padding) instead of zero.
+   **/
+  fitYAxisToData?: boolean;
 }) {
   const _id = useId();
   const id = _id.replace(/:/g, '');
 
   const [isHovered, setIsHovered] = useState(false);
 
-  const ChartComponent =
-    displayType === DisplayType.StackedBar ? BarChart : AreaChart; // LineChart;
+  // Filled by each Area's active dot with the series' active-point pixel Y,
+  // keyed by dataKey, so the tooltip can bold the series nearest the cursor.
+  // Read during the same render that draws the active dots.
+  const activePointYByKeyRef = useRef<Map<string, number>>(new Map());
+
+  // Key of the series whose line is nearest the cursor, lifted into state so
+  // the chart can emphasize that line (thicker stroke) and fade the rest.
+  // Set from the chart's mouse-move using the pixel Y the active dots captured
+  // on the prior frame; the one-frame lag is imperceptible and settles as soon
+  // as the pointer stops. The tooltip derives the same nearest row itself,
+  // same-frame, for its own bolding and dimming.
+  const [nearestSeriesKey, setNearestSeriesKey] = useState<
+    string | undefined
+  >();
+
+  const ChartComponent = useMemo(
+    () => (displayType === DisplayType.StackedBar ? BarChart : AreaChart), // LineChart;
+    [displayType],
+  );
 
   const lines = useMemo(() => {
     const hasSelection = selectedSeriesNames && selectedSeriesNames.size > 0;
@@ -455,25 +541,20 @@ export const MemoChart = memo(function MemoChart({
         return !hasSelection || selectedSeriesNames.has(seriesName);
       });
 
+    // When a series is nearest the cursor (only meaningful with more than one
+    // line shown), thicken its line and fade the others so the eye lands on
+    // the same series the tooltip bolds. Mirrors the legend's selected style
+    // (thicker stroke) with a gentle fade that keeps the rest readable.
+    const hasNearest =
+      limitedGroupKeys.length > 1 &&
+      nearestSeriesKey != null &&
+      limitedGroupKeys.includes(nearestSeriesKey);
+
     return limitedGroupKeys.map(key => {
       const lineDataIndex = lineData.findIndex(ld => ld.dataKey === key);
       const color = lineData[lineDataIndex]?.color;
       const strokeDasharray = lineData[lineDataIndex]?.isDashed ? '4 3' : '0';
       const seriesName = lineData[lineDataIndex]?.displayName ?? key;
-
-      const StackedBarWithOverlap = (props: BarProps) => {
-        const { x, y, width, height, fill } = props;
-        // Add a tiny bit to the height to create overlap. Otherwise there's a gap
-        return (
-          <rect
-            x={x}
-            y={y}
-            width={width}
-            height={height && height > 0 ? height + 0.5 : 0}
-            fill={fill}
-          />
-        );
-      };
 
       return displayType === 'stacked_bar' ? (
         <Bar
@@ -494,6 +575,11 @@ export const MemoChart = memo(function MemoChart({
           type="monotone"
           stroke={color}
           fillOpacity={1}
+          strokeWidth={hasNearest && key === nearestSeriesKey ? 2.5 : undefined}
+          strokeOpacity={
+            hasNearest && key !== nearestSeriesKey ? 0.5 : undefined
+          }
+          activeDot={<CaptureActiveDot captureRef={activePointYByKeyRef} />}
           {...(isHovered
             ? { fill: 'none', strokeDasharray }
             : {
@@ -506,25 +592,41 @@ export const MemoChart = memo(function MemoChart({
         />
       );
     });
-  }, [lineData, displayType, id, isHovered, selectedSeriesNames]);
+  }, [
+    lineData,
+    displayType,
+    id,
+    isHovered,
+    selectedSeriesNames,
+    nearestSeriesKey,
+  ]);
 
   const yAxisDomain: AxisDomain = useMemo(() => {
     const hasSelection = selectedSeriesNames && selectedSeriesNames.size > 0;
 
-    if (!hasSelection) {
-      // No selection, let Recharts auto-calculate based on all data
+    // Fitting the y-axis lower bound to the data only applies to line charts.
+    // Bar charts are always anchored at zero so the bar lengths stay
+    // proportional to their values.
+    const shouldFitYAxis =
+      fitYAxisToData && displayType !== DisplayType.StackedBar;
+
+    // The data min/max is only needed to either zoom into a selection or to
+    // fit the lower bound to the data. When neither applies, let Recharts
+    // auto-calculate the upper bound while pinning the lower bound to zero.
+    if (!hasSelection && !shouldFitYAxis) {
       return [0, 'auto'];
     }
 
-    // When series are selected, calculate domain based only on visible series
+    // Calculate domain based on visible series (all series when there's no
+    // explicit selection).
     let minValue = Infinity;
     let maxValue = -Infinity;
 
     graphResults.forEach(dataPoint => {
       lineData.forEach(ld => {
         const seriesName = ld.displayName || ld.dataKey;
-        // Only consider selected series
-        if (selectedSeriesNames.has(seriesName)) {
+        // Only consider visible series
+        if (!hasSelection || selectedSeriesNames.has(seriesName)) {
           const value = dataPoint[ld.dataKey];
           if (typeof value === 'number' && !isNaN(value)) {
             minValue = Math.min(minValue, value);
@@ -536,17 +638,49 @@ export const MemoChart = memo(function MemoChart({
 
     // If we found valid values, return them with some padding
     if (minValue !== Infinity && maxValue !== -Infinity) {
-      const padding = (maxValue - minValue) * 0.1; // 10% padding
-      return [
-        Math.max(0, minValue - padding), // Don't go below 0
-        maxValue + padding,
-      ];
+      const padding = (maxValue - minValue) * 0.05; // 5% padding
+      // When fitting to data, allow the lower bound to follow the data
+      // minimum; otherwise keep it pinned at zero. The 5% padding must not
+      // drag the axis below zero unless the data itself is negative, so
+      // clamp at zero whenever the minimum is non-negative.
+      const lowerBound =
+        shouldFitYAxis && minValue < 0
+          ? minValue - padding
+          : Math.max(0, minValue - padding);
+      const upperBound = maxValue + padding;
+      return [lowerBound, upperBound];
     }
 
     return ['auto', 'auto'];
-  }, [graphResults, lineData, selectedSeriesNames]);
+  }, [
+    graphResults,
+    lineData,
+    selectedSeriesNames,
+    fitYAxisToData,
+    displayType,
+  ]);
 
   const sizeRef = useRef<[number, number]>([0, 0]);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  // Recharts computes bar width from the smallest gap between ticks on a
+  // numerical XAxis. With a single data point there are no gaps, so the
+  // computed width is 0 and bars become invisible. Provide an explicit
+  // barSize for that case, sized to most of the drawable width (the
+  // xAxisDomain already spans exactly one granularity for StackedBar charts).
+  const singlePointBarSize = useMemo(() => {
+    if (displayType !== DisplayType.StackedBar) return undefined;
+    if (graphResults.length !== 1) return undefined;
+    const drawableWidth = Math.max(
+      0,
+      containerWidth - Y_AXIS_WIDTH - SINGLE_POINT_BAR_RIGHT_PADDING,
+    );
+    if (drawableWidth <= 0) return undefined;
+    return Math.max(
+      1,
+      Math.floor(drawableWidth * SINGLE_POINT_BAR_WIDTH_RATIO),
+    );
+  }, [displayType, graphResults.length, containerWidth]);
 
   const formatTime = useFormatTime();
   const xTickFormatter = useCallback(
@@ -559,10 +693,10 @@ export const MemoChart = memo(function MemoChart({
   );
 
   const tickFormatter = useCallback(
-    (value: number, index: number) => {
-      return numberFormat
+    (value: number) => {
+      return axisNumberFormat
         ? formatNumber(value, {
-            ...numberFormat,
+            ...axisNumberFormat,
             average: true,
             mantissa: 0,
             unit: undefined,
@@ -572,7 +706,7 @@ export const MemoChart = memo(function MemoChart({
             compactDisplay: 'short',
           }).format(value);
     },
-    [numberFormat],
+    [axisNumberFormat],
   );
 
   const [highlightStart, setHighlightStart] = useState<string | undefined>();
@@ -615,7 +749,9 @@ export const MemoChart = memo(function MemoChart({
       height="100%"
       minWidth={0}
       onResize={(width, height) => {
-        sizeRef.current = [width ?? 1, height ?? 1];
+        const w = width ?? 1;
+        sizeRef.current = [w, height ?? 1];
+        setContainerWidth(prev => (prev === w ? prev : w));
       }}
       className={isLoading ? 'effect-pulse' : ''}
     >
@@ -625,9 +761,11 @@ export const MemoChart = memo(function MemoChart({
         data={graphResults}
         syncId="hdx"
         syncMethod="value"
+        barSize={singlePointBarSize}
         onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={e => {
+        onMouseLeave={() => {
           setIsHovered(false);
+          setNearestSeriesKey(undefined);
 
           setHighlightStart(undefined);
           setHighlightEnd(undefined);
@@ -641,6 +779,27 @@ export const MemoChart = memo(function MemoChart({
         }}
         onMouseMove={e => {
           setIsHovered(true);
+
+          // Track which series' line is nearest the cursor so the lines can
+          // emphasize it. The active dots captured their pixel Y on the prior
+          // frame; comparing the pointer's chartY picks the nearest line. Skip
+          // while a click-frozen tooltip is shown, matching the tooltip, and
+          // only set state when the key changes to keep re-renders rare.
+          const activePointYByKey = activePointYByKeyRef.current;
+          const nextNearest =
+            isClickActive == null &&
+            activePointYByKey.size > 1 &&
+            e?.chartY != null
+              ? findNearestSeriesKey(
+                  activePointYByKey,
+                  Array.from(activePointYByKey.keys()),
+                  e.chartY,
+                  NEAREST_SERIES_MAX_DISTANCE_PX,
+                )
+              : undefined;
+          setNearestSeriesKey(prev =>
+            prev === nextNearest ? prev : nextNearest,
+          );
 
           if (highlightStart != null) {
             setHighlightEnd(e.activeLabel);
@@ -712,6 +871,9 @@ export const MemoChart = memo(function MemoChart({
               yPerc: state.chartY / sizeRef.current[1],
               activePayload: state.activePayload,
             });
+            // The click-frozen tooltip hides the live tooltip, so drop any
+            // line emphasis to match.
+            setNearestSeriesKey(undefined);
           } else {
             // We clicked on the chart but outside of a line
             setIsClickActive(undefined);
@@ -722,7 +884,15 @@ export const MemoChart = memo(function MemoChart({
         }}
       >
         <defs>
-          {COLORS.map(c => {
+          {/* Gradient defs cover every hex that any <Area> fill may reference.
+              `COLORS` (the unified categorical palette) is included up-front
+              as a baseline; semantic colors returned by the
+              `getChartColor{Info,Success,Warning,Error}` helpers can also
+              appear in `lineData[].color` (e.g. info-level log series
+              resolve to `--color-chart-info`, chart blue `#437eef`, on both
+              brands, which matches categorical slot 0). Union them here so the
+              referenced `url(#time-chart-lin-grad-…)` always exists. */}
+          {collectMemoChartGradientHexes(lineData).map(c => {
             return (
               <linearGradient
                 key={c}
@@ -752,7 +922,7 @@ export const MemoChart = memo(function MemoChart({
           tick={{ fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }}
         />
         <YAxis
-          width={40}
+          width={Y_AXIS_WIDTH}
           minTickGap={25}
           tickFormatter={tickFormatter}
           tick={{ fontSize: 11, fontFamily: 'IBM Plex Mono, monospace' }}
@@ -763,9 +933,11 @@ export const MemoChart = memo(function MemoChart({
           <Tooltip
             content={
               <HDXLineChartTooltip
-                numberFormat={numberFormat}
+                numberFormat={fallbackNumberFormat}
+                numberFormatByKey={tooltipNumberFormatsByKey}
                 lineDataMap={lineDataMap}
                 previousPeriodOffsetSeconds={previousPeriodOffsetSeconds}
+                activePointYByKeyRef={activePointYByKeyRef}
               />
             }
             wrapperStyle={{

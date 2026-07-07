@@ -1,58 +1,45 @@
-import React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import produce from 'immer';
+import {
+  type FilterState,
+  filtersToQuery,
+} from '@hyperdx/common-utils/dist/filters';
 import type { Filter } from '@hyperdx/common-utils/dist/types';
 
+import {
+  cleanClickHouseExpression,
+  toQuotedClickHouseKeyExpression,
+} from './components/DBSearchPageFilters/utils';
+import { usePinnedFiltersApi, useUpdatePinnedFilters } from './pinnedFilters';
 import { useLocalStorage } from './utils';
 
 export const IS_ROOT_SPAN_COLUMN_NAME = 'isRootSpan';
 
-export type FilterState = {
-  [key: string]: {
-    included: Set<string | boolean>;
-    excluded: Set<string | boolean>;
-    range?: { min: number; max: number }; // For BETWEEN conditions
-  };
+// Filter keys live in two forms.
+// 1. In-memory `FilterState`: use the clean/unquoted forms of each key. This is what
+// the UI renders, what test ids are built from, and what every key comparison expects.
+// 2. The persisted `Filter[]`: Uses the quoted/bracketed ClickHouse form so it emits
+// valid SQL verbatim. Persisted in URL params, local storage, and MongoDB for saved searches.
+
+// Convert the clean FilterState keys to valid SQL (quoted/bracket) keys.
+export const escapeFilterStateKeys = (
+  filters: FilterState,
+  knownColumns: Set<string>,
+): FilterState => {
+  const escaped: FilterState = {};
+  for (const [key, value] of Object.entries(filters)) {
+    escaped[toQuotedClickHouseKeyExpression(key, knownColumns)] = value;
+  }
+  return escaped;
 };
 
-export const filtersToQuery = (
-  filters: FilterState,
-  { stringifyKeys = false }: { stringifyKeys?: boolean } = {},
-): Filter[] => {
-  return Object.entries(filters)
-    .filter(
-      ([_, values]) =>
-        values.included.size > 0 ||
-        values.excluded.size > 0 ||
-        values.range != null,
-    )
-    .flatMap(([key, values]) => {
-      const conditions = [];
-      const actualKey = stringifyKeys ? `toString(${key})` : key;
-
-      if (values.included.size > 0) {
-        conditions.push({
-          type: 'sql' as const,
-          condition: `${actualKey} IN (${Array.from(values.included)
-            .map(v => (typeof v === 'string' ? `'${v}'` : v))
-            .join(', ')})`,
-        });
-      }
-      if (values.excluded.size > 0) {
-        conditions.push({
-          type: 'sql' as const,
-          condition: `${actualKey} NOT IN (${Array.from(values.excluded)
-            .map(v => (typeof v === 'string' ? `'${v}'` : v))
-            .join(', ')})`,
-        });
-      }
-      if (values.range != null) {
-        conditions.push({
-          type: 'sql' as const,
-          condition: `${actualKey} BETWEEN ${values.range.min} AND ${values.range.max}`,
-        });
-      }
-      return conditions;
-    });
+// Convert valid SQL/persisted keys to clean FilterState keys.
+const unescapeFilterStateKeys = (filters: FilterState): FilterState => {
+  const cleaned: FilterState = {};
+  for (const [key, value] of Object.entries(filters)) {
+    cleaned[cleanClickHouseExpression(key)] = value;
+  }
+  return cleaned;
 };
 
 export const areFiltersEqual = (a: FilterState, b: FilterState) => {
@@ -87,7 +74,7 @@ export const areFiltersEqual = (a: FilterState, b: FilterState) => {
 };
 
 // Helper function to parse a string value as boolean if possible, or otherwise
-// return as string with surrounding quotes removed.
+// return as string with surrounding quotes removed and SQL-escaped quotes unescaped.
 const getBooleanOrUnquotedString = (value: string): string | boolean => {
   const trimmed = value.trim();
 
@@ -95,13 +82,44 @@ const getBooleanOrUnquotedString = (value: string): string | boolean => {
     return trimmed.toLowerCase() === 'true';
   }
 
-  // Remove surrounding quotes if present
-  return trimmed.startsWith("'") && trimmed.endsWith("'")
-    ? trimmed.slice(1, -1)
-    : trimmed;
+  // Remove surrounding quotes and reverse the escape sequences produced by
+  // filtersToQuery's escapeString. Order matters: collapse \\ → \ first so
+  // that the following '' → ' pass doesn't mistake content for an escape.
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return trimmed.slice(1, -1).replace(/\\\\/g, '\\').replace(/''/g, "'");
+  }
+  return trimmed;
 };
 
-// Helper function to split on commas while respecting quoted strings and booleans
+// Returns true when the single-quote at position `i` is a real string delimiter
+// rather than an escape sequence.  Handles both ClickHouse/SQL '' escaping and
+// backslash \' escaping.  An odd number of preceding backslashes means the
+// quote is escaped via \'; an even number (including zero) means the
+// backslashes are themselves escaped (\\) and the quote is a real boundary.
+function isQuoteBoundary(s: string, i: number): boolean {
+  if (s[i] !== "'") return false;
+  let backslashes = 0;
+  for (let j = i - 1; j >= 0 && s[j] === '\\'; j--) {
+    backslashes++;
+  }
+  return backslashes % 2 === 0;
+}
+
+// If we're inside a quoted string and hit a quote, check whether the next
+// character is also a quote ('' escape).  If so, skip both and stay in the
+// string.  Returns the new index to continue iteration from.
+function handleQuoteEscape(
+  s: string,
+  i: number,
+): { skip: boolean; next: number } {
+  if (i + 1 < s.length && s[i + 1] === "'") {
+    return { skip: true, next: i + 1 };
+  }
+  return { skip: false, next: i };
+}
+
+// Helper function to split on commas while respecting quoted strings and booleans.
+// Handles SQL-escaped single quotes ('') inside quoted strings.
 function splitValuesOnComma(valuesStr: string): (string | boolean)[] {
   const values: (string | boolean)[] = [];
   let currentValue = '';
@@ -110,7 +128,15 @@ function splitValuesOnComma(valuesStr: string): (string | boolean)[] {
   for (let i = 0; i < valuesStr.length; i++) {
     const char = valuesStr[i];
 
-    if (char === "'" && (i === 0 || valuesStr[i - 1] !== '\\')) {
+    if (isQuoteBoundary(valuesStr, i)) {
+      if (inString) {
+        const esc = handleQuoteEscape(valuesStr, i);
+        if (esc.skip) {
+          currentValue += "''";
+          i = esc.next;
+          continue;
+        }
+      }
       inString = !inString;
       currentValue += char;
       continue;
@@ -135,6 +161,78 @@ function splitValuesOnComma(valuesStr: string): (string | boolean)[] {
   return values;
 }
 
+// Check whether a SQL fragment contains a keyword or operator outside of
+// single-quoted strings.  Accepts either single characters (=, <, >) or
+// multi-character keywords (' OR ', ' BETWEEN ') to search for.
+function containsOutsideQuotes(
+  text: string,
+  targets: (string | { char: string })[],
+): boolean {
+  let inString = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (isQuoteBoundary(text, i)) {
+      if (inString) {
+        const esc = handleQuoteEscape(text, i);
+        if (esc.skip) {
+          i = esc.next;
+          continue;
+        }
+      }
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+
+    for (const target of targets) {
+      if (typeof target === 'object') {
+        if (char === target.char) return true;
+      } else {
+        if (text.slice(i, i + target.length).toUpperCase() === target)
+          return true;
+      }
+    }
+  }
+  return false;
+}
+
+function containsOperatorOutsideQuotes(part: string): boolean {
+  return containsOutsideQuotes(part, [
+    { char: '=' },
+    { char: '<' },
+    { char: '>' },
+    ' OR ',
+  ]);
+}
+
+// Split a string on the first occurrence of `delimiter` that is outside
+// single-quoted strings.  Returns [before, after] or null if not found.
+function splitOnFirstOutsideQuotes(
+  text: string,
+  delimiter: string,
+): [string, string] | null {
+  let inString = false;
+  const upper = delimiter.toUpperCase();
+  for (let i = 0; i < text.length; i++) {
+    if (isQuoteBoundary(text, i)) {
+      if (inString) {
+        const esc = handleQuoteEscape(text, i);
+        if (esc.skip) {
+          i = esc.next;
+          continue;
+        }
+      }
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (text.slice(i, i + upper.length).toUpperCase() === upper) {
+      return [text.slice(0, i), text.slice(i + upper.length)];
+    }
+  }
+  return null;
+}
+
 // Helper function to extract simple IN/NOT IN clauses from a condition
 // This handles both simple conditions and compound conditions with AND
 function extractInClauses(condition: string): Array<{
@@ -148,7 +246,7 @@ function extractInClauses(condition: string): Array<{
     isExclude: boolean;
   }> = [];
 
-  // Split on ' AND ' while respecting quoted strings
+  // Split on ' AND ' while respecting quoted strings (including SQL-escaped quotes)
   const parts: string[] = [];
   let currentPart = '';
   let inString = false;
@@ -156,7 +254,15 @@ function extractInClauses(condition: string): Array<{
   for (let i = 0; i < condition.length; i++) {
     const char = condition[i];
 
-    if (char === "'" && (i === 0 || condition[i - 1] !== '\\')) {
+    if (isQuoteBoundary(condition, i)) {
+      if (inString) {
+        const esc = handleQuoteEscape(condition, i);
+        if (esc.skip) {
+          currentPart += "''";
+          i = esc.next;
+          continue;
+        }
+      }
       inString = !inString;
       currentPart += char;
       continue;
@@ -180,39 +286,52 @@ function extractInClauses(condition: string): Array<{
 
   // Process each part to extract IN/NOT IN clauses
   for (const part of parts) {
-    // Skip parts that contain OR (not supported) or comparison operators
-    if (
-      part.toUpperCase().includes(' OR ') ||
-      part.includes('=') ||
-      part.includes('<') ||
-      part.includes('>')
-    ) {
+    // Skip parts that contain OR (not supported) or comparison operators,
+    // but only when those operators appear outside of quoted strings.
+    if (containsOperatorOutsideQuotes(part)) {
       continue;
     }
 
-    const isExclude = part.includes('NOT IN');
+    const isExclude = containsOutsideQuotes(part, [' NOT IN ']);
+    const hasIn = isExclude || containsOutsideQuotes(part, [' IN ']);
 
-    // Check if this is an IN clause
-    if (part.includes(' IN ') || part.includes(' NOT IN ')) {
-      const [key, values] = part.split(isExclude ? ' NOT IN ' : ' IN ');
+    if (hasIn) {
+      // Split on the first unquoted ' IN ' / ' NOT IN '
+      const splitResult = splitOnFirstOutsideQuotes(
+        part,
+        isExclude ? ' NOT IN ' : ' IN ',
+      );
+      if (!splitResult) continue;
+      const [key, values] = splitResult;
 
-      if (key && values) {
-        const keyStr = key.trim();
-        // Remove outer parentheses and split on commas while respecting quotes
-        const trimmedValues = values.trim();
-        const withoutParens =
-          trimmedValues.startsWith('(') && trimmedValues.endsWith(')')
-            ? trimmedValues.slice(1, -1)
-            : trimmedValues;
+      const keyStr = key.trim();
+      const trimmedValues = values.trim();
+      const withoutParens =
+        trimmedValues.startsWith('(') && trimmedValues.endsWith(')')
+          ? trimmedValues.slice(1, -1)
+          : trimmedValues;
 
-        const valuesArray = splitValuesOnComma(withoutParens);
+      // Unwrap the date-value expressions filtersToQuery emits for date columns
+      // back into the plain quoted literal 'X' before splitting on commas. The
+      // DateTime64 wrapper contains an unquoted comma (before its precision
+      // argument), so this must run before splitValuesOnComma. The capture
+      // group `'(?:[^']|'')*'` consumes the SQL-escaped quoted string ('' for
+      // embedded quotes), keeping the round-trip exact even if a value
+      // contained quotes; the optional `, N` covers parseDateTime64BestEffort's
+      // precision argument. Matches the four producers in `dateTimeValueExpr`:
+      // parseDateTime64BestEffort, parseDateTimeBestEffort, toDate32, toDate.
+      const unwrapped = withoutParens.replace(
+        /(?:parseDateTime64BestEffort|parseDateTimeBestEffort|toDate32|toDate)\(('(?:[^']|'')*')(?:\s*,\s*\d+)?\)/g,
+        '$1',
+      );
 
-        results.push({
-          key: keyStr,
-          values: valuesArray,
-          isExclude,
-        });
-      }
+      const valuesArray = splitValuesOnComma(unwrapped);
+
+      results.push({
+        key: keyStr,
+        values: valuesArray,
+        isExclude,
+      });
     }
   }
 
@@ -235,8 +354,8 @@ export const parseQuery = (
   for (const filter of q) {
     if (filter.type !== 'sql') continue;
 
-    // Check for BETWEEN condition
-    if (filter.condition.includes(' BETWEEN ')) {
+    // Check for BETWEEN condition (only when BETWEEN appears outside quotes)
+    if (containsOutsideQuotes(filter.condition, [' BETWEEN '])) {
       const betweenMatch = filter.condition.match(
         /^(.+?)\s+BETWEEN\s+(.+?)\s+AND\s+(.+?)$/i,
       );
@@ -284,22 +403,44 @@ export const parseQuery = (
 export const useSearchPageFilterState = ({
   searchQuery = [],
   onFilterChange,
+  dateTimeColumns,
+  knownColumns,
 }: {
   searchQuery?: Filter[];
   onFilterChange: (filters: Filter[]) => void;
+  dateTimeColumns?: ReadonlyMap<string, string>;
+  /**
+   * Top-level column names on the table, used to quote
+   * column names that contain special characters
+   * (eg. service-name --> `service-name`).
+   **/
+  knownColumns: Set<string>;
 }) => {
-  const parsedQuery = React.useMemo(() => {
+  // Access knownColumns through a ref so the returned mutators (which depend on
+  // updateFilterQuery) keep stable identities across knownColumns reference
+  // changes. The known columns are only used by the mutators, which are called
+  // on user input, not render, so avoid re-render by using a stable ref.
+  const knownColumnsRef = useRef<Set<string>>(knownColumns);
+  useEffect(() => {
+    knownColumnsRef.current = knownColumns;
+  }, [knownColumns]);
+
+  // Persisted filters carry canonical (escaped) keys; convert back to the clean
+  // keys the sidebar/comparisons use as they enter in-memory FilterState.
+  const parsedQuery = useMemo(() => {
     try {
-      return parseQuery(searchQuery);
+      return {
+        filters: unescapeFilterStateKeys(parseQuery(searchQuery).filters),
+      };
     } catch (e) {
       console.error(e);
       return { filters: {} };
     }
   }, [searchQuery]);
 
-  const [filters, setFilters] = React.useState<FilterState>({});
+  const [filters, setFilters] = useState<FilterState>({});
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!areFiltersEqual(filters, parsedQuery.filters)) {
       setFilters(parsedQuery.filters);
     }
@@ -307,14 +448,20 @@ export const useSearchPageFilterState = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parsedQuery.filters]);
 
-  const updateFilterQuery = React.useCallback(
+  const updateFilterQuery = useCallback(
     (newFilters: FilterState) => {
-      onFilterChange(filtersToQuery(newFilters));
+      // Escape filter keys here prior to saving so the URL / saved
+      // search holds valid-SQL keys while FilterState stays clean.
+      const escapedFilters = escapeFilterStateKeys(
+        newFilters,
+        knownColumnsRef.current,
+      );
+      onFilterChange(filtersToQuery(escapedFilters, { dateTimeColumns }));
     },
-    [onFilterChange],
+    [onFilterChange, dateTimeColumns],
   );
 
-  const setFilterValue = React.useCallback(
+  const setFilterValue = useCallback(
     (
       property: string,
       value: string | boolean,
@@ -361,7 +508,7 @@ export const useSearchPageFilterState = ({
     [updateFilterQuery],
   );
 
-  const setFilterRange = React.useCallback(
+  const setFilterRange = useCallback(
     (property: string, range: { min: number; max: number }) => {
       setFilters(prevFilters => {
         const newFilters = produce(prevFilters, draft => {
@@ -377,7 +524,7 @@ export const useSearchPageFilterState = ({
     [updateFilterQuery],
   );
 
-  const clearFilter = React.useCallback(
+  const clearFilter = useCallback(
     (property: string) => {
       setFilters(prevFilters => {
         const newFilters = produce(prevFilters, draft => {
@@ -390,18 +537,77 @@ export const useSearchPageFilterState = ({
     [updateFilterQuery],
   );
 
-  const clearAllFilters = React.useCallback(() => {
+  // Swap one value for another within the same set (included or excluded),
+  // preserving polarity, in a single state update. Two setFilterValue calls
+  // would emit onFilterChange twice (one query run each); this emits once.
+  const replaceFilterValue = useCallback(
+    (
+      property: string,
+      oldValue: string | boolean,
+      newValue: string | boolean,
+      action: 'include' | 'exclude',
+    ) => {
+      setFilters(prevFilters => {
+        const newFilters = produce(prevFilters, draft => {
+          if (!draft[property]) {
+            draft[property] = { included: new Set(), excluded: new Set() };
+          }
+          const set =
+            action === 'exclude'
+              ? draft[property].excluded
+              : draft[property].included;
+          set.delete(oldValue);
+          set.add(newValue);
+        });
+        updateFilterQuery(newFilters);
+        return newFilters;
+      });
+    },
+    [updateFilterQuery],
+  );
+
+  const clearAllFilters = useCallback(() => {
     setFilters(() => ({}));
     updateFilterQuery({});
   }, [updateFilterQuery]);
+
+  // Keep only filters whose root column appears in `allowedColumnNames`.
+  // Returns the keys of the filters that were dropped so callers can surface
+  // a notice when filter state was thrown away (e.g. on source change).
+  const retainFiltersByColumns = useCallback(
+    (allowedColumnNames: Set<string>): string[] => {
+      const dropped: string[] = [];
+      const kept: FilterState = {};
+      for (const [key, value] of Object.entries(filters)) {
+        // Filter keys are dot-normalized, top-level columns are stored as-is,
+        // nested JSON/Map keys as `Root.nested.path`. An exact match handles
+        // the rare case of a column with dots in its name.
+        const dotIdx = key.indexOf('.');
+        const rootColumn = dotIdx > 0 ? key.slice(0, dotIdx) : key;
+        if (allowedColumnNames.has(key) || allowedColumnNames.has(rootColumn)) {
+          kept[key] = value;
+        } else {
+          dropped.push(key);
+        }
+      }
+      if (dropped.length > 0) {
+        setFilters(kept);
+        updateFilterQuery(kept);
+      }
+      return dropped;
+    },
+    [filters, updateFilterQuery],
+  );
 
   return {
     filters,
     setFilters,
     setFilterValue,
+    replaceFilterValue,
     setFilterRange,
     clearFilter,
     clearAllFilters,
+    retainFiltersByColumns,
   };
 };
 
@@ -411,128 +617,324 @@ type PinnedFilters = {
 
 export type FilterStateHook = ReturnType<typeof useSearchPageFilterState>;
 
-function usePinnedFilterBySource(sourceId: string | null) {
-  // Keep the original structure for backwards compatibility
+/**
+ * Merge team-level and personal pinned filter data into a single view.
+ * Fields and filter values are unioned (deduplicated).
+ */
+export function mergePinnedData(
+  team: { fields: string[]; filters: PinnedFilters } | null,
+  personal: { fields: string[]; filters: PinnedFilters } | null,
+): { fields: string[]; filters: PinnedFilters } {
+  const teamFields = team?.fields ?? [];
+  const personalFields = personal?.fields ?? [];
+  const fields = [...new Set([...teamFields, ...personalFields])];
+
+  const teamFilters = team?.filters ?? {};
+  const personalFilters = personal?.filters ?? {};
+  const allKeys = new Set([
+    ...Object.keys(teamFilters),
+    ...Object.keys(personalFilters),
+  ]);
+
+  const filters: PinnedFilters = {};
+  for (const key of allKeys) {
+    const teamVals = teamFilters[key] ?? [];
+    const personalVals = personalFilters[key] ?? [];
+    const merged = [...teamVals];
+    for (const v of personalVals) {
+      if (!merged.some(existing => existing === v)) {
+        merged.push(v);
+      }
+    }
+    filters[key] = merged;
+  }
+
+  return { fields, filters };
+}
+
+/**
+ * Toggle a value in a PinnedFilters map. Returns a new map with the value
+ * added or removed under the given property key.
+ */
+function toggleValueInFilters(
+  filters: PinnedFilters,
+  property: string,
+  value: string | boolean,
+): PinnedFilters {
+  const updated = { ...filters };
+  if (!updated[property]) {
+    updated[property] = [];
+  }
+  const idx = updated[property].findIndex((v: string | boolean) => v === value);
+  if (idx >= 0) {
+    updated[property] = updated[property].filter(
+      (_: string | boolean, i: number) => i !== idx,
+    );
+    if (updated[property].length === 0) {
+      delete updated[property];
+    }
+  } else {
+    updated[property] = [...updated[property], value];
+  }
+  return updated;
+}
+
+/**
+ * Hook for personal pinned filters stored in localStorage.
+ * This is the original storage mechanism, per-user, per-browser.
+ */
+function usePersonalPinnedFilters(sourceId: string | null) {
   const [_pinnedFilters, _setPinnedFilters] = useLocalStorage<{
     [sourceId: string]: PinnedFilters;
   }>('hdx-pinned-search-filters', {});
 
-  // Separate storage for pinned fields
   const [_pinnedFields, _setPinnedFields] = useLocalStorage<{
     [sourceId: string]: string[];
   }>('hdx-pinned-fields', {});
 
-  const pinnedFilters = React.useMemo<PinnedFilters>(
+  const filters = useMemo<PinnedFilters>(
     () =>
       !sourceId || !_pinnedFilters[sourceId] ? {} : _pinnedFilters[sourceId],
     [_pinnedFilters, sourceId],
   );
 
-  const pinnedFields = React.useMemo<string[]>(
+  const fields = useMemo<string[]>(
     () =>
       !sourceId || !_pinnedFields[sourceId] ? [] : _pinnedFields[sourceId],
     [_pinnedFields, sourceId],
   );
 
-  const setPinnedFilters = React.useCallback<
-    (val: PinnedFilters | ((pf: PinnedFilters) => PinnedFilters)) => void
-  >(
-    val => {
+  const setFilters = useCallback(
+    (val: PinnedFilters | ((pf: PinnedFilters) => PinnedFilters)) => {
       if (!sourceId) return;
-      _setPinnedFilters(prev =>
-        produce(prev, draft => {
-          draft[sourceId] =
-            val instanceof Function ? val(draft[sourceId] ?? {}) : val;
-        }),
-      );
+      _setPinnedFilters(prev => {
+        const updated = { ...prev };
+        updated[sourceId] =
+          val instanceof Function ? val(prev[sourceId] ?? {}) : val;
+        return updated;
+      });
     },
     [sourceId, _setPinnedFilters],
   );
 
-  const setPinnedFields = React.useCallback<
-    (val: string[] | ((pf: string[]) => string[])) => void
-  >(
-    val => {
+  const setFields = useCallback(
+    (val: string[] | ((pf: string[]) => string[])) => {
       if (!sourceId) return;
-      _setPinnedFields(prev =>
-        produce(prev, draft => {
-          draft[sourceId] =
-            val instanceof Function ? val(draft[sourceId] ?? []) : val;
-        }),
-      );
+      _setPinnedFields(prev => {
+        const updated = { ...prev };
+        updated[sourceId] =
+          val instanceof Function ? val(prev[sourceId] ?? []) : val;
+        return updated;
+      });
     },
     [sourceId, _setPinnedFields],
   );
 
-  return { pinnedFilters, setPinnedFilters, pinnedFields, setPinnedFields };
+  return { filters, fields, setFilters, setFields };
 }
 
 export function usePinnedFilters(sourceId: string | null) {
-  const { pinnedFilters, setPinnedFilters, pinnedFields, setPinnedFields } =
-    usePinnedFilterBySource(sourceId);
+  // Personal pins: localStorage (per-user, per-browser)
+  const personal = usePersonalPinnedFilters(sourceId);
 
-  const toggleFilterPin = React.useCallback(
+  // Team/shared pins: MongoDB via API (shared across team)
+  const { data: teamApiData } = usePinnedFiltersApi(sourceId);
+  const updateTeamMutation = useUpdatePinnedFilters();
+
+  // Optimistic state keyed by sourceId so it is automatically ignored when
+  // the source changes, no useEffect needed to clear stale state.
+  const [optimisticTeam, setOptimisticTeam] = useState<{
+    sourceId: string;
+    fields: string[];
+    filters: PinnedFilters;
+  } | null>(null);
+
+  const effectiveTeam = useMemo(
+    () =>
+      optimisticTeam?.sourceId === sourceId
+        ? { fields: optimisticTeam.fields, filters: optimisticTeam.filters }
+        : {
+            fields: teamApiData?.team?.fields ?? [],
+            filters: teamApiData?.team?.filters ?? {},
+          },
+    [optimisticTeam, sourceId, teamApiData],
+  );
+
+  // Merge team + personal into a unified view for read operations
+  const { fields: pinnedFields, filters: pinnedFilters } = useMemo(
+    () =>
+      mergePinnedData(effectiveTeam, {
+        fields: personal.fields,
+        filters: personal.filters,
+      }),
+    [effectiveTeam, personal.fields, personal.filters],
+  );
+
+  // Debounce for team API writes, cancelled on unmount to prevent stale writes.
+  const pendingTeamUpdateRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  useEffect(() => {
+    return () => {
+      if (pendingTeamUpdateRef.current) {
+        clearTimeout(pendingTeamUpdateRef.current);
+        pendingTeamUpdateRef.current = null;
+      }
+    };
+  }, []);
+
+  const flushTeamUpdate = useCallback(
+    (newFields: string[], newFilters: PinnedFilters) => {
+      if (!sourceId) return;
+
+      setOptimisticTeam({ sourceId, fields: newFields, filters: newFilters });
+
+      if (pendingTeamUpdateRef.current) {
+        clearTimeout(pendingTeamUpdateRef.current);
+      }
+      pendingTeamUpdateRef.current = setTimeout(() => {
+        updateTeamMutation.mutate(
+          {
+            source: sourceId,
+            fields: newFields,
+            filters: newFilters,
+          },
+          {
+            onSettled: () => setOptimisticTeam(null),
+          },
+        );
+        pendingTeamUpdateRef.current = null;
+      }, 300);
+    },
+    [sourceId, updateTeamMutation],
+  );
+
+  // Personal pin: value-level pin (localStorage, instant)
+  const toggleFilterPin = useCallback(
     (property: string, value: string | boolean) => {
-      setPinnedFilters(prevFilters =>
-        produce(prevFilters, draft => {
-          if (!draft[property]) {
-            draft[property] = [];
-          }
-          const idx = draft[property].findIndex(v => v === value);
-          if (idx >= 0) {
-            draft[property].splice(idx, 1);
-          } else {
-            draft[property].push(value);
-          }
-          return draft;
-        }),
-      );
-
+      personal.setFilters(prev => toggleValueInFilters(prev, property, value));
       // When pinning a value, also pin the field if not already pinned
-      setPinnedFields(prevFields => {
-        if (!prevFields.includes(property)) {
-          return [...prevFields, property];
-        }
-        return prevFields;
-      });
+      personal.setFields(prev =>
+        prev.includes(property) ? prev : [...prev, property],
+      );
     },
-    [setPinnedFilters, setPinnedFields],
+    [personal],
   );
 
-  const toggleFieldPin = React.useCallback(
+  // Personal pin: field-level pin (localStorage, instant)
+  const toggleFieldPin = useCallback(
     (field: string) => {
-      setPinnedFields(prevFields => {
-        const fieldIndex = prevFields.findIndex(f => f === field);
-        if (fieldIndex >= 0) {
-          return prevFields.filter((_, i) => i !== fieldIndex);
-        } else {
-          return [...prevFields, field];
-        }
+      personal.setFields(prev => {
+        const idx = prev.indexOf(field);
+        return idx >= 0 ? prev.filter((_, i) => i !== idx) : [...prev, field];
       });
     },
-    [setPinnedFields],
+    [personal],
   );
 
-  const isFilterPinned = React.useCallback(
+  // Personal-only checks (not merged), so team pins don't show as personal
+  const isFilterPinned = useCallback(
     (property: string, value: string | boolean): boolean => {
       return (
-        pinnedFilters[property] &&
-        pinnedFilters[property].some(v => v === value)
+        personal.filters[property] != null &&
+        personal.filters[property].some((v: string | boolean) => v === value)
       );
     },
-    [pinnedFilters],
+    [personal.filters],
   );
 
-  const isFieldPinned = React.useCallback(
+  const isFieldPinned = useCallback(
     (field: string): boolean => {
-      return pinnedFields.includes(field);
+      return personal.fields.includes(field);
     },
-    [pinnedFields],
+    [personal.fields],
   );
 
-  const getPinnedFields = React.useCallback((): string[] => {
+  // Merged view for getPinnedFields (used for sorting and always-fetch logic)
+  const getPinnedFields = useCallback((): string[] => {
     return pinnedFields;
   }, [pinnedFields]);
+
+  // Team pin: field-level (MongoDB via API, debounced)
+  const toggleSharedFieldPin = useCallback(
+    (field: string) => {
+      const currentFields = [...effectiveTeam.fields];
+      const currentFilters = { ...effectiveTeam.filters };
+      const fieldIndex = currentFields.indexOf(field);
+
+      if (fieldIndex >= 0) {
+        // Removing field from shared, also clean up its filter values
+        const newFields = currentFields.filter((_, i) => i !== fieldIndex);
+        delete currentFilters[field];
+        flushTeamUpdate(newFields, currentFilters);
+      } else {
+        // Adding field to shared
+        flushTeamUpdate([...currentFields, field], currentFilters);
+      }
+    },
+    [effectiveTeam, flushTeamUpdate],
+  );
+
+  const isSharedFieldPinned = useCallback(
+    (field: string): boolean => {
+      // A field is shared if it's in the fields list OR has shared filter values
+      return (
+        effectiveTeam.fields.includes(field) ||
+        (effectiveTeam.filters[field] != null &&
+          effectiveTeam.filters[field].length > 0)
+      );
+    },
+    [effectiveTeam],
+  );
+
+  // Team pin: value-level (MongoDB via API, debounced)
+  const toggleSharedFilterPin = useCallback(
+    (property: string, value: string | boolean) => {
+      const newFilters = toggleValueInFilters(
+        effectiveTeam.filters,
+        property,
+        value,
+      );
+      // When sharing a value, also add the field to shared fields
+      const newFields = effectiveTeam.fields.includes(property)
+        ? effectiveTeam.fields
+        : [...effectiveTeam.fields, property];
+
+      flushTeamUpdate(newFields, newFilters);
+    },
+    [effectiveTeam, flushTeamUpdate],
+  );
+
+  const isSharedFilterPinned = useCallback(
+    (property: string, value: string | boolean): boolean => {
+      const vals = effectiveTeam.filters[property];
+      return vals != null && vals.some(v => v === value);
+    },
+    [effectiveTeam],
+  );
+
+  const resetPersonalPins = useCallback(() => {
+    personal.setFields(() => []);
+    personal.setFilters(() => ({}));
+  }, [personal]);
+
+  const resetSharedFilters = useCallback(() => {
+    flushTeamUpdate([], {});
+  }, [flushTeamUpdate]);
+
+  const hasPersonalPins = useMemo(
+    () =>
+      personal.fields.length > 0 || Object.keys(personal.filters).length > 0,
+    [personal.fields, personal.filters],
+  );
+
+  const hasSharedPins = useMemo(
+    () =>
+      effectiveTeam.fields.length > 0 ||
+      Object.keys(effectiveTeam.filters).length > 0,
+    [effectiveTeam],
+  );
 
   return {
     toggleFilterPin,
@@ -541,5 +943,13 @@ export function usePinnedFilters(sourceId: string | null) {
     isFieldPinned,
     getPinnedFields,
     pinnedFilters,
+    toggleSharedFieldPin,
+    isSharedFieldPinned,
+    toggleSharedFilterPin,
+    isSharedFilterPinned,
+    resetPersonalPins,
+    resetSharedFilters,
+    hasPersonalPins,
+    hasSharedPins,
   };
 }

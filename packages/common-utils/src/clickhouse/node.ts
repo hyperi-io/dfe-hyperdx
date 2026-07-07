@@ -1,5 +1,10 @@
+import type {
+  BaseResultSet,
+  ClickHouseClient as NodeClickHouseClient,
+  ClickHouseSettings,
+  DataFormat,
+} from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
-import type { BaseResultSet, DataFormat } from '@clickhouse/client-common';
 
 import {
   BaseClickhouseClient,
@@ -23,6 +28,13 @@ export class ClickhouseClient extends BaseClickhouseClient {
     });
   }
 
+  // This subclass always builds a node client, so narrow the base class's
+  // platform-agnostic client type to the node-specific one.
+  protected getClient(): NodeClickHouseClient {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- subclass always builds a node client
+    return super.getClient() as NodeClickHouseClient;
+  }
+
   protected async __query<Format extends DataFormat>({
     query,
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- default generic value
@@ -30,13 +42,26 @@ export class ClickhouseClient extends BaseClickhouseClient {
     query_params = {},
     abort_signal,
     clickhouse_settings: externalClickhouseSettings,
+    connectionId,
     queryId,
+    shouldSkipApplySettings,
   }: QueryInputs<Format>): Promise<BaseResultSet<ReadableStream, Format>> {
     this.logDebugQuery(query, query_params);
 
-    const clickhouseSettings = this.processClickhouseSettings(
-      externalClickhouseSettings,
-    );
+    let clickhouseSettings: ClickHouseSettings | undefined;
+    // If this is the settings query, we must not process the clickhouse settings, or else we will infinitely recurse
+    if (!shouldSkipApplySettings) {
+      const neutralSettings = await this.processClickhouseSettings({
+        externalClickhouseSettings,
+        connectionId,
+      });
+      // processClickhouseSettings produces @clickhouse/client-common's
+      // ClickHouseSettings. It is structurally identical to the node client's
+      // own (self-bundled, since 1.23) ClickHouseSettings, but the two packages'
+      // copies are distinct nominal types, so bridge explicitly.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- client library type mismatch
+      clickhouseSettings = neutralSettings as ClickHouseSettings;
+    }
 
     // TODO: Custom error handling
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- client library type mismatch
