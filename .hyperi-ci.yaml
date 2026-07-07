@@ -21,5 +21,10 @@ build:
 publish:
   enabled: true
   target: internal
+  destinations_oss:
+    npm: false
+  container:
+    enabled: true
+    dockerfile: Dockerfile
 typescript:
   package_manager: yarn
