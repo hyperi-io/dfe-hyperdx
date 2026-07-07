@@ -56,7 +56,8 @@ COPY ./packages/app/types ./packages/app/types
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_OUTPUT_STANDALONE=true
-ENV NEXT_PUBLIC_IS_LOCAL_MODE=false
+ARG NEXT_PUBLIC_IS_LOCAL_MODE=false
+ENV NEXT_PUBLIC_IS_LOCAL_MODE=$NEXT_PUBLIC_IS_LOCAL_MODE
 ENV NX_DAEMON=false
 RUN npx nx run-many --target=build --projects=@hyperdx/common-utils,@hyperdx/api,@hyperdx/app
 RUN rm -rf node_modules && yarn workspaces focus @hyperdx/api --production
@@ -75,6 +76,8 @@ ARG CODE_VERSION
 
 ENV CODE_VERSION=$CODE_VERSION
 ENV NODE_ENV=production
+ARG NEXT_PUBLIC_IS_LOCAL_MODE=false
+ENV NEXT_PUBLIC_IS_LOCAL_MODE=$NEXT_PUBLIC_IS_LOCAL_MODE
 
 # Install libs used for the start script
 RUN npm install -g concurrently@9.1.0
