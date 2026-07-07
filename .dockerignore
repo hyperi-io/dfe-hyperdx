@@ -1,0 +1,46 @@
+# Project:   hyperi-hyperdx
+# File:      .dockerignore
+# Purpose:   keep build artefacts and local state out of the Docker build context
+#
+# License:   MIT
+# Copyright: (c) 2026 HYPERI PTY LIMITED
+#
+# NOTE: .yarn/ is deliberately NOT ignored -- the Yarn 4 (berry) release lives
+# there and the image build needs it.
+
+# git
+.git
+.gitignore*
+
+# dependencies (reinstalled inside the image)
+**/node_modules
+
+# build output
+packages/app/.next
+packages/app/out
+packages/api/build
+packages/common-utils/dist
+**/coverage
+**/.nx/cache
+
+# local env / secrets
+**/.env
+**/.env.*
+!**/.env-example
+**/.dockerhub.env
+**/.ghcr.env
+**/*.pem
+**/keys
+
+# logs / misc
+**/*.log
+**/.DS_Store
+
+# CI / tooling that is not needed to build the app image
+.github
+.claude
+docker-compose*.yml
+smoke-tests
+**/__tests__
+**/*.test.ts
+**/*.test.tsx
