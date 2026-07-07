@@ -4,15 +4,27 @@ export FRONTEND_URL="${FRONTEND_URL:-${HYPERDX_APP_URL:-http://localhost}:${HYPE
 export OPAMP_PORT=${HYPERDX_OPAMP_PORT:-4320}
 export HYPERDX_IMAGE="hyperdx"
 
-# API auth mode. Safe default is REQUIRED_AUTH. When the image was built in
-# local mode (NEXT_PUBLIC_IS_LOCAL_MODE=true, e.g. dfe-docker's no-auth local
-# observability stack), default to the no-auth mode so the client and server
-# agree - the client skips login in local mode, so REQUIRED_AUTH would break it.
-# An explicit IS_LOCAL_APP_MODE in the environment always wins.
 if [ "${NEXT_PUBLIC_IS_LOCAL_MODE}" = "true" ]; then
-  export IS_LOCAL_APP_MODE="${IS_LOCAL_APP_MODE:-DANGEROUSLY_is_local_app_mode💀}"
+  export IS_LOCAL_APP_MODE="DANGEROUSLY_is_local_app_mode💀"
+  echo "WARNING: HyperDX authentication is DISABLED (local mode). Every request runs unauthenticated - do NOT expose this image to untrusted networks." >&2
 else
   export IS_LOCAL_APP_MODE="${IS_LOCAL_APP_MODE:-REQUIRED_AUTH}"
+fi
+
+if [ -z "${DEFAULT_CONNECTIONS}" ] && [ -f "${DEFAULT_CONNECTIONS_FILE}" ]; then
+  export DEFAULT_CONNECTIONS="$(cat "${DEFAULT_CONNECTIONS_FILE}")"
+fi
+if [ -z "${DEFAULT_SOURCES}" ] && [ -f "${DEFAULT_SOURCES_FILE}" ]; then
+  export DEFAULT_SOURCES="$(cat "${DEFAULT_SOURCES_FILE}")"
+fi
+
+if [ -z "${NEXT_PUBLIC_HDX_LOCAL_DEFAULT_SOURCES}" ] && [ -f "${NEXT_PUBLIC_HDX_LOCAL_DEFAULT_SOURCES_FILE}" ]; then
+  export NEXT_PUBLIC_HDX_LOCAL_DEFAULT_SOURCES="$(cat "${NEXT_PUBLIC_HDX_LOCAL_DEFAULT_SOURCES_FILE}")"
+fi
+
+ENV_JS="/app/packages/app/packages/app/public/__ENV.js"
+if [ -d "$(dirname "${ENV_JS}")" ]; then
+  node -e 'const fs=require("fs");const e={};for(const k in process.env){if(k.indexOf("NEXT_PUBLIC_")===0){e[k]=process.env[k];}}fs.writeFileSync(process.argv[1],"window.__ENV = "+JSON.stringify(e)+";\n");' "${ENV_JS}"
 fi
 
 echo ""
