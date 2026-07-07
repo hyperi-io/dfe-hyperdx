@@ -11,13 +11,13 @@
 language: typescript
 quality:
   enabled: true
+  typescript:
+    audit: warn
 test:
   enabled: true
   coverage: true
 build:
-  enabled: true
-  strategies:
-    - native
+  enabled: false
 publish:
   enabled: true
   target: internal

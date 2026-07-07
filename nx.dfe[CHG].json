@@ -15,6 +15,9 @@
     },
     "ci:lint": {
       "dependsOn": ["^build"]
+    },
+    "ci:unit": {
+      "dependsOn": ["^build"]
     }
   },
   "tasksRunnerOptions": {
