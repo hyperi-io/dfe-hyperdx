@@ -19,6 +19,18 @@ is the *design*. Downstream repos (dfe-engine, dfe-infra, dfe-docs) should
 ## Upstream base
 
 - **Upstream:** <https://github.com/hyperdxio/hyperdx> (HyperDX v2)
+- **Synced to:** `@hyperdx/app@2.29.0` (merge `f95c8773`, 2026-07-07). Recorded as
+  a real 2-parent merge (base `e58f01d`), so future syncs are clean 3-way merges
+  off 2.29. `git rerere` is enabled for the fork (future conflict resolutions
+  auto-replay). Sync process: `git merge <new-upstream-tag>` on a `sync/<tag>`
+  branch, then build + test (see DFE-DOCKER-LOCAL.md).
+- **RETIRED - the `.dfe[CHG]` shadow-copy convention.** It was never wired (no
+  swap alias/script/config; pages import the pristine originals; docker build
+  ignores the `package.dfe[CHG].json`/`nx.dfe[CHG].json` variants), had drifted
+  hard against 2.29, and blocked the build. All 32 shadow files were removed in
+  `bfb9899a`. The fork's real customisations live entirely in the imported
+  `dfe/` dirs. When customising an upstream file now, prefer an upstream config
+  seam (e.g. the `brandName`/theme hooks) over shadowing.
 - **Imported at:** commit `e58f01d` "Initial HyperDX commit" (2026-02-16)
 - **No `upstream` remote is configured** as of this writing -- only `origin`
   points at `github.com/hyperi-io/hyperi-hyperdx`. To assess or pull upstream
