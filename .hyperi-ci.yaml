@@ -11,6 +11,8 @@
 language: typescript
 quality:
   enabled: true
+  typescript:
+    audit: warn
 test:
   enabled: true
   coverage: true
