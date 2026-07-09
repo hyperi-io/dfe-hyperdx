@@ -4,9 +4,28 @@ export FRONTEND_URL="${FRONTEND_URL:-${HYPERDX_APP_URL:-http://localhost}:${HYPE
 export OPAMP_PORT=${HYPERDX_OPAMP_PORT:-4320}
 export HYPERDX_IMAGE="hyperdx"
 
-# Set to "REQUIRED_AUTH" to enforce API authentication.
-# ⚠️ Do not change this value !!!!
-export IS_LOCAL_APP_MODE="REQUIRED_AUTH"
+if [ "${NEXT_PUBLIC_IS_LOCAL_MODE}" = "true" ]; then
+  export IS_LOCAL_APP_MODE="DANGEROUSLY_is_local_app_mode💀"
+  echo "WARNING: HyperDX authentication is DISABLED (local mode). Every request runs unauthenticated - do NOT expose this image to untrusted networks." >&2
+else
+  export IS_LOCAL_APP_MODE="${IS_LOCAL_APP_MODE:-REQUIRED_AUTH}"
+fi
+
+if [ -z "${DEFAULT_CONNECTIONS}" ] && [ -f "${DEFAULT_CONNECTIONS_FILE}" ]; then
+  export DEFAULT_CONNECTIONS="$(cat "${DEFAULT_CONNECTIONS_FILE}")"
+fi
+if [ -z "${DEFAULT_SOURCES}" ] && [ -f "${DEFAULT_SOURCES_FILE}" ]; then
+  export DEFAULT_SOURCES="$(cat "${DEFAULT_SOURCES_FILE}")"
+fi
+
+if [ -z "${NEXT_PUBLIC_HDX_LOCAL_DEFAULT_SOURCES}" ] && [ -f "${NEXT_PUBLIC_HDX_LOCAL_DEFAULT_SOURCES_FILE}" ]; then
+  export NEXT_PUBLIC_HDX_LOCAL_DEFAULT_SOURCES="$(cat "${NEXT_PUBLIC_HDX_LOCAL_DEFAULT_SOURCES_FILE}")"
+fi
+
+ENV_JS="/app/packages/app/packages/app/public/__ENV.js"
+if [ -d "$(dirname "${ENV_JS}")" ]; then
+  node -e 'const fs=require("fs");const e={};for(const k in process.env){if(k.indexOf("NEXT_PUBLIC_")===0){e[k]=process.env[k];}}fs.writeFileSync(process.argv[1],"window.__ENV = "+JSON.stringify(e)+";\n");' "${ENV_JS}"
+fi
 
 echo ""
 echo "Visit the HyperDX UI at $FRONTEND_URL"

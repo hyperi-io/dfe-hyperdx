@@ -11,15 +11,20 @@
 language: typescript
 quality:
   enabled: true
+  typescript:
+    audit: warn
 test:
   enabled: true
   coverage: true
 build:
-  enabled: true
-  strategies:
-    - native
+  enabled: false
 publish:
   enabled: true
   target: internal
+  destinations_oss:
+    npm: false
+  container:
+    enabled: true
+    dockerfile: Dockerfile
 typescript:
   package_manager: yarn

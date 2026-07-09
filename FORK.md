@@ -10,8 +10,8 @@ re-applying that divergence onto a newer upstream. Keep it accurate: when you
 add, remove, or move a fork change, update this file in the same commit.
 
 Design rationale for each extension lives in
-[DFE-ARCHITECTURE.md](DFE-ARCHITECTURE.md). This file is the *index*; that file
-is the *design*. Downstream repos (dfe-engine, dfe-infra, dfe-docs) should
+[DFE-ARCHITECTURE.md](DFE-ARCHITECTURE.md). This file is the _index_; that file
+is the _design_. Downstream repos (dfe-engine, dfe-infra, dfe-docs) should
 **link to this file**, never duplicate it (capabilities, not API surface).
 
 ---
@@ -52,6 +52,7 @@ follows one of two conventions:
 
 1. **New code lives under a `dfe/` directory.** Zero conflict risk -- these
    paths do not exist upstream.
+
    - `packages/api/src/dfe/**` -- backend extensions (auth, authz, provisioning,
      config, bootstrap, query-export)
    - `packages/app/src/dfe/**` -- frontend DFE components
@@ -127,7 +128,8 @@ HyperDX trusts the identity injected at the edge. Removed:
 ### DFE integration features
 
 - `packages/api/src/dfe/routers/query-export.ts` -- export a HyperDX saved
-  search / SQL to a DFE rule (the "generate hunt from saved search" path, PR #10)
+  search / SQL to a DFE rule (the "generate hunt from saved search" path, PR
+  #10)
 - Source-create + JSON-parse improvements (PR #11) -- see
   `packages/common-utils/**` delta
 - Alerting: HyperDX's built-in alert checker is **not started**; alert routes
@@ -147,8 +149,8 @@ HyperDX trusts the identity injected at the edge. Removed:
 - `packages/app/src/dfe/components/**` -- SidebarMenu, ThemeToggle,
   UserActionsButton (+ `useLogout`)
 - `.dfe[CHG]` copies: `layout`, `theme/index`, `theme/types`,
-  `theme/themes/_base-tokens`, `utils`, `hooks/useRowWhere`, `globals.css`,
-  and their tests
+  `theme/themes/_base-tokens`, `utils`, `hooks/useRowWhere`, `globals.css`, and
+  their tests
 
 ### Build / CI / tooling
 
@@ -156,8 +158,8 @@ HyperDX trusts the identity injected at the edge. Removed:
 - `.releaserc.json` -- semantic-release
 - `.gitleaks.toml` -- secret-scan false-positive rules
 - `scripts/audit.sh` -- `yarn npm audit` wrapper (Yarn 4 removed built-in audit)
-- `.dfe[CHG]` copies: `nx`, root + per-package `package.json`,
-  `.prettierrc`, `.prettierignore`, `.gitignore`, `tsconfig.build.json`
+- `.dfe[CHG]` copies: `nx`, root + per-package `package.json`, `.prettierrc`,
+  `.prettierignore`, `.gitignore`, `tsconfig.build.json`
 
 ### Docs
 
@@ -180,9 +182,10 @@ HyperDX trusts the identity injected at the edge. Removed:
 
 ## Syncing with upstream (the recovery plan)
 
-Because our changes are merged into `main` (not a curated overlay), there are two
-viable paths. Prefer (A) while merge debt is low; switch to (B) when `.dfe[CHG]`
-copies have drifted too far from their upstream originals to merge cleanly.
+Because our changes are merged into `main` (not a curated overlay), there are
+two viable paths. Prefer (A) while merge debt is low; switch to (B) when
+`.dfe[CHG]` copies have drifted too far from their upstream originals to merge
+cleanly.
 
 ### A. Merge upstream into the fork
 
@@ -204,7 +207,7 @@ When (A) gets ugly:
 2. Re-apply each extension in this catalogue, in order: data layer -> OIDC ->
    Casbin -> provisioning -> integration features -> config/bootstrap ->
    branding -> CI -> docs.
-3. Re-derive each `.dfe[CHG]` copy from the *new* upstream original (do not
+3. Re-derive each `.dfe[CHG]` copy from the _new_ upstream original (do not
    blindly copy the old `.dfe[CHG]` -- diff it against its old original first to
    extract just the DFE delta).
 4. Update this file's upstream-base commit + counts.
@@ -272,7 +275,7 @@ rebase-onto-upstream (shared team repo; rerere replays either way).
 ## Cross-references
 
 - DFE platform: dfe-engine (control plane), dfe-infra (deploy), dfe-docs
-- The OIDC trusted-header contract (`x-oidc-*`) is the universal seam shared with
-  the rest of DFE -- see dfe-engine OIDC dual-mode design.
+- The OIDC trusted-header contract (`x-oidc-*`) is the universal seam shared
+  with the rest of DFE -- see dfe-engine OIDC dual-mode design.
 - FerretDB 2.x requires the Microsoft DocumentDB PG extension and **cannot be
   upgraded in place from 1.x** (clean install + dump/restore).
