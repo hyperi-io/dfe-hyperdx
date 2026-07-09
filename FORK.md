@@ -113,15 +113,16 @@ to teams. Falls back to upstream session auth when headers are absent.
 - Spikes: `.hyperi/spikes/oauth2-derek/**` (Envoy/oauth2-proxy/nginx reference
   configs -- not shipped, kept for reference)
 
-### Authorization: Casbin RBAC (shared enforcer)
+### Authorization
 
-Adds multi-tenant RBAC HyperDX never had. The DFE Python UI is the policy
-authority (pycasbin); HyperDX is a policy consumer (node-casbin). Both read the
-same `casbin_rule` table in the shared PostgreSQL.
-
-- `packages/api/src/dfe/middleware/casbin-authz.ts` -- per-route enforcement
-  middleware
-- Model: RBAC-with-tenants (`sub, dom, obj, act`); roles viewer/editor/admin
+Casbin RBAC (a shared `casbin_rule` PostgreSQL enforcer) was REMOVED in the
+dfe-hyperdx v1 line. It was redundant: every HyperDX route handler already
+self-scopes its Mongo queries by `team`, so tenant isolation holds without it and
+cross-team access was never possible. Authorization is owned by the DFE engine
+(the policy decision point) and enforced at the data layer by ClickHouse GRANTs;
+HyperDX trusts the identity injected at the edge. Removed:
+`dfe/middleware/casbin-authz.ts`, `dfe/bootstrap.ts`,
+`rbac_with_tenants_model.conf`, and the `casbin` / `casbin-pg-adapter` deps.
 
 ### DFE integration features
 
@@ -130,14 +131,13 @@ same `casbin_rule` table in the shared PostgreSQL.
 - Source-create + JSON-parse improvements (PR #11) -- see
   `packages/common-utils/**` delta
 - Alerting: HyperDX's built-in alert checker is **not started**; alert routes
-  are gated via Casbin. Detection/alerting is owned by the DFE rules engine.
-  (Disabled, not removed -- additive.)
+  are hidden by the DFE embed nav gating. Detection/alerting is owned by the DFE
+  rules engine. (Disabled, not removed -- additive.)
 
 ### Config + bootstrap
 
 - `packages/api/src/dfe/config.ts` -- DFE config surface (auth mode, header
-  names, Casbin PG URL, default team)
-- `packages/api/src/dfe/bootstrap.ts` -- DFE startup wiring
+  names, default team)
 - `.env.dfe-example` -- DFE env template
 
 ### Branding / frontend

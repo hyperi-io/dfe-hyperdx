@@ -65,7 +65,7 @@ if (!config.IS_LOCAL_APP_MODE) {
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 // --- DFE START ---
-// DFE OIDC + Casbin middleware. When DFE_AUTH_MODE is unset, this block
+// DFE OIDC identity middleware. When DFE_AUTH_MODE is unset, this block
 // is skipped entirely and HyperDX behaves exactly as upstream.
 // See DFE-ARCHITECTURE.md for design details.
 {
@@ -75,10 +75,8 @@ if (!config.IS_LOCAL_APP_MODE) {
       oidcIdentityMiddleware,
     } = require('./dfe/middleware/oidc-identity');
 
-    const { casbinAuthzMiddleware } = require('./dfe/middleware/casbin-authz');
     app.use(oidcIdentityMiddleware);
-    app.use(casbinAuthzMiddleware);
-    logger.info('DFE: OIDC identity + Casbin authz middleware enabled');
+    logger.info('DFE: OIDC identity middleware enabled');
   }
 }
 // --- DFE END ---

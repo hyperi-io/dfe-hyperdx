@@ -66,7 +66,6 @@ The fork keeps upstream HyperDX code pristine; DFE behaviour is additive
 - **MongoDB -> FerretDB + PostgreSQL/DocumentDB.** `docker-compose.dfe*.yml`
   replaces `db` (mongo) with `postgres` + `ferretdb`; the app speaks Mongo-wire to
   FerretDB unchanged. k8s: a PostgreSQL (DocumentDB ext) + FerretDB deployment.
-- **Casbin RBAC** shares that PostgreSQL (`CASBIN_PG_URL`).
 - **OIDC trusted-header auth** (`DFE_AUTH_MODE=oidc-proxy`): an OIDC proxy
   (Envoy in k8s / oauth2-proxy in docker) terminates auth and forwards
   `x-forwarded-email` / `x-forwarded-groups`. Empty `DFE_AUTH_MODE` = upstream

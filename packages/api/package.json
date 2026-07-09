@@ -22,8 +22,6 @@
     "@types/node": "^22.15.18",
     "ai": "^6.0.116",
     "aws4": "^1.13.2",
-    "casbin": "^5.49.0",
-    "casbin-pg-adapter": "^1.4.0",
     "chrono-node": "^2.9.0",
     "compression": "^1.7.4",
     "concurrently": "^9.1.2",
