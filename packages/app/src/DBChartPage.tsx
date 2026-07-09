@@ -25,6 +25,7 @@ import {
 
 import api from '@/api';
 import { DEFAULT_CHART_CONFIG } from '@/ChartUtils';
+import { DFE_CHART_AI_ASSISTANT_ENABLED } from '@/dfe/embedFeatures';
 import EditTimeChartForm from '@/components/DBEditTimeChartForm';
 import { InputControlled } from '@/components/InputControlled';
 import { SourceSelectControlled } from '@/components/SourceSelect';
@@ -233,12 +234,16 @@ function DBChartExplorerPage() {
         <title>Chart Explorer - {brandName}</title>
       </Head>
       <OnboardingModal />
-      <AIAssistant
-        setConfig={setChartConfig}
-        onTimeRangeSelect={onTimeRangeSelect}
-        submitRef={submitRef}
-        aiAssistantEnabled={me?.aiAssistantEnabled ?? false}
-      />
+      {/* DFE: the experimental CHART AI Assistant is hidden unless explicitly enabled
+          (NEXT_PUBLIC_DFE_CHART_AI_ASSISTANT=true) - hides the teaser bar too. */}
+      {DFE_CHART_AI_ASSISTANT_ENABLED && (
+        <AIAssistant
+          setConfig={setChartConfig}
+          onTimeRangeSelect={onTimeRangeSelect}
+          submitRef={submitRef}
+          aiAssistantEnabled={me?.aiAssistantEnabled ?? false}
+        />
+      )}
       <EditTimeChartForm
         data-testid="chart-explorer-form"
         chartConfig={chartConfig}

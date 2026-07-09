@@ -22,6 +22,8 @@ $button-height: 18px;
   border-collapse: separate;
   background: var(--log-table-bg);
   font-family: var(--font-ibm-plex-mono);
+  /* Slashed zero (0 vs O) for log/data rows - IDs, timestamps, values. */
+  font-feature-settings: 'zero' 1;
 }
 
 .tableHead {

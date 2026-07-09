@@ -25,7 +25,11 @@ export const makeTheme = ({
 }): MantineThemeOverride => ({
   cursorType: 'pointer',
   fontFamily,
-  primaryColor: 'yellow',
+  // DFE primary is the BRAND BLUE (docstring above), not the olive 'yellow' left
+  // over from the source clickstack theme. Scale anchored on the brand tokens in
+  // _tokens.scss: shade 5 = --color-brand-secondary #2ea4f6, shade 7 =
+  // --color-brand-primary #10398f, shade 6 = the filled primary between them.
+  primaryColor: 'brand',
   primaryShade: 6,
   autoContrast: true,
   white: '#fff',
@@ -47,20 +51,33 @@ export const makeTheme = ({
     xl: 'calc(2rem * var(--mantine-scale))',
   },
   colors: {
-    // Note: Actual color values are overridden via CSS variables in _tokens.scss
-    // These arrays are required for Mantine to recognize the colors
-    // The CSS variables allow different palettes for light/dark modes
+    // DFE brand-blue primary scale (the Mantine `primary`). Anchored on the brand
+    // tokens: shade 5 = brand-secondary #2ea4f6, shade 7 = brand-primary #10398f.
+    brand: [
+      '#eaf3ff', // 0
+      '#cde2ff', // 1
+      '#9ec8fb', // 2
+      '#6aabf6', // 3
+      '#3f92ef', // 4
+      '#2ea4f6', // 5  brand-secondary (light action blue)
+      '#1c6ac4', // 6  filled primary (solid brand blue)
+      '#10398f', // 7  brand-primary (dark)
+      '#0c2c6f', // 8
+      '#081d4a', // 9
+    ],
+    // Kept so any remaining references to theme.colors.yellow still resolve; no
+    // longer the primary (was the olive leftover from the source theme).
     yellow: [
-      '#ffffe8', // Overridden by --mantine-color-yellow-0
-      '#feffc2', // Overridden by --mantine-color-yellow-1
-      '#fdffa3', // Overridden by --mantine-color-yellow-2
-      '#faff69', // Overridden by --mantine-color-yellow-3
-      '#eef400', // Overridden by --mantine-color-yellow-4
-      '#c7cc00', // Overridden by --mantine-color-yellow-5
-      '#959900', // Overridden by --mantine-color-yellow-6
-      '#686b00', // Overridden by --mantine-color-yellow-7
-      '#3c4601', // Overridden by --mantine-color-yellow-8
-      '#333300', // Overridden by --mantine-color-yellow-9
+      '#ffffe8',
+      '#feffc2',
+      '#fdffa3',
+      '#faff69',
+      '#eef400',
+      '#c7cc00',
+      '#959900',
+      '#686b00',
+      '#3c4601',
+      '#333300',
     ],
   },
   headings: {

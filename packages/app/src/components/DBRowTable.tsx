@@ -1298,6 +1298,9 @@ export const RawLogTable = memo(
                         <div
                           className="my-3"
                           data-testid="db-row-table-no-results"
+                          // Empty-state PROSE uses the body font (Inter), not the
+                          // results table's IBM Plex Mono (which is for data/log rows).
+                          style={{ fontFamily: 'var(--mantine-font-family)' }}
                         >
                           No results found.
                           <Text mt="sm">

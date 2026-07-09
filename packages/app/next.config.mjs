@@ -79,13 +79,21 @@ const nextConfig = {
     return config;
   },
   async headers() {
+    // DFE embed: hyperdx is iframed by dfe-ui as a seamless sibling. A blanket
+    // X-Frame-Options: DENY blocks ALL framing, so we use a CSP frame-ancestors
+    // allowlist instead -- ONLY the DFE UI origin(s) may frame this app;
+    // clickjacking protection remains against everyone else. Extra origins are
+    // configured per deployment via DFE_EMBED_FRAME_ANCESTORS (space-separated).
+    const extra = process.env.DFE_EMBED_FRAME_ANCESTORS
+      ? ` ${process.env.DFE_EMBED_FRAME_ANCESTORS}`
+      : '';
     return [
       {
         source: '/(.*)?', // Matches all pages
         headers: [
           {
-            key: 'X-Frame-Options',
-            value: 'DENY',
+            key: 'Content-Security-Policy',
+            value: `frame-ancestors 'self'${extra}`,
           },
         ],
       },

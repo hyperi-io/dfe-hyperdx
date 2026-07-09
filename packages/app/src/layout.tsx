@@ -9,6 +9,7 @@ import { IconX } from '@tabler/icons-react';
 // replaced by the config-driven condensed embed nav. Re-point once that lands.
 import AppNav from '@/components/AppNav';
 import { IS_CLICKHOUSE_BUILD } from '@/config';
+import { isEmbedChrome } from '@/dfe/embedFeatures';
 
 import { HDXSpotlightProvider } from './Spotlights';
 import { useLocalStorage } from './utils';
@@ -29,6 +30,12 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
   );
   const [hasMounted, setHasMounted] = React.useState(false); // prevents banner flash
   React.useEffect(() => setHasMounted(true), []);
+
+  // DFE embed (chromeless) mode: when embedded in dfe-ui (?embed=1) dfe-ui owns the
+  // nav, so hyperdx renders NO AppNav. Resolved after mount to avoid SSR mismatch.
+  const [isEmbed, setIsEmbed] = React.useState(false);
+  React.useEffect(() => setIsEmbed(isEmbedChrome()), []);
+
   const bannerIsActive =
     hasMounted && IS_CLICKHOUSE_BUILD && bannerState === 'opened';
 
@@ -62,7 +69,7 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
         </Group>
       )}
       <div className="d-flex" style={{ height: '100%', overflow: 'hidden' }}>
-        <AppNav />
+        {!isEmbed && <AppNav />}
         <div
           id="app-content-scroll-container"
           className="w-100 min-w-0"

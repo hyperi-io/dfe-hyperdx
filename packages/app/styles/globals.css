@@ -47,3 +47,18 @@ a {
 .mantine-focus-auto:focus-visible {
   outline: 2px solid var(--color-outline-focus) !important;
 }
+
+/* DFE: code/SQL/data uses the IBM Plex Mono code font (not CodeMirror's default
+   generic `monospace`), per the work-UI font standard (Inter for prose, IBM Plex
+   Mono for code/SQL/log-lines/IDs). WITH the slashed-zero ('zero' OpenType feature)
+   so 0 is unmistakable from O in IDs / SQL / log data. Prose (Inter) keeps normal
+   zeros. */
+.cm-editor,
+.cm-editor .cm-content,
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--font-ibm-plex-mono), 'IBM Plex Mono', monospace;
+  font-feature-settings: 'zero' 1;
+}

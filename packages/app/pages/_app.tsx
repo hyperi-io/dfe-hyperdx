@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import type { NextPage } from 'next';
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
+import { useRouter } from 'next/router';
 import { env } from 'next-runtime-env';
 import randomUUID from 'crypto-randomuuid';
 import { enableMapSet } from 'immer';
@@ -15,6 +16,8 @@ import {
 
 import { DynamicFavicon } from '@/components/DynamicFavicon';
 import { IS_LOCAL_MODE, parseResourceAttributes } from '@/config';
+import { isBlockedRoute } from '@/dfe/embedFeatures';
+import { useEmbedColorScheme } from '@/dfe/EmbedThemeSync';
 import {
   DEFAULT_FONT_VAR,
   FONT_VAR_MAP,
@@ -91,7 +94,22 @@ function AppContent({
 }) {
   const { userPreferences } = useUserPreferences();
   const resolvedColorScheme = useResolvedColorScheme();
+  // In embed mode, dfe-ui owns light/dark; otherwise use hyperdx's own resolution.
+  const colorScheme = useEmbedColorScheme(resolvedColorScheme);
   const { themeName } = useAppTheme();
+
+  // DFE embed route guard (top level, covers ALL pages regardless of layout):
+  // a disabled feature must not be reachable even by direct URL.
+  const router = useRouter();
+  useEffect(() => {
+    // Use asPath (the actual URL) not pathname: a disabled feature has no page in
+    // the OSS build, so pathname is '/404' while asPath is still e.g. '/alerts'.
+    // This turns the raw 404 into a clean redirect to Search AND covers any real page.
+    const path = router.asPath.split('?')[0].split('#')[0];
+    if (isBlockedRoute(path)) {
+      router.replace('/search');
+    }
+  }, [router, router.asPath]);
 
   // ClickStack theme always uses Inter font - user preference is ignored
   // HyperDX theme allows user to select font preference
@@ -117,10 +135,7 @@ function AppContent({
   const getLayout = Component.getLayout ?? (page => page);
 
   return (
-    <ThemeWrapper
-      fontFamily={selectedMantineFont}
-      colorScheme={resolvedColorScheme}
-    >
+    <ThemeWrapper fontFamily={selectedMantineFont} colorScheme={colorScheme}>
       <ConfirmProvider>
         {getLayout(<Component {...pageProps} />)}
       </ConfirmProvider>

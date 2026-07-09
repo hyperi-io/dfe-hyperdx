@@ -35,6 +35,7 @@ import { useFavorites } from '@/favorites';
 import InstallInstructionModal from '@/InstallInstructionsModal';
 import OnboardingChecklist from '@/OnboardingChecklist';
 import { useSavedSearches } from '@/savedSearch';
+import { isEmbedFeatureEnabled } from '@/dfe/embedFeatures';
 import { useLogomark, useWordmark } from '@/theme/ThemeProvider';
 import { UserPreferencesModal } from '@/UserPreferencesModal';
 import { useUserPreferences } from '@/useUserPreferences';
@@ -416,8 +417,13 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
                 </div>
               </Collapse>
             )}
-            {/* Simple nav links from config */}
-            {NAV_LINKS.filter(link => !link.cloudOnly || !IS_LOCAL_MODE).map(
+            {/* Simple nav links from config -- DFE embed keeps only allowlisted
+                features (dfe/embedFeatures.ts); the rest are hidden + route-blocked. */}
+            {NAV_LINKS.filter(
+              link =>
+                isEmbedFeatureEnabled(link.id) &&
+                (!link.cloudOnly || !IS_LOCAL_MODE),
+            ).map(
               link => (
                 <AppNavLink
                   key={link.id}
@@ -461,14 +467,14 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
               </Collapse>
             )}
 
-            {/* Help */}
-            <AppNavHelpMenu version={APP_VERSION} />
-
-            {/* Feedback */}
-            <AppNavFeedback />
-
-            {/* Team Settings (Cloud only) */}
-            {!IS_LOCAL_MODE && (
+            {/* Help / Feedback / Team Settings -- DFE embed: gated OFF (not in the
+                embed feature set, dfe/embedFeatures.ts). Help is a deliberate open
+                question (converging with DFE help) -- re-enable via the allowlist. */}
+            {isEmbedFeatureEnabled('help') && (
+              <AppNavHelpMenu version={APP_VERSION} />
+            )}
+            {isEmbedFeatureEnabled('feedback') && <AppNavFeedback />}
+            {!IS_LOCAL_MODE && isEmbedFeatureEnabled('team') && (
               <AppNavLink
                 label="Team Settings"
                 href="/team"
@@ -477,7 +483,8 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
             )}
           </div>
 
-          {!isCollapsed && (
+          {/* DFE embed: onboarding checklist + ClickHouse Cloud promo gated OFF. */}
+          {!isCollapsed && isEmbedFeatureEnabled('onboarding') && (
             <div
               style={{ width: navWidth }}
               className={styles.onboardingSection}
@@ -489,7 +496,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
         </ScrollArea>
 
         <div className={styles.footer} style={{ width: navWidth }}>
-          {IS_LOCAL_MODE && !isCollapsed && (
+          {IS_LOCAL_MODE && !isCollapsed && isEmbedFeatureEnabled('careers') && (
             <Link
               href="/careers"
               style={{
