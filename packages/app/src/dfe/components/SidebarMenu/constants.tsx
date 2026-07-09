@@ -1,15 +1,14 @@
 import {
   IconArrowBounce,
   IconDatabase as DatabaseOutlined,
-  IconFocus2 as AimOutlined,
-  IconSettings as SettingOutlined,
+  IconSettings2,
   IconShieldCheck as SafetyCertificateOutlined,
+  IconTargetArrow,
 } from '@tabler/icons-react';
 
 import { DFE_UI_BASE_URL } from '@/config';
 
 import { SidebarLink } from './SidebarLink';
-
 interface SidebarMenuProps {
   collapsed: boolean;
 }
@@ -62,7 +61,7 @@ export const featureFlagSidebarMenuItems = DFE_UI_BASE_URL
             collapsed={collapsed}
             item={{
               key: `${DFE_UI_BASE_URL}/hunts`,
-              icon: <AimOutlined size={16} />,
+              icon: <IconTargetArrow size={16} />,
               label: 'Hunts',
             }}
           />
@@ -75,7 +74,7 @@ export const featureFlagSidebarMenuItems = DFE_UI_BASE_URL
             collapsed={collapsed}
             item={{
               key: `${DFE_UI_BASE_URL}/settings`,
-              icon: <SettingOutlined size={16} />,
+              icon: <IconSettings2 size={16} />,
               label: 'Settings',
             }}
           />
