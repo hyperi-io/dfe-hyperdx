@@ -4462,6 +4462,7 @@ __metadata:
     http-graceful-shutdown: "npm:^3.1.13"
     http-proxy-middleware: "npm:^4.0.0"
     jest: "npm:^30.2.0"
+    jose: "npm:^6.2.3"
     jsonwebtoken: "npm:^9.0.0"
     lodash: "npm:^4.18.1"
     migrate-mongo: "npm:^11.0.0"
@@ -19664,6 +19665,13 @@ __metadata:
   version: 6.2.2
   resolution: "jose@npm:6.2.2"
   checksum: 10c0/201f4776d77eccd339de99fb3ba940fdf03db15e64be7a99b511e53c232e3f3818e3f21b95223d62f99315a2ab76b4251cedd94e067de56893e45273a8d2151b
+  languageName: node
+  linkType: hard
+
+"jose@npm:^6.2.3":
+  version: 6.2.3
+  resolution: "jose@npm:6.2.3"
+  checksum: 10c0/aa91bccba22cc84d86308f833749bcb0b00441e35c24e0ac79abeac5f76dc62d47bdef9c1da6a0c609f5da6478595f52b252085888b89dbdb163861e40ea4188
   languageName: node
   linkType: hard
 

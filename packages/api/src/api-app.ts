@@ -72,11 +72,11 @@ if (!config.IS_LOCAL_APP_MODE) {
   const { isDfeEnabled } = require('./dfe/config');
   if (isDfeEnabled) {
     const {
-      oidcIdentityMiddleware,
-    } = require('./dfe/middleware/oidc-identity');
+      dfeIdentityMiddleware,
+    } = require('./dfe/middleware/jwt-verify');
 
-    app.use(oidcIdentityMiddleware);
-    logger.info('DFE: OIDC identity middleware enabled');
+    app.use(dfeIdentityMiddleware);
+    logger.info('DFE: identity middleware enabled');
   }
 }
 // --- DFE END ---
