@@ -1,20 +1,18 @@
+/* eslint-disable @eslint-react/no-create-ref */
 import * as React from 'react';
 import { useImperativeHandle } from 'react';
 import { useRouter } from 'next/router';
-import { NextAdapter } from 'next-query-params';
-import { QueryParamProvider } from 'use-query-params';
 import { LocationMock } from '@jedmao/location';
 import { render } from '@testing-library/react';
 
 import { TestRouter } from '@/fixtures';
-
 import {
   getLiveTailTimeRange,
   useNewTimeQuery,
   type UseTimeQueryInputType,
   type UseTimeQueryReturnType,
-} from '../timeQuery';
-import { useUserPreferences } from '../useUserPreferences';
+} from '@/timeQuery';
+import { useUserPreferences } from '@/useUserPreferences';
 
 // Setting a fixed time of 10/03/23 at 12pm EDT
 const INITIAL_DATE_STRING =
@@ -36,9 +34,7 @@ function TestWrapper({
   React.useEffect(() => {
     setUserPreference({ isUTC });
   }, [setUserPreference, isUTC]);
-  return (
-    <QueryParamProvider adapter={NextAdapter}>{children}</QueryParamProvider>
-  );
+  return <>{children}</>;
 }
 
 const TestComponent = React.forwardRef(function Component(

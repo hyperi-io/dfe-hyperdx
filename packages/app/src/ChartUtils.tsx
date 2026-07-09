@@ -11,52 +11,39 @@ import {
   ResponseJSON,
 } from '@hyperdx/common-utils/dist/clickhouse';
 import { isMetricChartConfig } from '@hyperdx/common-utils/dist/core/renderChartConfig';
-import { getAlignedDateRange } from '@hyperdx/common-utils/dist/core/utils';
 import {
   convertDateRangeToGranularityString,
+  convertGranularityToSeconds,
+  getAlignedDateRange,
   Granularity,
 } from '@hyperdx/common-utils/dist/core/utils';
+import { isBuilderChartConfig } from '@hyperdx/common-utils/dist/guards';
 import {
   AggregateFunction as AggFnV2,
+  BuilderChartConfigWithDateRange,
+  BuilderChartConfigWithOptTimestamp,
+  BuilderSavedChartConfig,
   ChartConfigWithDateRange,
   ChartConfigWithOptDateRange,
-  ChartConfigWithOptTimestamp,
   DisplayType,
   Filter,
   MetricsDataType as MetricsDataTypeV2,
-  SavedChartConfig,
   SourceKind,
   SQLInterval,
+  TMetricSource,
   TSource,
 } from '@hyperdx/common-utils/dist/types';
-import { SegmentedControl } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 
 import DateRangeIndicator from './components/charts/DateRangeIndicator';
 import { MVOptimizationExplanationResult } from './hooks/useMVOptimizationExplanation';
+import { DEFAULT_SERIES_LIMIT } from './defaults';
 import { getMetricNameSql } from './otelSemanticConventions';
-import {
-  AggFn,
-  ChartSeries,
-  MetricsDataType,
-  SourceTable,
-  TableChartSeries,
-  TimeChartSeries,
-} from './types';
+import { AggFn, TableChartSeries, TimeChartSeries } from './types';
 import { NumberFormat } from './types';
 import { getColorProps, getLogLevelColorOrder, logLevelColor } from './utils';
 
-export const SORT_ORDER = [
-  { value: 'asc' as const, label: 'Ascending' },
-  { value: 'desc' as const, label: 'Descending' },
-];
-
-export type SortOrder = (typeof SORT_ORDER)[number]['value'];
-
-export const TABLES = [
-  { value: 'logs' as const, label: 'Logs / Spans' },
-  { value: 'metrics' as const, label: 'Metrics' },
-];
+type SortOrder = 'asc' | 'desc';
 
 export const AGG_FNS = [
   { value: 'count' as const, label: 'Count of Events', isAttributable: false },
@@ -74,42 +61,12 @@ export const AGG_FNS = [
     isAttributable: false,
   },
   { value: 'any' as const, label: 'Any' },
+  { value: 'increase' as const, label: 'Increase', isAttributable: false },
   { value: 'none' as const, label: 'Custom' },
 ];
 
-export const getMetricAggFns = (
-  dataType: MetricsDataType,
-): { value: AggFn; label: string }[] => {
-  if (dataType === MetricsDataType.Histogram) {
-    return [
-      { value: 'p99', label: '99th Percentile' },
-      { value: 'p95', label: '95th Percentile' },
-      { value: 'p90', label: '90th Percentile' },
-      { value: 'p50', label: 'Median' },
-    ];
-  } else if (dataType === MetricsDataType.Summary) {
-    return [
-      { value: 'sum', label: 'Sum' },
-      { value: 'max', label: 'Maximum' },
-      { value: 'min', label: 'Minimum' },
-      { value: 'count', label: 'Sample Count' },
-    ];
-  }
-
-  return [
-    { value: 'sum', label: 'Sum' },
-    { value: 'p99', label: '99th Percentile' },
-    { value: 'p95', label: '95th Percentile' },
-    { value: 'p90', label: '90th Percentile' },
-    { value: 'p50', label: 'Median' },
-    { value: 'avg', label: 'Average' },
-    { value: 'max', label: 'Maximum' },
-    { value: 'min', label: 'Minimum' },
-  ];
-};
-
 export const DEFAULT_CHART_CONFIG: Omit<
-  SavedChartConfig,
+  BuilderSavedChartConfig,
   'source' | 'connection'
 > = {
   name: '',
@@ -128,138 +85,110 @@ export const DEFAULT_CHART_CONFIG: Omit<
   alignDateRangeToGranularity: true,
 };
 
-export const isGranularity = (value: string): value is Granularity => {
-  return Object.values(Granularity).includes(value as Granularity);
-};
-
-export function convertToTimeChartConfig(config: ChartConfigWithDateRange) {
-  const granularity =
-    config.granularity === 'auto' || config.granularity == null
-      ? convertDateRangeToGranularityString(config.dateRange, 80)
-      : config.granularity;
-
-  const dateRange =
-    config.alignDateRangeToGranularity === false
-      ? config.dateRange
-      : getAlignedDateRange(config.dateRange, granularity);
-
-  return {
-    ...config,
-    dateRange,
-    dateRangeEndInclusive: false,
-    granularity,
-    limit: { limit: 100000 },
-  };
+function getTimeChartGranularity(
+  granularity: string | undefined,
+  dateRange: [Date, Date],
+) {
+  return granularity === 'auto' || granularity == null
+    ? convertDateRangeToGranularityString(dateRange, 80)
+    : granularity;
 }
 
-export function useTimeChartSettings(chartConfig: ChartConfigWithDateRange) {
+function getTimeChartDateRange(
+  dateRange: [Date, Date],
+  alignDateRangeToGranularity: boolean | undefined,
+  granularity: string,
+) {
+  return alignDateRangeToGranularity === false
+    ? dateRange
+    : getAlignedDateRange(dateRange, granularity);
+}
+
+export const MAX_TIME_CHART_SERIES = DEFAULT_SERIES_LIMIT;
+
+export function convertToTimeChartConfig(
+  config: ChartConfigWithDateRange,
+): ChartConfigWithDateRange {
+  // Series capping is opt-in per tile via the chart's Display Settings; when
+  // unset, no __hdx_series_limit CTE is emitted and every series is fetched.
+  const seriesLimit = isBuilderChartConfig(config)
+    ? config.seriesLimit != null
+      ? Math.max(1, config.seriesLimit)
+      : undefined
+    : undefined;
+
+  const granularity = getTimeChartGranularity(
+    config.granularity,
+    config.dateRange,
+  );
+
+  const dateRange = getTimeChartDateRange(
+    config.dateRange,
+    config.alignDateRangeToGranularity,
+    granularity,
+  );
+
+  // When the range is bucket-aligned, the end is the start of the next bucket,
+  // so end-exclusive is required to avoid double-counting boundary events.
+  // When alignment is off the end is the user's exact selection, so fall back
+  // to the caller's setting, if there is one.
+  const isAligned = config.alignDateRangeToGranularity !== false;
+  const dateRangeEndInclusive = isAligned
+    ? false
+    : (config.dateRangeEndInclusive ?? false);
+
+  return isBuilderChartConfig(config)
+    ? {
+        ...config,
+        dateRange,
+        dateRangeEndInclusive,
+        granularity,
+        limit: { limit: 100000 },
+        // Overwrite (not conditionally spread) so a cleared `null` from the
+        // source config is normalized to undefined rather than carried over.
+        seriesLimit,
+      }
+    : {
+        ...config,
+        dateRangeEndInclusive,
+        dateRange,
+        granularity,
+      };
+}
+
+export function useTimeChartSettings(
+  config: Pick<
+    ChartConfigWithDateRange,
+    | 'displayType'
+    | 'dateRange'
+    | 'fillNulls'
+    | 'granularity'
+    | 'alignDateRangeToGranularity'
+  >,
+) {
   return useMemo(() => {
-    const convertedConfig = convertToTimeChartConfig(chartConfig);
+    const granularity = getTimeChartGranularity(
+      config.granularity,
+      config.dateRange,
+    );
+
+    const dateRange = getTimeChartDateRange(
+      config.dateRange,
+      config.alignDateRangeToGranularity,
+      granularity,
+    );
 
     return {
-      displayType: convertedConfig.displayType,
-      dateRange: convertedConfig.dateRange,
-      fillNulls: convertedConfig.fillNulls,
-      granularity: convertedConfig.granularity,
+      displayType: config.displayType,
+      fillNulls: config.fillNulls,
+      dateRange,
+      granularity,
     };
-  }, [chartConfig]);
-}
-
-export function seriesToSearchQuery({
-  series,
-  groupByValue,
-}: {
-  series: ChartSeries[];
-  groupByValue?: string;
-}) {
-  const queries = series
-    .map((s, i) => {
-      if (s.type === 'time' || s.type === 'table' || s.type === 'number') {
-        const { where, aggFn, field } = s;
-        return `${where.trim()}${
-          aggFn !== 'count' && field ? ` ${field}:*` : ''
-        }${
-          'groupBy' in s && s.groupBy != null && s.groupBy.length > 0
-            ? ` ${s.groupBy}:${groupByValue ?? '*'}`
-            : ''
-        }`.trim();
-      }
-    })
-    .filter(q => q != null && q.length > 0);
-
-  const q =
-    queries.length > 1
-      ? queries.map(q => `(${q})`).join(' OR ')
-      : queries.join('');
-
-  return q;
-}
-
-export function seriesToUrlSearchQueryParam({
-  series,
-  dateRange,
-  groupByValue = '*',
-}: {
-  series: ChartSeries[];
-  dateRange: [Date, Date];
-  groupByValue?: string | undefined;
-}) {
-  const q = seriesToSearchQuery({ series, groupByValue });
-
-  return new URLSearchParams({
-    q,
-    from: `${dateRange[0].getTime()}`,
-    to: `${dateRange[1].getTime()}`,
-  });
-}
-
-export function TableToggle({
-  table,
-  setTableAndAggFn,
-}: {
-  setTableAndAggFn: (table: SourceTable, fn: AggFn) => void;
-  table: string;
-}) {
-  return (
-    <SegmentedControl
-      value={table}
-      onChange={(value: string) => {
-        const val = value ?? 'logs';
-        if (val === 'logs') {
-          setTableAndAggFn('logs', 'count');
-        } else if (val === 'metrics') {
-          // TODO: This should set rate if metric field is a sum
-          // or we should just reset the field if changing tables
-          setTableAndAggFn('metrics', 'max');
-        }
-      }}
-      data={[
-        { label: 'Logs/Spans', value: 'logs' },
-        { label: 'Metrics', value: 'metrics' },
-      ]}
-    />
-  );
+  }, [config]);
 }
 
 export const ChartKeyJoiner = ' · ';
 export const PreviousPeriodSuffix = ' (previous)';
-
-export function convertGranularityToSeconds(granularity: SQLInterval): number {
-  const [num, unit] = granularity.split(' ');
-  const numInt = Number.parseInt(num);
-  switch (unit) {
-    case 'second':
-      return numInt;
-    case 'minute':
-      return numInt * 60;
-    case 'hour':
-      return numInt * 60 * 60;
-    case 'day':
-      return numInt * 60 * 60 * 24;
-    default:
-      return 0;
-  }
-}
 
 // Note: roundToNearestMinutes is broken in date-fns currently
 // additionally it doesn't support seconds or > 30min
@@ -449,13 +378,6 @@ export const INTEGER_NUMBER_FORMAT: NumberFormat = {
   thousandSeparated: true,
 };
 
-export const SINGLE_DECIMAL_NUMBER_FORMAT: NumberFormat = {
-  factor: 1,
-  output: 'number',
-  mantissa: 1,
-  thousandSeparated: true,
-};
-
 export const MS_NUMBER_FORMAT: NumberFormat = {
   factor: 1,
   output: 'number',
@@ -470,8 +392,8 @@ export const ERROR_RATE_PERCENTAGE_NUMBER_FORMAT: NumberFormat = {
 };
 
 export const K8S_CPU_PERCENTAGE_NUMBER_FORMAT: NumberFormat = {
-  output: 'percent',
-  mantissa: 0,
+  output: 'number',
+  mantissa: 2,
 };
 
 export const K8S_FILESYSTEM_NUMBER_FORMAT: NumberFormat = {
@@ -479,10 +401,6 @@ export const K8S_FILESYSTEM_NUMBER_FORMAT: NumberFormat = {
 };
 
 export const K8S_MEM_NUMBER_FORMAT: NumberFormat = {
-  output: 'byte',
-};
-
-export const K8S_NETWORK_NUMBER_FORMAT: NumberFormat = {
   output: 'byte',
 };
 
@@ -503,6 +421,49 @@ function inferGroupColumns(meta: Array<{ name: string; type: string }>) {
   ]);
 }
 
+export function formatResponseForPieChart(
+  data: ResponseJSON<Record<string, unknown>>,
+  getColor: (index: number, label: string) => string,
+): Array<{ label: string; value: number; color: string }> {
+  if (data.meta == null) {
+    throw new Error('No meta data found in response');
+  }
+
+  if (data.data.length === 0) return [];
+
+  const valueColumns = inferValueColumns(data.meta, new Set()) ?? [];
+  if (valueColumns.length === 0) {
+    throw new Error(
+      `No value columns found in result column metadata. Make sure a numeric column exists in the result set.\n\nResult column metadata: ${JSON.stringify(data.meta)}`,
+    );
+  }
+  const valueColumn = valueColumns[0].name;
+
+  const groupByColumns = inferGroupColumns(data.meta);
+
+  return (
+    data.data
+      .map(row => {
+        const label = groupByColumns?.length
+          ? groupByColumns.map(({ name }) => row[name]).join(' - ')
+          : valueColumn;
+        const rawValue = row[valueColumn];
+        const value =
+          typeof rawValue === 'number'
+            ? rawValue
+            : Number.parseFloat(`${rawValue}`);
+        return { label, value };
+      })
+      .filter(entry => !isNaN(entry.value) && isFinite(entry.value))
+      // Sort in descending order so the largest slice is always first and gets the first color in the palette
+      .sort((a, b) => b.value - a.value)
+      .map((entry, index) => ({
+        ...entry,
+        color: getColor(index, entry.label),
+      }))
+  );
+}
+
 export function getPreviousDateRange(currentRange: [Date, Date]): [Date, Date] {
   const [start, end] = currentRange;
   const offsetSeconds = differenceInSeconds(end, start);
@@ -512,11 +473,55 @@ export function getPreviousDateRange(currentRange: [Date, Date]): [Date, Date] {
   ];
 }
 
+/**
+ * Find the series whose active-point pixel Y is closest to the cursor.
+ *
+ * `seriesYByKey` maps each series' dataKey to the pixel Y of its
+ * active point (captured from the chart's active dots), and `pointerY`
+ * is the cursor's pixel Y. Both live in the same chart pixel space, so
+ * the nearest series is the one with the smallest vertical distance.
+ * Returns that series' dataKey, or `undefined` when the pointer is
+ * farther than `maxDistancePx` from every line (so nothing is
+ * highlighted in empty space). Candidates not present in the map are
+ * skipped, and ties resolve to the first candidate in `candidateKeys`.
+ */
+export function findNearestSeriesKey(
+  seriesYByKey: Map<string, number> | undefined,
+  candidateKeys: string[],
+  pointerY: number | undefined,
+  maxDistancePx: number,
+): string | undefined {
+  if (seriesYByKey == null || pointerY == null) {
+    return undefined;
+  }
+
+  let nearestKey: string | undefined;
+  let nearestDistance = Infinity;
+  for (const key of candidateKeys) {
+    const seriesY = seriesYByKey.get(key);
+    if (seriesY == null) {
+      continue;
+    }
+    const distance = Math.abs(seriesY - pointerY);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestKey = key;
+    }
+  }
+
+  if (nearestKey == null || nearestDistance > maxDistancePx) {
+    return undefined;
+  }
+  return nearestKey;
+}
+
 export interface LineData {
   dataKey: string;
   currentPeriodKey: string;
   previousPeriodKey: string;
   displayName: string;
+  /** The original result column name this series' values were pulled from. */
+  valueColumnName: string;
   color: string;
   isDashed?: boolean;
 }
@@ -554,14 +559,14 @@ function firstGroupColumnIsLogLevel(
   source: TSource | undefined,
   groupColumns: ColumnMetaType[],
 ) {
-  return (
-    source &&
-    groupColumns.length === 1 &&
-    groupColumns[0].name ===
-      (source.kind === SourceKind.Log
-        ? source.severityTextExpression
-        : source.statusCodeExpression)
-  );
+  if (!source || groupColumns.length !== 1) return false;
+  if (source.kind === SourceKind.Log) {
+    return groupColumns[0].name === source.severityTextExpression;
+  }
+  if (source.kind === SourceKind.Trace) {
+    return groupColumns[0].name === source.statusCodeExpression;
+  }
+  return false;
 }
 
 function addResponseToFormattedData({
@@ -583,13 +588,13 @@ function addResponseToFormattedData({
 }) {
   const { meta, data } = response;
   if (meta == null) {
-    throw new Error('No meta data found in response');
+    throw new Error('No metadata found in response');
   }
 
   const timestampColumn = inferTimestampColumn(meta);
   if (timestampColumn == null) {
     throw new Error(
-      `No timestamp column found with meta: ${JSON.stringify(meta)}`,
+      `No timestamp column found in result column metadata: ${JSON.stringify(meta)}`,
     );
   }
 
@@ -615,7 +620,10 @@ function addResponseToFormattedData({
       const currentPeriodKey = [
         // Simplify the display name if there's only one series and a group by
         ...(isSingleValueColumn && hasGroupColumns ? [] : [valueColumn.name]),
-        ...groupColumns.map(g => row[g.name]),
+        ...groupColumns.map(g => {
+          const v = row[g.name];
+          return typeof v === 'object' && v !== null ? JSON.stringify(v) : v;
+        }),
       ].join(ChartKeyJoiner);
       const previousPeriodKey = `${currentPeriodKey}${PreviousPeriodSuffix}`;
       const keyName = isPreviousPeriod ? previousPeriodKey : currentPeriodKey;
@@ -640,6 +648,7 @@ function addResponseToFormattedData({
         currentPeriodKey,
         previousPeriodKey,
         displayName: keyName,
+        valueColumnName: valueColumn.name,
         color,
         isDashed: isPreviousPeriod,
       };
@@ -681,7 +690,13 @@ export function formatResponseForTimeChart({
 
   if (timestampColumn == null) {
     throw new Error(
-      `No timestamp column found with meta: ${JSON.stringify(meta)}`,
+      `No timestamp column found in result column metadata. Make sure a Date/DateTime column exists in the result set.\n\nResult column metadata: ${JSON.stringify(meta)}`,
+    );
+  }
+
+  if (valueColumns.length === 0) {
+    throw new Error(
+      `No value columns found in result column metadata. Make sure a numeric column exists in the result set.\n\nResult column metadata: ${JSON.stringify(meta)}`,
     );
   }
 
@@ -773,7 +788,7 @@ export function formatResponseForTimeChart({
 }
 
 // Define a mapping from app AggFn to common-utils AggregateFunction
-export const mapV1AggFnToV2 = (aggFn?: AggFn): AggFnV2 | undefined => {
+const mapV1AggFnToV2 = (aggFn?: AggFn): AggFnV2 | undefined => {
   if (aggFn == null) {
     return aggFn;
   }
@@ -819,8 +834,8 @@ export const mapV1AggFnToV2 = (aggFn?: AggFn): AggFnV2 | undefined => {
   throw new Error(`Unsupported aggregation function in v2: ${aggFn}`);
 };
 
-export const convertV1GroupByToV2 = (
-  metricSource: TSource,
+const convertV1GroupByToV2 = (
+  metricSource: TMetricSource,
   groupBy: string[],
 ): string => {
   return groupBy
@@ -847,10 +862,10 @@ export const convertV1ChartConfigToV2 = (
   },
   source: {
     log?: TSource;
-    metric?: TSource;
+    metric?: TMetricSource;
     trace?: TSource;
   },
-): ChartConfigWithDateRange => {
+): BuilderChartConfigWithDateRange => {
   const {
     series,
     granularity,
@@ -925,7 +940,7 @@ export function buildEventsSearchUrl({
   valueRangeFilter,
 }: {
   source: TSource;
-  config: ChartConfigWithDateRange;
+  config: BuilderChartConfigWithDateRange;
   dateRange: [Date, Date];
   groupFilters?: Array<{ column: string; value: any }>;
   valueRangeFilter?: { expression: string; value: number; threshold?: number };
@@ -935,12 +950,18 @@ export function buildEventsSearchUrl({
   }
 
   const isMetricChart = isMetricChartConfig(config);
-  if (isMetricChart && source?.logSourceId == null) {
-    notifications.show({
-      color: 'yellow',
-      message: 'No log source is associated with the selected metric source.',
-    });
-    return null;
+  if (isMetricChart) {
+    const logSourceId =
+      source.kind === SourceKind.Metric || source.kind === SourceKind.Trace
+        ? source.logSourceId
+        : undefined;
+    if (logSourceId == null) {
+      notifications.show({
+        color: 'yellow',
+        message: 'No log source is associated with the selected metric source.',
+      });
+      return null;
+    }
   }
 
   let where = config.where;
@@ -1004,7 +1025,10 @@ export function buildEventsSearchUrl({
     params.where = '';
     params.whereLanguage = 'lucene';
     params.filters = JSON.stringify([]);
-    params.source = source?.logSourceId ?? '';
+    params.source =
+      (source.kind === SourceKind.Metric || source.kind === SourceKind.Trace
+        ? source.logSourceId
+        : undefined) ?? '';
   }
 
   // Include the select parameter if provided to preserve custom columns
@@ -1022,7 +1046,7 @@ export function buildEventsSearchUrl({
  * Handles both string format ("col1, col2") and array format ([{ valueExpression: "col1" }, ...])
  */
 function extractGroupColumns(
-  groupBy: ChartConfigWithDateRange['groupBy'],
+  groupBy: BuilderChartConfigWithDateRange['groupBy'],
 ): string[] {
   if (!groupBy) return [];
 
@@ -1047,7 +1071,7 @@ export function buildTableRowSearchUrl({
 }: {
   row: Record<string, any>;
   source: TSource | undefined;
-  config: ChartConfigWithDateRange;
+  config: BuilderChartConfigWithDateRange;
   dateRange: [Date, Date];
 }): string | null {
   if (!source?.id) {
@@ -1109,14 +1133,20 @@ export function buildTableRowSearchUrl({
 }
 
 export function convertToNumberChartConfig(
-  config: ChartConfigWithDateRange,
-): ChartConfigWithOptTimestamp {
+  config: BuilderChartConfigWithDateRange,
+): BuilderChartConfigWithOptTimestamp {
   return omit(config, ['granularity', 'groupBy']);
 }
 
+export function convertToPieChartConfig(
+  config: BuilderChartConfigWithOptTimestamp,
+): BuilderChartConfigWithOptTimestamp {
+  return omit(config, ['granularity']);
+}
+
 export function convertToTableChartConfig(
-  config: ChartConfigWithOptTimestamp,
-): ChartConfigWithOptTimestamp {
+  config: BuilderChartConfigWithOptTimestamp,
+): BuilderChartConfigWithOptTimestamp {
   const convertedConfig = structuredClone(omit(config, ['granularity']));
 
   // Set a default limit if not already set

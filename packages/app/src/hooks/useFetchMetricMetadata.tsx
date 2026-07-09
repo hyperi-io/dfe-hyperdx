@@ -3,7 +3,7 @@ import {
   ResponseJSON,
   tableExpr,
 } from '@hyperdx/common-utils/dist/clickhouse';
-import { SourceKind, TSource } from '@hyperdx/common-utils/dist/types';
+import { SourceKind, TMetricSource } from '@hyperdx/common-utils/dist/types';
 import { useQuery } from '@tanstack/react-query';
 
 import { getClickhouseClient } from '@/clickhouse';
@@ -16,9 +16,9 @@ export interface MetricMetadata {
 
 interface MetricMetadataProps {
   databaseName: string;
-  metricType: string;
-  metricName: string;
-  tableSource: TSource | undefined;
+  metricType?: string;
+  metricName?: string;
+  tableSource: TMetricSource | undefined;
 }
 
 interface MetricMetadataResponse {
@@ -48,7 +48,7 @@ export const useFetchMetricMetadata = ({
   return useQuery({
     queryKey: ['metric-metadata', databaseName, metricType, metricName],
     queryFn: async ({ signal }) => {
-      if (!shouldFetch) {
+      if (!shouldFetch || !metricName) {
         return null;
       }
 

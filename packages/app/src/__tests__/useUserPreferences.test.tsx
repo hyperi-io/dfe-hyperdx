@@ -7,8 +7,8 @@
  * - Migration idempotency (safe to run multiple times)
  */
 
-import type { UserPreferences } from '../useUserPreferences';
-import { migrateUserPreferences } from '../useUserPreferences';
+import type { UserPreferences } from '@/useUserPreferences';
+import { migrateUserPreferences } from '@/useUserPreferences';
 
 const STORAGE_KEY = 'hdx-user-preferences';
 
@@ -264,6 +264,20 @@ describe('migrateUserPreferences', () => {
 
       expect(result).toEqual(migratedData);
       // Should not call setItem since data is already migrated
+      expect(localStorageMock.setItem).not.toHaveBeenCalled();
+    });
+
+    it('should accept colorMode "system" as valid', () => {
+      const dataWithSystem: UserPreferences = {
+        isUTC: false,
+        timeFormat: '12h',
+        colorMode: 'system',
+        font: 'IBM Plex Mono',
+      };
+
+      const result = migrateUserPreferences(JSON.stringify(dataWithSystem));
+
+      expect(result).toEqual(dataWithSystem);
       expect(localStorageMock.setItem).not.toHaveBeenCalled();
     });
 

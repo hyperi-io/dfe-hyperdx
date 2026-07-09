@@ -1,3 +1,4 @@
+import { env } from 'next-runtime-env';
 import { z } from 'zod';
 
 import { clickstackTheme } from './themes/clickstack';
@@ -176,11 +177,16 @@ export function safeLocalStorageRemove(key: string): void {
   }
 }
 
-// Default theme (validated against registry, falls back to FALLBACK_THEME)
-const envTheme = process.env.NEXT_PUBLIC_THEME;
-let resolvedDefaultTheme: ThemeName = isValidThemeName(envTheme)
-  ? envTheme
-  : FALLBACK_THEME;
+// Default theme (validated against registry, falls back to FALLBACK_THEME).
+// Use runtimeEnv so the theme can be changed at container start-up without
+// rebuilding the Next.js bundle. DFE: fall back to FALLBACK_THEME ('dfe'), not
+// upstream's 'hyperdx'.
+function getEnvTheme(): ThemeName {
+  const value = env('NEXT_PUBLIC_THEME');
+  return isValidThemeName(value) ? value : FALLBACK_THEME;
+}
+
+let resolvedDefaultTheme: ThemeName = getEnvTheme();
 
 // Validate that the resolved default theme exists and is valid
 if (!themes[resolvedDefaultTheme]) {
@@ -275,6 +281,3 @@ export function getTheme(name: ThemeName = DEFAULT_THEME): ThemeConfig {
 
 // Re-export types
 export type { ThemeConfig, ThemeName } from './types';
-
-// Re-export for backwards compatibility
-export { makeTheme, theme } from './themes/hyperdx/mantineTheme';

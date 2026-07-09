@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { TSource } from '@hyperdx/common-utils/dist/types';
+import { TMetricSource } from '@hyperdx/common-utils/dist/types';
 import {
   Badge,
   Box,
@@ -36,13 +36,13 @@ interface MetricAttributeHelperPanelProps {
   databaseName: string;
   metricType: string;
   metricName: string;
-  tableSource: TSource | undefined;
+  tableSource: TMetricSource | undefined;
   attributeKeys: AttributeKey[];
   isLoading?: boolean;
   language: 'sql' | 'lucene';
   metricMetadata?: MetricMetadata | null;
   onAddToWhere: (clause: string) => void;
-  onAddToGroupBy: (clause: string) => void;
+  onAddToGroupBy?: (clause: string) => void;
 }
 
 const CATEGORY_LABELS: Record<AttributeCategory, string> = {
@@ -165,12 +165,12 @@ interface AttributeValueListProps {
   databaseName: string;
   metricType: string;
   metricName: string;
-  tableSource: TSource | undefined;
+  tableSource: TMetricSource | undefined;
   attribute: AttributeKey;
   language: 'sql' | 'lucene';
   onAddToWhere: (clause: string) => void;
   onBack: () => void;
-  onAddToGroupBy: (clause: string) => void;
+  onAddToGroupBy?: (clause: string) => void;
 }
 
 function AttributeValueList({
@@ -217,7 +217,7 @@ function AttributeValueList({
       attribute.name,
       'sql',
     );
-    onAddToGroupBy(clause);
+    onAddToGroupBy?.(clause);
   }, [attribute, onAddToGroupBy]);
 
   return (
@@ -234,14 +234,16 @@ function AttributeValueList({
             </Badge>
           </Group>
         </UnstyledButton>
-        <Button
-          variant="secondary"
-          size="xs"
-          leftSection={<IconPlus size={14} />}
-          onClick={handleAddToGroupBy}
-        >
-          Group By
-        </Button>
+        {onAddToGroupBy && (
+          <Button
+            variant="secondary"
+            size="xs"
+            leftSection={<IconPlus size={14} />}
+            onClick={handleAddToGroupBy}
+          >
+            Group By
+          </Button>
+        )}
       </Group>
 
       <TextInput
@@ -458,7 +460,7 @@ export function MetricAttributeHelperPanel({
         </Group>
       </UnstyledButton>
 
-      <Collapse in={opened}>
+      <Collapse expanded={opened}>
         <Box pt="xs">
           {isLoading ? (
             <Flex justify="center" py="md">

@@ -4,9 +4,9 @@ import { Granularity } from '@hyperdx/common-utils/dist/core/utils';
 import {
   ChartConfigWithOptDateRange,
   DisplayType,
+  pickSampleWeightExpressionProps,
+  SourceKind,
 } from '@hyperdx/common-utils/dist/types';
-import { SourceKind } from '@hyperdx/common-utils/dist/types';
-import opentelemetry, { SpanStatusCode } from '@opentelemetry/api';
 import express from 'express';
 import _ from 'lodash';
 import { z } from 'zod';
@@ -17,7 +17,25 @@ import { getTeam } from '@/controllers/team';
 import { IConnection } from '@/models/connection';
 import { ISource } from '@/models/source';
 import { validateRequestWithEnhancedErrors as validateRequest } from '@/utils/enhancedErrors';
+import {
+  getCounter,
+  getHistogram,
+  SpanStatusCode,
+  withSpan,
+} from '@/utils/instrumentation';
 import { externalQueryChartSeriesSchema } from '@/utils/zod';
+
+const chartsSeriesDuration = getHistogram('hyperdx.charts.series.duration_ms', {
+  description:
+    'Duration of external API v2 chart /series requests (across all series).',
+  unit: 'ms',
+});
+const chartsSeriesErrors = getCounter('hyperdx.charts.series.errors', {
+  description:
+    'Count of external API v2 chart /series request failures, labeled by ' +
+    'error type (e.g. TEAM_MISSING, TEAM_NOT_FOUND, SOURCE_NOT_FOUND, ' +
+    'CONNECTION_NOT_FOUND, UNHANDLED).',
+});
 
 /**
  * @openapi
@@ -129,6 +147,7 @@ import { externalQueryChartSeriesSchema } from '@/utils/zod';
  *       properties:
  *         data:
  *           type: array
+ *           description: Array of data points for the series
  *           items:
  *             $ref: '#/components/schemas/SeriesDataPoint'
  */
@@ -226,6 +245,27 @@ const buildChartConfigFromRequest = async (
     groupBy,
   } = params.externalSeries;
 
+  const isMetricSource = source.kind === SourceKind.Metric;
+
+  // For metric sources, if metricName is not provided but field is,
+  // use field as the metric name (matching the natural API usage pattern
+  // where users pass the metric name as the field they want to query)
+  const resolvedMetricName = isMetricSource
+    ? (metricName ?? field)
+    : metricName;
+
+  // For metric sources, valueExpression should be 'Value' (the ClickHouse column)
+  // unless the user explicitly provides both metricName and field
+  const resolvedValueExpression = isMetricSource
+    ? metricName && field
+      ? field.includes('.')
+        ? `'${field}'`
+        : field
+      : 'Value'
+    : field?.includes('.')
+      ? `'${field}'`
+      : (field ?? '');
+
   const hasGroupBy = groupBy?.length > 0;
 
   if (aggFn == null) {
@@ -237,7 +277,7 @@ const buildChartConfigFromRequest = async (
     connection: connection._id.toString(),
     from: {
       databaseName: source.from.databaseName,
-      tableName: source.kind !== SourceKind.Metric ? source.from.tableName : '',
+      tableName: !isMetricSource ? source.from.tableName : '',
     },
     ...(source.kind === SourceKind.Metric && {
       metricTables: source.metricTables,
@@ -246,20 +286,19 @@ const buildChartConfigFromRequest = async (
       {
         aggFn,
         level,
-        valueExpression: field?.includes('.')
-          ? `'${field}'`
-          : (field ?? (source.kind === SourceKind.Metric ? 'Value' : '')),
+        valueExpression: resolvedValueExpression,
         aggCondition: where?.trim() ?? '',
         aggConditionLanguage: whereLanguage ?? 'lucene',
         alias: `series_${params.seriesIndex}`,
-        ...(source.kind === SourceKind.Metric && {
-          metricName,
+        ...(isMetricSource && {
+          metricName: resolvedMetricName,
           metricType: metricDataType,
         }),
       },
     ],
     where: '',
     timestampValueExpression: source.timestampValueExpression,
+    ...pickSampleWeightExpressionProps(source),
     dateRange: [new Date(params.startTime), new Date(params.endTime)] as [
       Date,
       Date,
@@ -329,6 +368,7 @@ type SeriesResult = {
   error?: {
     status: number;
     message: string;
+    code: string;
   };
 };
 
@@ -517,129 +557,152 @@ router.post(
     }),
   }),
   async (req, res) => {
-    const span = opentelemetry.trace.getActiveSpan();
-    try {
-      const teamId = req.user?.team;
-      if (!teamId) {
-        return res.status(403).send({ error: 'Team context missing' });
-      }
-      const team = await getTeam(teamId);
-      if (!team) {
-        return res.status(403).send({ error: 'Team not found' });
-      }
-
-      const {
-        endTime,
-        granularity,
-        startTime,
-        seriesReturnType,
-        series: externalSeries,
-      } = req.body;
-
-      const allResults = await Promise.all(
-        externalSeries.map(async (series, index) => {
-          try {
-            const source = await getSource(teamId.toString(), series.sourceId);
-            if (!source || !source.connection) {
-              // Return a structured error object instead of throwing
-              return {
-                error: {
-                  status: 404,
-                  message: `Source not found for series ${index}`,
-                },
-              } as SeriesResult;
-            }
-
-            const connection = await getConnectionById(
-              teamId.toString(),
-              source.connection.toString(),
-              true, // Decrypt password
-            );
-
-            if (!connection) {
-              return {
-                error: {
-                  status: 404,
-                  message: `Connection not found for series ${index}`,
-                },
-              } as SeriesResult;
-            }
-
-            const { chartConfig, groupByFields } =
-              await buildChartConfigFromRequest(
-                {
-                  externalSeries: series,
-                  sourceId: series.sourceId,
-                  seriesIndex: index,
-                  startTime,
-                  endTime,
-                  granularity,
-                  seriesReturnType,
-                  teamId: teamId.toString(),
-                },
-                source,
-                connection,
-              );
-
-            const clickhouseClient = new ClickhouseClient({
-              host: connection.host,
-              username: connection.username,
-              password: connection.password,
-            });
-
-            const metadata = getMetadata(clickhouseClient);
-            const result = await clickhouseClient.queryChartConfig({
-              config: chartConfig,
-              metadata,
-              querySettings: source.querySettings,
-            });
-
-            return {
-              data: result.data || [],
-              groupByFields,
-            } as SeriesResult;
-          } catch (err) {
-            console.error(`Error processing series ${index}:`, err);
-            throw err;
+    const requestStartedAt = Date.now();
+    // The span status/exception is managed inside the handler (errors are mapped
+    // to HTTP responses rather than thrown), so disable the default OK status.
+    await withSpan(
+      'external_api.charts.series',
+      async span => {
+        try {
+          const teamId = req.user?.team;
+          if (!teamId) {
+            chartsSeriesErrors.add(1, { error_type: 'TEAM_MISSING' });
+            return res.status(403).send({ error: 'Team context missing' });
           }
-        }),
-      );
+          const team = await getTeam(teamId);
+          if (!team) {
+            chartsSeriesErrors.add(1, { error_type: 'TEAM_NOT_FOUND' });
+            return res.status(403).send({ error: 'Team not found' });
+          }
 
-      // Check if any results contain errors
-      const errorResult = allResults.find(
-        result => 'error' in result && result.error,
-      ) as SeriesResult | undefined;
-      if (errorResult && errorResult.error) {
-        const { status, message } = errorResult.error;
-        return res.status(status).json({ error: message });
-      }
+          const {
+            endTime,
+            granularity,
+            startTime,
+            seriesReturnType,
+            series: externalSeries,
+          } = req.body;
 
-      // Combine all data rows across all series
-      const combinedResults = allResults.flatMap(
-        result => result.data || [],
-      ) as Record<string, unknown>[];
+          const allResults = await Promise.all(
+            externalSeries.map(async (series, index) => {
+              try {
+                const source = await getSource(
+                  teamId.toString(),
+                  series.sourceId,
+                );
+                if (!source || !source.connection) {
+                  // Return a structured error object instead of throwing
+                  return {
+                    error: {
+                      status: 404,
+                      message: `Source not found for series ${index}`,
+                      code: 'SOURCE_NOT_FOUND',
+                    },
+                  } as SeriesResult;
+                }
 
-      // Format based on requested type
-      let responseData;
-      if (seriesReturnType === 'column') {
-        responseData = combinedResults;
-      } else {
-        const primaryGroupByFields = allResults.find(
-          r => r.groupByFields,
-        )?.groupByFields;
-        responseData = formatCHResult(combinedResults, primaryGroupByFields);
-      }
+                const connection = await getConnectionById(
+                  teamId.toString(),
+                  source.connection.toString(),
+                  true, // Decrypt password
+                );
 
-      res.json({ data: responseData });
-    } catch (e) {
-      span?.recordException(e as Error);
-      span?.setStatus({ code: SpanStatusCode.ERROR });
-      console.error('Error in /series endpoint:', e);
+                if (!connection) {
+                  return {
+                    error: {
+                      status: 404,
+                      message: `Connection not found for series ${index}`,
+                      code: 'CONNECTION_NOT_FOUND',
+                    },
+                  } as SeriesResult;
+                }
 
-      const errMsg = e instanceof Error ? e.message : 'Internal server error';
-      const statusCode = (e as any).statusCode || 500;
-      res.status(statusCode).json({ error: errMsg });
-    }
+                const { chartConfig, groupByFields } =
+                  await buildChartConfigFromRequest(
+                    {
+                      externalSeries: series,
+                      sourceId: series.sourceId,
+                      seriesIndex: index,
+                      startTime,
+                      endTime,
+                      granularity,
+                      seriesReturnType,
+                      teamId: teamId.toString(),
+                    },
+                    source,
+                    connection,
+                  );
+
+                const clickhouseClient = new ClickhouseClient({
+                  host: connection.host,
+                  username: connection.username,
+                  password: connection.password,
+                });
+
+                const metadata = getMetadata(clickhouseClient);
+                const result = await clickhouseClient.queryChartConfig({
+                  config: chartConfig,
+                  metadata,
+                  querySettings: source.querySettings,
+                });
+
+                return {
+                  data: result.data || [],
+                  groupByFields,
+                } as SeriesResult;
+              } catch (err) {
+                console.error(`Error processing series ${index}:`, err);
+                throw err;
+              }
+            }),
+          );
+
+          // Check if any results contain errors
+          const errorResult = allResults.find(
+            result => 'error' in result && result.error,
+          ) as SeriesResult | undefined;
+          if (errorResult && errorResult.error) {
+            const { status, message, code } = errorResult.error;
+            chartsSeriesErrors.add(1, { error_type: code });
+            return res.status(status).json({ error: message });
+          }
+
+          // Combine all data rows across all series
+          const combinedResults = allResults.flatMap(
+            result => result.data || [],
+          ) as Record<string, unknown>[];
+
+          // Format based on requested type
+          let responseData;
+          if (seriesReturnType === 'column') {
+            responseData = combinedResults;
+          } else {
+            const primaryGroupByFields = allResults.find(
+              r => r.groupByFields,
+            )?.groupByFields;
+            responseData = formatCHResult(
+              combinedResults,
+              primaryGroupByFields,
+            );
+          }
+
+          span.setStatus({ code: SpanStatusCode.OK });
+          res.json({ data: responseData });
+        } catch (e) {
+          chartsSeriesErrors.add(1, { error_type: 'UNHANDLED' });
+          span.recordException(e as Error);
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          console.error('Error in /series endpoint:', e);
+
+          const errMsg =
+            e instanceof Error ? e.message : 'Internal server error';
+          const statusCode = (e as any).statusCode || 500;
+          res.status(statusCode).json({ error: errMsg });
+        }
+      },
+      { recordOkStatus: false },
+    );
+    chartsSeriesDuration.record(Date.now() - requestStartedAt);
   },
 );
 

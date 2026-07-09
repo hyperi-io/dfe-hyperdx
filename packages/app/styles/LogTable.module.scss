@@ -1,6 +1,10 @@
 $button-height: 18px;
 
 .tableWrapper {
+  overflow: auto;
+  height: 100%;
+  font-size: var(--mantine-font-size-xs);
+
   /* CSS custom properties for variant support */
   --log-table-bg: var(--color-bg-body);
   --log-table-muted-bg: var(--color-bg-muted);
@@ -12,11 +16,14 @@ $button-height: 18px;
 }
 
 .table {
+  width: 100%;
   table-layout: fixed;
   border-spacing: 0;
   border-collapse: separate;
   background: var(--log-table-bg);
   font-family: var(--font-ibm-plex-mono);
+  /* Slashed zero (0 vs O) for log/data rows - IDs, timestamps, values. */
+  font-feature-settings: 'zero' 1;
 }
 
 .tableHead {
@@ -219,7 +226,7 @@ $button-height: 18px;
 
 .fieldText.wrapped {
   word-break: break-word;
-  white-space: normal;
+  white-space: pre-wrap;
   display: flex;
 }
 

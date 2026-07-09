@@ -1,18 +1,99 @@
-import { SourceSchema } from '@hyperdx/common-utils/dist/types';
+import {
+  SourceKind,
+  SourceSchema,
+  type TSource,
+} from '@hyperdx/common-utils/dist/types';
 import express from 'express';
 
 import { getSources } from '@/controllers/sources';
 import { SourceDocument } from '@/models/source';
 import logger from '@/utils/logger';
 
+export function mapGranularityToExternalFormat(granularity: string): string {
+  const matches = granularity.match(/^(\d+) (second|minute|hour|day)$/);
+  if (matches == null) return granularity;
+
+  const [, amount, unit] = matches;
+  switch (unit) {
+    case 'second':
+      return `${amount}s`;
+    case 'minute':
+      return `${amount}m`;
+    case 'hour':
+      return `${amount}h`;
+    case 'day':
+      return `${amount}d`;
+    default:
+      return granularity;
+  }
+}
+
+function mapSourceToExternalSource(source: TSource): TSource {
+  if (!('materializedViews' in source)) return source;
+
+  const mapped = { ...source };
+
+  if (Array.isArray(source.materializedViews)) {
+    mapped.materializedViews = source.materializedViews.map(view => ({
+      ...view,
+      minGranularity: mapGranularityToExternalFormat(view.minGranularity),
+    }));
+  }
+
+  if (
+    'metadataMaterializedViews' in source &&
+    source.metadataMaterializedViews
+  ) {
+    mapped.metadataMaterializedViews = {
+      ...source.metadataMaterializedViews,
+      granularity: mapGranularityToExternalFormat(
+        source.metadataMaterializedViews.granularity,
+      ),
+    };
+  }
+
+  return mapped;
+}
+
+function applyLegacyDefaults(
+  parsed: Record<string, unknown>,
+): Record<string, unknown> {
+  // Legacy Session sources were created before timestampValueExpression was
+  // required. The old code defaulted it to 'TimestampTime' at query time.
+  if (parsed.kind === SourceKind.Session && !parsed.timestampValueExpression) {
+    return { ...parsed, timestampValueExpression: 'TimestampTime' };
+  }
+  return parsed;
+}
+
 function formatExternalSource(source: SourceDocument) {
   // Convert to JSON so that any ObjectIds are converted to strings
-  const json = JSON.stringify(source.toJSON({ getters: true }));
+  const json = JSON.stringify(
+    (() => {
+      switch (source.kind) {
+        case SourceKind.Log:
+          return source.toJSON({ getters: true });
+        case SourceKind.Trace:
+          return source.toJSON({ getters: true });
+        case SourceKind.Metric:
+          return source.toJSON({ getters: true });
+        case SourceKind.Session:
+          return source.toJSON({ getters: true });
+        case SourceKind.Promql:
+          return source.toJSON({ getters: true });
+        default:
+          source satisfies never;
+          return {};
+      }
+    })(),
+  );
 
   // Parse using the SourceSchema to strip out any fields not defined in the schema
-  const parseResult = SourceSchema.safeParse(JSON.parse(json));
+  const parseResult = SourceSchema.safeParse(
+    applyLegacyDefaults(JSON.parse(json)),
+  );
   if (parseResult.success) {
-    return parseResult.data;
+    return mapSourceToExternalSource(parseResult.data);
   }
 
   // If parsing fails, log the error and return undefined
@@ -37,9 +118,11 @@ function formatExternalSource(source: SourceDocument) {
  *         setting:
  *           type: string
  *           description: ClickHouse setting name
+ *           example: max_threads
  *         value:
  *           type: string
  *           description: Setting value
+ *           example: "4"
  *     SourceFrom:
  *       type: object
  *       required:
@@ -49,9 +132,49 @@ function formatExternalSource(source: SourceDocument) {
  *         databaseName:
  *           type: string
  *           description: ClickHouse database name
+ *           example: otel
  *         tableName:
  *           type: string
  *           description: ClickHouse table name
+ *           example: otel_logs
+ *     MetricSourceFrom:
+ *       type: object
+ *       required:
+ *         - databaseName
+ *       properties:
+ *         databaseName:
+ *           type: string
+ *           description: ClickHouse database name
+ *           example: otel
+ *         tableName:
+ *           type: string
+ *           description: ClickHouse table name
+ *           nullable: true
+ *           example: otel_metrics_gauge
+ *     MetricTables:
+ *       type: object
+ *       description: Mapping of metric data types to table names. At least one must be specified.
+ *       properties:
+ *         gauge:
+ *           type: string
+ *           description: Table containing gauge metrics data
+ *           example: otel_metrics_gauge
+ *         histogram:
+ *           type: string
+ *           description: Table containing histogram metrics data
+ *           example: otel_metrics_histogram
+ *         sum:
+ *           type: string
+ *           description: Table containing sum metrics data
+ *           example: otel_metrics_sum
+ *         summary:
+ *           type: string
+ *           description: Table containing summary metrics data. Note - not yet fully supported by HyperDX
+ *           example: otel_metrics_summary
+ *         exponential histogram:
+ *           type: string
+ *           description: Table containing exponential histogram metrics data. Note - not yet fully supported by HyperDX
+ *           example: otel_metrics_exponential_histogram
  *     HighlightedAttributeExpression:
  *       type: object
  *       required:
@@ -60,14 +183,17 @@ function formatExternalSource(source: SourceDocument) {
  *         sqlExpression:
  *           type: string
  *           description: SQL expression for the attribute
+ *           example: SpanAttributes['http.status_code']
  *         luceneExpression:
  *           type: string
  *           description: An optional, Lucene version of the sqlExpression expression. If provided, it is used when searching for this attribute value.
  *           nullable: true
+ *           example: http.status_code
  *         alias:
  *           type: string
  *           description: Optional alias for the attribute
  *           nullable: true
+ *           example: HTTP Status Code
  *     AggregatedColumn:
  *       type: object
  *       required:
@@ -78,12 +204,15 @@ function formatExternalSource(source: SourceDocument) {
  *           type: string
  *           description: Source column name
  *           nullable: true
+ *           example: Duration
  *         aggFn:
  *           type: string
  *           description: Aggregation function (e.g., count, sum, avg)
+ *           example: sum
  *         mvColumn:
  *           type: string
  *           description: Materialized view column name
+ *           example: sum__Duration
  *     MaterializedView:
  *       type: object
  *       required:
@@ -97,33 +226,35 @@ function formatExternalSource(source: SourceDocument) {
  *         databaseName:
  *           type: string
  *           description: Database name for the materialized view
+ *           example: otel
  *         tableName:
  *           type: string
  *           description: Table name for the materialized view
+ *           example: otel_logs_mv_5m
  *         dimensionColumns:
  *           type: string
  *           description: Columns which are not pre-aggregated in the materialized view and can be used for filtering and grouping.
+ *           example: ServiceName, SeverityText
  *         minGranularity:
  *           type: string
  *           description: The granularity of the timestamp column
- *           enum: [1 second, 15 second, 30 second, 1 minute, 5 minute, 15 minute, 30 minute, 1 hour, 2 hour, 6 hour, 12 hour, 1 day, 2 day, 7 day, 30 day]
+ *           enum: [1s, 15s, 30s, 1m, 5m, 15m, 30m, 1h, 2h, 6h, 12h, 1d, 2d, 7d, 30d]
+ *           example: 5m
  *         minDate:
  *           type: string
  *           format: date-time
  *           description: (Optional) The earliest date and time for which the materialized view contains data. If not provided, then HyperDX will assume that the materialized view contains data for all dates for which the source table contains data.
  *           nullable: true
+ *           example: "2025-01-01T00:00:00Z"
  *         timestampColumn:
  *           type: string
  *           description: Timestamp column name
+ *           example: Timestamp
  *         aggregatedColumns:
  *           type: array
  *           description: Columns which are pre-aggregated by the materialized view
  *           items:
  *             $ref: '#/components/schemas/AggregatedColumn'
- *     SourceKind:
- *       type: string
- *       enum: [log, trace, session, metric]
- *       description: The type of data source.
  *     LogSource:
  *       type: object
  *       required:
@@ -137,63 +268,109 @@ function formatExternalSource(source: SourceDocument) {
  *       properties:
  *         id:
  *           type: string
+ *           description: Unique source ID.
+ *           example: 507f1f77bcf86cd799439011
  *         name:
  *           type: string
+ *           description: Display name for the source.
+ *           example: Logs
+ *         section:
+ *           type: string
+ *           maxLength: 256
+ *           description: Optional grouping label used to organize sources in the source selector. Sources that share a section value are displayed together.
+ *           example: Billing
  *         kind:
  *           type: string
  *           enum: [log]
+ *           description: Source kind discriminator. Must be "log" for log sources.
+ *           example: log
  *         connection:
  *           type: string
+ *           description: ID of the ClickHouse connection used by this source.
+ *           example: 507f1f77bcf86cd799439012
  *         from:
  *           $ref: '#/components/schemas/SourceFrom'
+ *           description: Database and table location of the source data.
  *         querySettings:
  *           type: array
+ *           description: Optional ClickHouse query settings applied when querying this source.
  *           items:
  *             $ref: '#/components/schemas/QuerySetting'
  *           nullable: true
  *         defaultTableSelectExpression:
  *           type: string
  *           description: Default columns selected in search results (this can be customized per search later)
+ *           example: Timestamp, ServiceName, SeverityText, Body
  *         timestampValueExpression:
  *           type: string
  *           description: DateTime column or expression that is part of your table's primary key.
+ *           example: Timestamp
  *         serviceNameExpression:
  *           type: string
+ *           description: Expression to extract the service name from log rows.
  *           nullable: true
+ *           example: ServiceName
  *         severityTextExpression:
  *           type: string
+ *           description: Expression to extract the severity/log level text.
  *           nullable: true
+ *           example: SeverityText
  *         bodyExpression:
  *           type: string
+ *           description: Expression to extract the log message body.
  *           nullable: true
+ *           example: Body
  *         eventAttributesExpression:
  *           type: string
+ *           description: Expression to extract event-level attributes.
  *           nullable: true
+ *           example: LogAttributes
  *         resourceAttributesExpression:
  *           type: string
+ *           description: Expression to extract resource-level attributes.
  *           nullable: true
+ *           example: ResourceAttributes
  *         displayedTimestampValueExpression:
  *           type: string
  *           description: This DateTime column is used to display and order search results.
  *           nullable: true
+ *           example: TimestampTime
  *         metricSourceId:
  *           type: string
  *           description: HyperDX Source for metrics associated with logs. Optional
  *           nullable: true
+ *           example: 507f1f77bcf86cd799439013
  *         traceSourceId:
  *           type: string
  *           description: HyperDX Source for traces associated with logs. Optional
  *           nullable: true
+ *           example: 507f1f77bcf86cd799439014
  *         traceIdExpression:
  *           type: string
+ *           description: Expression to extract the trace ID for correlating logs with traces.
  *           nullable: true
+ *           example: TraceId
  *         spanIdExpression:
  *           type: string
+ *           description: Expression to extract the span ID for correlating logs with traces.
  *           nullable: true
+ *           example: SpanId
  *         implicitColumnExpression:
  *           type: string
  *           description: Column used for full text search if no property is specified in a Lucene-based search. Typically the message body of a log.
  *           nullable: true
+ *           example: Body
+ *         knownColumnsListExpression:
+ *           type: string
+ *           description: For Distributed table sources whose target tables have non-matching column sets. A list of columns supported across all target tables, used instead of SELECT * when fetching full row data. Leave blank to select all columns.
+ *           nullable: true
+ *           example: Timestamp, Body, ServiceName
+ *         useTextIndexForImplicitColumn:
+ *           type: string
+ *           enum: [auto, enabled, disabled]
+ *           description: Controls whether lucene rendering uses ClickHouse text indices via hasAllTokens() against the implicit column. "auto" detects a covering index at query time, "enabled" forces text index usage, "disabled" forces a LIKE/hasToken fallback.
+ *           nullable: true
+ *           example: auto
  *         highlightedTraceAttributeExpressions:
  *           type: array
  *           description: Expressions defining trace-level attributes which are displayed in the trace view for the selected trace.
@@ -212,6 +389,23 @@ function formatExternalSource(source: SourceDocument) {
  *           items:
  *             $ref: '#/components/schemas/MaterializedView'
  *           nullable: true
+ *         metadataMaterializedViews:
+ *           type: object
+ *           description: Configure materialized views for fast field discovery and value autocomplete.
+ *           nullable: true
+ *           properties:
+ *             keyRollupTable:
+ *               type: string
+ *               description: ClickHouse table name for the key rollup (field discovery).
+ *               example: otel_logs_key_rollup_15m
+ *             kvRollupTable:
+ *               type: string
+ *               description: ClickHouse table name for the key-value rollup (value autocomplete).
+ *               example: otel_logs_kv_rollup_15m
+ *             granularity:
+ *               type: string
+ *               description: The time granularity of the rollup tables.
+ *               example: 15m
  *     TraceSource:
  *       type: object
  *       required:
@@ -231,17 +425,32 @@ function formatExternalSource(source: SourceDocument) {
  *       properties:
  *         id:
  *           type: string
+ *           description: Unique source ID.
+ *           example: 507f1f77bcf86cd799439021
  *         name:
  *           type: string
+ *           description: Display name for the source.
+ *           example: Traces
+ *         section:
+ *           type: string
+ *           maxLength: 256
+ *           description: Optional grouping label used to organize sources in the source selector. Sources that share a section value are displayed together.
+ *           example: Billing
  *         kind:
  *           type: string
  *           enum: [trace]
+ *           description: Source kind discriminator. Must be "trace" for trace sources.
+ *           example: trace
  *         connection:
  *           type: string
+ *           description: ID of the ClickHouse connection used by this source.
+ *           example: 507f1f77bcf86cd799439012
  *         from:
  *           $ref: '#/components/schemas/SourceFrom'
+ *           description: Database and table location of the source data.
  *         querySettings:
  *           type: array
+ *           description: Optional ClickHouse query settings applied when querying this source.
  *           items:
  *             $ref: '#/components/schemas/QuerySetting'
  *           nullable: true
@@ -249,61 +458,102 @@ function formatExternalSource(source: SourceDocument) {
  *           type: string
  *           description: Default columns selected in search results (this can be customized per search later)
  *           nullable: true
+ *           example: Timestamp, SpanName, ServiceName, Duration
  *         timestampValueExpression:
  *           type: string
  *           description: DateTime column or expression defines the start of the span
+ *           example: Timestamp
  *         durationExpression:
  *           type: string
+ *           description: Expression to extract span duration.
+ *           example: Duration
  *         durationPrecision:
  *           type: integer
  *           minimum: 0
  *           maximum: 9
  *           default: 3
+ *           description: Number of decimal digits in the duration value (e.g., 3 for milliseconds, 6 for microseconds, 9 for nanoseconds).
  *         traceIdExpression:
  *           type: string
+ *           description: Expression to extract the trace ID.
+ *           example: TraceId
  *         spanIdExpression:
  *           type: string
+ *           description: Expression to extract the span ID.
+ *           example: SpanId
  *         parentSpanIdExpression:
  *           type: string
+ *           description: Expression to extract the parent span ID.
+ *           example: ParentSpanId
  *         spanNameExpression:
  *           type: string
+ *           description: Expression to extract the span name.
+ *           example: SpanName
  *         spanKindExpression:
  *           type: string
+ *           description: Expression to extract the span kind (e.g., client, server, internal).
+ *           example: SpanKind
  *         logSourceId:
  *           type: string
  *           description: HyperDX Source for logs associated with traces. Optional
  *           nullable: true
+ *           example: 507f1f77bcf86cd799439011
  *         sessionSourceId:
  *           type: string
  *           description: HyperDX Source for sessions associated with traces. Optional
  *           nullable: true
+ *           example: 507f1f77bcf86cd799439031
  *         metricSourceId:
  *           type: string
  *           description: HyperDX Source for metrics associated with traces. Optional
  *           nullable: true
+ *           example: 507f1f77bcf86cd799439041
  *         statusCodeExpression:
  *           type: string
+ *           description: Expression to extract the span status code.
  *           nullable: true
+ *           example: StatusCode
  *         statusMessageExpression:
  *           type: string
+ *           description: Expression to extract the span status message.
  *           nullable: true
+ *           example: StatusMessage
  *         serviceNameExpression:
  *           type: string
+ *           description: Expression to extract the service name from trace rows.
  *           nullable: true
+ *           example: ServiceName
  *         resourceAttributesExpression:
  *           type: string
+ *           description: Expression to extract resource-level attributes.
  *           nullable: true
+ *           example: ResourceAttributes
  *         eventAttributesExpression:
  *           type: string
+ *           description: Expression to extract event-level attributes.
  *           nullable: true
+ *           example: SpanAttributes
  *         spanEventsValueExpression:
  *           type: string
  *           description: Expression to extract span events. Used to capture events associated with spans. Expected to be Nested ( Timestamp DateTime64(9), Name LowCardinality(String), Attributes Map(LowCardinality(String), String)
  *           nullable: true
+ *           example: Events
  *         implicitColumnExpression:
  *           type: string
  *           description: Column used for full text search if no property is specified in a Lucene-based search. Typically the message body of a log.
  *           nullable: true
+ *           example: SpanName
+ *         knownColumnsListExpression:
+ *           type: string
+ *           description: For Distributed table sources whose target tables have non-matching column sets. A list of columns supported across all target tables, used instead of SELECT * when fetching full row data. Leave blank to select all columns.
+ *           nullable: true
+ *           example: Timestamp, Body, ServiceName
+ *         useTextIndexForImplicitColumn:
+ *           type: string
+ *           enum: [auto, enabled, disabled]
+ *           description: Controls whether lucene rendering uses ClickHouse text indices via hasAllTokens() against the implicit column. "auto" detects a covering index at query time, "enabled" forces text index usage, "disabled" forces a LIKE/hasToken fallback.
+ *           nullable: true
+ *           example: auto
  *         highlightedTraceAttributeExpressions:
  *           type: array
  *           description: Expressions defining trace-level attributes which are displayed in the trace view for the selected trace.
@@ -322,6 +572,23 @@ function formatExternalSource(source: SourceDocument) {
  *           items:
  *             $ref: '#/components/schemas/MaterializedView'
  *           nullable: true
+ *         metadataMaterializedViews:
+ *           type: object
+ *           description: Configure materialized views for fast field discovery and value autocomplete.
+ *           nullable: true
+ *           properties:
+ *             keyRollupTable:
+ *               type: string
+ *               description: ClickHouse table name for the key rollup (field discovery).
+ *               example: otel_traces_key_rollup_15m
+ *             kvRollupTable:
+ *               type: string
+ *               description: ClickHouse table name for the key-value rollup (value autocomplete).
+ *               example: otel_traces_kv_rollup_15m
+ *             granularity:
+ *               type: string
+ *               description: The time granularity of the rollup tables.
+ *               example: 15m
  *     MetricSource:
  *       type: object
  *       required:
@@ -336,57 +603,51 @@ function formatExternalSource(source: SourceDocument) {
  *       properties:
  *         id:
  *           type: string
+ *           description: Unique source ID.
+ *           example: 507f1f77bcf86cd799439041
  *         name:
  *           type: string
+ *           description: Display name for the source.
+ *           example: Metrics
+ *         section:
+ *           type: string
+ *           maxLength: 256
+ *           description: Optional grouping label used to organize sources in the source selector. Sources that share a section value are displayed together.
+ *           example: Billing
  *         kind:
  *           type: string
  *           enum: [metric]
+ *           description: Source kind discriminator. Must be "metric" for metric sources.
+ *           example: metric
  *         connection:
  *           type: string
+ *           description: ID of the ClickHouse connection used by this source.
+ *           example: 507f1f77bcf86cd799439012
  *         from:
- *           type: object
- *           required:
- *             - databaseName
- *           properties:
- *             databaseName:
- *               type: string
- *             tableName:
- *               type: string
- *               nullable: true
+ *           $ref: '#/components/schemas/MetricSourceFrom'
+ *           description: Database and optional table location of the metric source data.
  *         querySettings:
  *           type: array
+ *           description: Optional ClickHouse query settings applied when querying this source.
  *           items:
  *             $ref: '#/components/schemas/QuerySetting'
  *           nullable: true
  *         metricTables:
- *           type: object
- *           description: Mapping of metric data types to table names. At least one must be specified.
- *           properties:
- *             gauge:
- *               type: string
- *               description: Table containing gauge metrics data
- *             histogram:
- *               type: string
- *               description: Table containing histogram metrics data
- *             sum:
- *               type: string
- *               description: Table containing sum metrics data
- *             summary:
- *               type: string
- *               description: Table containing summary metrics data. Note - not yet fully supported by HyperDX
- *             exponential histogram:
- *               type: string
- *               description: Table containing exponential histogram metrics data. Note - not yet fully supported by HyperDX
+ *           $ref: '#/components/schemas/MetricTables'
+ *           description: Mapping of metric data types to their respective table names.
  *         timestampValueExpression:
  *           type: string
  *           description: DateTime column or expression that is part of your table's primary key.
+ *           example: TimeUnix
  *         resourceAttributesExpression:
  *           type: string
  *           description: Column containing resource attributes for metrics
+ *           example: ResourceAttributes
  *         logSourceId:
  *           type: string
  *           description: HyperDX Source for logs associated with metrics. Optional
  *           nullable: true
+ *           example: 507f1f77bcf86cd799439011
  *     SessionSource:
  *       type: object
  *       required:
@@ -399,17 +660,32 @@ function formatExternalSource(source: SourceDocument) {
  *       properties:
  *         id:
  *           type: string
+ *           description: Unique source ID.
+ *           example: 507f1f77bcf86cd799439031
  *         name:
  *           type: string
+ *           description: Display name for the source.
+ *           example: Sessions
+ *         section:
+ *           type: string
+ *           maxLength: 256
+ *           description: Optional grouping label used to organize sources in the source selector. Sources that share a section value are displayed together.
+ *           example: Billing
  *         kind:
  *           type: string
  *           enum: [session]
+ *           description: Source kind discriminator. Must be "session" for session sources.
+ *           example: session
  *         connection:
  *           type: string
+ *           description: ID of the ClickHouse connection used by this source.
+ *           example: 507f1f77bcf86cd799439012
  *         from:
  *           $ref: '#/components/schemas/SourceFrom'
+ *           description: Database and table location of the source data.
  *         querySettings:
  *           type: array
+ *           description: Optional ClickHouse query settings applied when querying this source.
  *           items:
  *             $ref: '#/components/schemas/QuerySetting'
  *           nullable: true
@@ -417,9 +693,11 @@ function formatExternalSource(source: SourceDocument) {
  *           type: string
  *           description: DateTime column or expression that is part of your table's primary key.
  *           nullable: true
+ *           example: TimestampTime
  *         traceSourceId:
  *           type: string
  *           description: HyperDX Source for traces associated with sessions.
+ *           example: 507f1f77bcf86cd799439021
  *     Source:
  *       oneOf:
  *         - $ref: '#/components/schemas/LogSource'
@@ -438,6 +716,7 @@ function formatExternalSource(source: SourceDocument) {
  *       properties:
  *         data:
  *           type: array
+ *           description: List of source objects.
  *           items:
  *             $ref: '#/components/schemas/Source'
  */

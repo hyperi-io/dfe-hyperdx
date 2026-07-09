@@ -1,6 +1,6 @@
 # FORK.md -- HyperI fork of HyperDX
 
-This repository (`hyperi-hyperdx`) is a fork of upstream
+This repository (`dfe-hyperdx`) is a fork of upstream
 [HyperDX](https://github.com/hyperdxio/hyperdx) v2, embedded in the DFE platform
 as its visualisation and search layer.
 
@@ -19,9 +19,21 @@ is the _design_. Downstream repos (dfe-engine, dfe-infra, dfe-docs) should
 ## Upstream base
 
 - **Upstream:** <https://github.com/hyperdxio/hyperdx> (HyperDX v2)
+- **Synced to:** `@hyperdx/app@2.29.0` (merge `f95c8773`, 2026-07-07). Recorded as
+  a real 2-parent merge (base `e58f01d`), so future syncs are clean 3-way merges
+  off 2.29. `git rerere` is enabled for the fork (future conflict resolutions
+  auto-replay). Sync process: `git merge <new-upstream-tag>` on a `sync/<tag>`
+  branch, then build + test (see DFE-DOCKER-LOCAL.md).
+- **RETIRED - the `.dfe[CHG]` shadow-copy convention.** It was never wired (no
+  swap alias/script/config; pages import the pristine originals; docker build
+  ignores the `package.dfe[CHG].json`/`nx.dfe[CHG].json` variants), had drifted
+  hard against 2.29, and blocked the build. All 32 shadow files were removed in
+  `bfb9899a`. The fork's real customisations live entirely in the imported
+  `dfe/` dirs. When customising an upstream file now, prefer an upstream config
+  seam (e.g. the `brandName`/theme hooks) over shadowing.
 - **Imported at:** commit `e58f01d` "Initial HyperDX commit" (2026-02-16)
 - **No `upstream` remote is configured** as of this writing -- only `origin`
-  points at `github.com/hyperi-io/hyperi-hyperdx`. To assess or pull upstream
+  points at `github.com/hyperi-io/dfe-hyperdx`. To assess or pull upstream
   you must add it (see [Syncing with upstream](#syncing-with-upstream)).
 - **Our changes live on `main`**, merged in as feature PRs (#2 config, #3 title
   tweaks, #4 dfe pg rbac OIDC, #10 generate-hunt-from-saved-search, #11
@@ -102,15 +114,16 @@ to teams. Falls back to upstream session auth when headers are absent.
 - Spikes: `.hyperi/spikes/oauth2-derek/**` (Envoy/oauth2-proxy/nginx reference
   configs -- not shipped, kept for reference)
 
-### Authorization: Casbin RBAC (shared enforcer)
+### Authorization
 
-Adds multi-tenant RBAC HyperDX never had. The DFE Python UI is the policy
-authority (pycasbin); HyperDX is a policy consumer (node-casbin). Both read the
-same `casbin_rule` table in the shared PostgreSQL.
-
-- `packages/api/src/dfe/middleware/casbin-authz.ts` -- per-route enforcement
-  middleware
-- Model: RBAC-with-tenants (`sub, dom, obj, act`); roles viewer/editor/admin
+Casbin RBAC (a shared `casbin_rule` PostgreSQL enforcer) was REMOVED in the
+dfe-hyperdx v1 line. It was redundant: every HyperDX route handler already
+self-scopes its Mongo queries by `team`, so tenant isolation holds without it and
+cross-team access was never possible. Authorization is owned by the DFE engine
+(the policy decision point) and enforced at the data layer by ClickHouse GRANTs;
+HyperDX trusts the identity injected at the edge. Removed:
+`dfe/middleware/casbin-authz.ts`, `dfe/bootstrap.ts`,
+`rbac_with_tenants_model.conf`, and the `casbin` / `casbin-pg-adapter` deps.
 
 ### DFE integration features
 
@@ -120,14 +133,13 @@ same `casbin_rule` table in the shared PostgreSQL.
 - Source-create + JSON-parse improvements (PR #11) -- see
   `packages/common-utils/**` delta
 - Alerting: HyperDX's built-in alert checker is **not started**; alert routes
-  are gated via Casbin. Detection/alerting is owned by the DFE rules engine.
-  (Disabled, not removed -- additive.)
+  are hidden by the DFE embed nav gating. Detection/alerting is owned by the DFE
+  rules engine. (Disabled, not removed -- additive.)
 
 ### Config + bootstrap
 
 - `packages/api/src/dfe/config.ts` -- DFE config surface (auth mode, header
-  names, Casbin PG URL, default team)
-- `packages/api/src/dfe/bootstrap.ts` -- DFE startup wiring
+  names, default team)
 - `.env.dfe-example` -- DFE env template
 
 ### Branding / frontend
@@ -201,6 +213,62 @@ When (A) gets ugly:
 4. Update this file's upstream-base commit + counts.
 
 This catalogue is what makes (B) tractable. Keep it current.
+
+### C. Automated drift sync: rerere + the test gate
+
+The point of keeping our changes greppable and catalogued is to make the
+recurring upstream merge cheap and reliable. Two mechanisms do that, and the
+second is the load-bearing one.
+
+1. **`git rerere` (reuse recorded resolution).** Enabled in this repo
+   (`rerere.enabled` + `rerere.autoupdate`). Resolve a merge conflict on an
+   upstream file ONCE and git records the preimage -> postimage. When the SAME
+   conflict recurs on a later upstream bump, git replays our resolution
+   automatically. Our conflict surface is exactly the pristine upstream files we
+   now modify **in place** (the `.dfe[CHG]` shadow convention was retired) -- the
+   recent embed work touched:
+   `packages/app/next.config.mjs` (CSP frame-ancestors),
+   `packages/app/pages/_app.tsx` (route-guard + colour-scheme feed),
+   `packages/app/src/layout.tsx` (hide AppNav in embed),
+   `packages/app/src/components/AppNav/AppNav.tsx`,
+   `packages/app/src/components/DBRowTable.tsx`,
+   `packages/app/src/DBChartPage.tsx` (gate the chart AI assistant),
+   `packages/app/styles/globals.css` + `styles/LogTable.module.scss` (Inter /
+   IBM Plex Mono + slashed-zero), `packages/app/.env.development`. The additive
+   `packages/app/src/dfe/**` files (embedFeatures, EmbedThemeSync) never
+   conflict.
+
+   LIMIT (state it plainly): rerere replays a resolution only when the conflict
+   preimage matches. If upstream refactors the surrounding code the hunk changes,
+   the preimage no longer matches, and you get a FRESH conflict to resolve by
+   hand (which rerere then records for next time). rerere removes the toil of
+   identical recurring conflicts; it does NOT understand our intent and does NOT
+   prove the replayed result still behaves correctly.
+
+2. **The test gate (the real guarantee).** Because rerere is textual, a merge can
+   apply cleanly yet silently break a DFE delta (e.g. upstream renames a prop our
+   sidebar-hide relied on). The merge result is trusted only once our tests pass.
+   `.github/workflows/upstream-sync.yml` runs the merge on a bot branch weekly
+   (and on demand), lets rerere replay, then runs build + test and opens a PR --
+   as a **draft flagged "upstream broke our deltas"** when tests fail. Remaining
+   unresolved conflicts file a drift issue instead. `main` is never touched
+   directly.
+
+   Coverage today + the gap: `yarn test` (unit) catches breakage of code that has
+   tests; the embed integration net is `dfe-infra/scripts/verify_embed.py`
+   (playwright: nav gating, route-block, fonts, theme sync -- 8 checks). GAP: our
+   in-place DFE deltas above need dedicated fork-local unit tests (embedFeatures
+   gating, EmbedThemeSync, the brand mantine theme, the CSP header) so an upstream
+   break is caught in this repo's own CI, not only downstream. Those tests are the
+   executable form of "what must keep working" -- add them as the deltas
+   stabilise.
+
+**Priming rerere:** rerere has nothing to replay until a resolution is recorded.
+Prime it by doing the first post-2.29 upstream merge by hand on a `sync/<tag>`
+branch, resolving each conflict on the modified upstream files above, and
+committing -- that writes the resolutions into `.git/rr-cache`. CI persists
+`rr-cache` (actions/cache) so later scheduled runs replay them. Use MERGE, not
+rebase-onto-upstream (shared team repo; rerere replays either way).
 
 ---
 

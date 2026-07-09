@@ -1,0 +1,65 @@
+# DFE memory caps - REUSABLE resource-limit layer.
+#
+# WHY: never run uncapped docker on a dev laptop (OOM risk). Layer this file LAST
+# so every container has a hard memory ceiling. Applied by `docker compose up`
+# (Compose v2 honours deploy.resources.limits.memory outside swarm).
+#
+# REUSE: dfe-docker layers this same file for the HyperDX stack. The limits below
+# are the resource-sizing SSoT and map 1:1 to Kubernetes:
+#   deploy.resources.limits.memory  ->  k8s containers[].resources.limits.memory
+#   deploy.resources.reservations   ->  k8s containers[].resources.requests
+#
+# Usage (dev - app runs locally via yarn):
+#   docker compose --env-file .env.dfe \
+#     -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml -f docker-compose.caps.yml up -d
+# Usage (prod image - app in a container): swap dfe.dev.yml for dfe.yml (app cap included below).
+#
+# Total dev ceiling ~= 3.4 GB (CH 2g dominates). Tune CH down to 1536m if tight.
+
+services:
+  ch-server:
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+        reservations:
+          memory: 512m
+
+  postgres:
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 128m
+
+  ferretdb:
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+        reservations:
+          memory: 64m
+
+  otel-collector:
+    deploy:
+      resources:
+        limits:
+          memory: 300m
+
+  otel-collector-json:
+    deploy:
+      resources:
+        limits:
+          memory: 300m
+
+  prometheus:
+    deploy:
+      resources:
+        limits:
+          memory: 300m
+
+# NB: the `app` container exists only in the prod-image stack
+# (docker-compose.dfe.yml), not in dev (app runs locally). Its memory cap lives
+# in docker-compose.dfe.yml directly - a service with only `deploy` and no
+# image/build is an invalid compose project, so it cannot be capped from here.

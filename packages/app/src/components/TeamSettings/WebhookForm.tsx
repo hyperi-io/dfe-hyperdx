@@ -27,6 +27,7 @@ import ReactCodeMirror, {
 } from '@uiw/react-codemirror';
 
 import api from '@/api';
+import { useBrandDisplayName } from '@/theme/ThemeProvider';
 import { isValidUrl } from '@/utils';
 
 const DEFAULT_GENERIC_WEBHOOK_BODY = [
@@ -65,6 +66,7 @@ export function WebhookForm({
   onClose: VoidFunction;
   onSuccess: (webhookId?: string) => void;
 }) {
+  const brandName = useBrandDisplayName();
   const saveWebhook = api.useSaveWebhook();
   const updateWebhook = api.useUpdateWebhook();
   const testWebhook = api.useTestWebhook();
@@ -142,6 +144,7 @@ export function WebhookForm({
         url,
         body: defaultBody,
         headers: parsedHeaders,
+        ...(isEditing && { webhookId: webhook._id }),
       });
       notifications.show({
         color: 'green',
@@ -233,7 +236,7 @@ export function WebhookForm({
       onClose();
     } catch (e) {
       console.error(e);
-      let message = 'Something went wrong. Please contact HyperDX team.';
+      let message = `Something went wrong. Please contact ${brandName} team.`;
 
       if (e instanceof HTTPError) {
         try {
@@ -274,12 +277,15 @@ export function WebhookForm({
   };
 
   const service = useWatch({ control: form.control, name: 'service' });
+  const headersText = useWatch({ control: form.control, name: 'headers' });
+  const hasMaskedHeaders = isEditing && !!headersText?.includes('****');
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)}>
       <Stack mt="sm">
         <Text>{isEditing ? 'Edit Webhook' : 'Create Webhook'}</Text>
         <Radio.Group
+          data-testid="service-type-radio-group"
           label="Service Type"
           required
           value={service}
@@ -293,6 +299,7 @@ export function WebhookForm({
         </Radio.Group>
         <TextInput
           label="Webhook Name"
+          data-testid="webhook-name-input"
           placeholder="Post to #dev-alerts"
           required
           error={form.formState.errors.name?.message}
@@ -301,6 +308,12 @@ export function WebhookForm({
 
         <TextInput
           label="Webhook URL"
+          data-testid="webhook-url-input"
+          description={
+            isEditing
+              ? 'URL is masked for security. Enter a new URL to update.'
+              : undefined
+          }
           placeholder={
             service === WebhookService.Slack
               ? 'https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX'
@@ -331,6 +344,12 @@ export function WebhookForm({
           <label className=".mantine-TextInput-label" key="1">
             Webhook Headers (optional)
           </label>,
+          hasMaskedHeaders && (
+            <Text key="1a" size="xs" c="dimmed" mt={-4}>
+              Header values are masked. Enter new values to update or remove
+              keys to delete them.
+            </Text>
+          ),
           <div className="mb-2" key="2">
             <Controller
               name="headers"
@@ -402,6 +421,7 @@ export function WebhookForm({
             <Button
               variant="primary"
               type="submit"
+              data-testid="add-webhook-button"
               loading={saveWebhook.isPending || updateWebhook.isPending}
             >
               {isEditing ? 'Update Webhook' : 'Add Webhook'}

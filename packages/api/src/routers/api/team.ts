@@ -1,14 +1,22 @@
-import { TeamClickHouseSettingsSchema } from '@hyperdx/common-utils/dist/types';
+import type {
+  RotateApiKeyApiResponse,
+  TeamApiResponse,
+  TeamInvitationsApiResponse,
+  TeamMembersApiResponse,
+  TeamTagsApiResponse,
+  UpdateClickHouseSettingsApiResponse,
+} from '@hyperdx/common-utils/dist/types';
+import { TeamClickHouseSettingsUpdateSchema } from '@hyperdx/common-utils/dist/types';
 import crypto from 'crypto';
 import express from 'express';
 import pick from 'lodash/pick';
 import { z } from 'zod';
 import { processRequest, validateRequest } from 'zod-express-middleware';
 
-import * as config from '@/config';
 import {
   getTags,
   getTeam,
+  getTeamInviteUrl,
   rotateTeamApiKey,
   setTeamName,
   updateTeamClickhouseSettings,
@@ -19,11 +27,13 @@ import {
   findUsersByTeam,
 } from '@/controllers/user';
 import TeamInvite from '@/models/teamInvite';
+import { sendJson } from '@/utils/serialization';
 import { objectIdSchema } from '@/utils/zod';
 
 const router = express.Router();
 
-router.get('/', async (req, res, next) => {
+type TeamApiExpRes = express.Response<TeamApiResponse>;
+router.get('/', async (req, res: TeamApiExpRes, next) => {
   try {
     const teamId = req.user?.team;
     const userId = req.user?._id;
@@ -35,31 +45,36 @@ router.get('/', async (req, res, next) => {
       throw new Error(`User has no id`);
     }
 
-    const team = await getTeam(teamId, [
+    const fields = [
       '_id',
       'allowedAuthMethods',
       'apiKey',
       'name',
       'createdAt',
-    ]);
+    ] as const;
+    const team = await getTeam(teamId, fields);
     if (team == null) {
       throw new Error(`Team ${teamId} not found for user ${userId}`);
     }
 
-    res.json(team.toJSON());
+    sendJson(res, team);
   } catch (e) {
     next(e);
   }
 });
 
-router.patch('/apiKey', async (req, res, next) => {
+type RotateApiKeyExpRes = express.Response<RotateApiKeyApiResponse>;
+router.patch('/apiKey', async (req, res: RotateApiKeyExpRes, next) => {
   try {
     const teamId = req.user?.team;
     if (teamId == null) {
       throw new Error(`User ${req.user?._id} not associated with a team`);
     }
     const team = await rotateTeamApiKey(teamId);
-    res.json({ newApiKey: team?.apiKey });
+    if (team?.apiKey == null) {
+      throw new Error(`Failed to rotate API key for team ${teamId}`);
+    }
+    res.json({ newApiKey: team.apiKey });
   } catch (e) {
     next(e);
   }
@@ -90,9 +105,13 @@ router.patch(
 router.patch(
   '/clickhouse-settings',
   processRequest({
-    body: TeamClickHouseSettingsSchema,
+    body: TeamClickHouseSettingsUpdateSchema,
   }),
-  async (req, res, next) => {
+  async (
+    req,
+    res: express.Response<UpdateClickHouseSettingsApiResponse>,
+    next,
+  ) => {
     try {
       const teamId = req.user?.team;
       if (teamId == null) {
@@ -105,14 +124,7 @@ router.patch(
 
       const team = await updateTeamClickhouseSettings(teamId, req.body);
 
-      res.json(
-        Object.entries(req.body).reduce((acc, cur) => {
-          return {
-            ...acc,
-            [cur[0]]: team?.[cur[0]],
-          };
-        }, {} as any),
-      );
+      res.json(pick(team, Object.keys(req.body)));
     } catch (e) {
       next(e);
     }
@@ -168,7 +180,7 @@ router.post(
       }
 
       res.json({
-        url: `${config.FRONTEND_URL}/join-team?token=${teamInvite.token}`,
+        url: getTeamInviteUrl(teamInvite.token),
       });
     } catch (e) {
       next(e);
@@ -176,7 +188,8 @@ router.post(
   },
 );
 
-router.get('/invitations', async (req, res, next) => {
+type TeamInviteExpressRes = express.Response<TeamInvitationsApiResponse>;
+router.get('/invitations', async (req, res: TeamInviteExpressRes, next) => {
   try {
     const teamId = req.user?.team;
     if (teamId == null) {
@@ -193,11 +206,11 @@ router.get('/invitations', async (req, res, next) => {
     );
     res.json({
       data: teamInvites.map(ti => ({
-        _id: ti._id,
-        createdAt: ti.createdAt,
+        _id: ti._id.toString(),
+        createdAt: ti.createdAt.toISOString(),
         email: ti.email,
         name: ti.name,
-        url: `${config.FRONTEND_URL}/join-team?token=${ti.token}`,
+        url: getTeamInviteUrl(ti.token),
       })),
     });
   } catch (e) {
@@ -225,7 +238,8 @@ router.delete(
   },
 );
 
-router.get('/members', async (req, res, next) => {
+type TeamMembersExpRes = express.Response<TeamMembersApiResponse>;
+router.get('/members', async (req, res: TeamMembersExpRes, next) => {
   try {
     const teamId = req.user?.team;
     const userId = req.user?._id;
@@ -281,7 +295,8 @@ router.delete(
   },
 );
 
-router.get('/tags', async (req, res, next) => {
+type TeamTagsExpRes = express.Response<TeamTagsApiResponse>;
+router.get('/tags', async (req, res: TeamTagsExpRes, next) => {
   try {
     const teamId = req.user?.team;
     if (teamId == null) {

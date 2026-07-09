@@ -3,21 +3,24 @@ import {
   MetricsDataType,
   PresetDashboard,
   SourceKind,
-  TSourceUnion,
+  TSource,
 } from '@hyperdx/common-utils/dist/types';
 import { omit } from 'lodash';
 import mongoose, { Types } from 'mongoose';
-
-import PresetDashboardFilter from '@/models/presetDashboardFilter';
-import { Source } from '@/models/source';
 
 import {
   getLoggedInAgent,
   getServer,
   makeAlertInput,
+  makeRawSqlTile,
   makeTile,
-} from '../../../fixtures';
-import Alert from '../../../models/alert';
+} from '@/fixtures';
+import Alert from '@/models/alert';
+import Dashboard from '@/models/dashboard';
+import PresetDashboardFilter from '@/models/presetDashboardFilter';
+import { Source } from '@/models/source';
+import User from '@/models/user';
+import Webhook, { WebhookDocument, WebhookService } from '@/models/webhook';
 
 const MOCK_DASHBOARD = {
   name: 'Test Dashboard',
@@ -25,18 +28,35 @@ const MOCK_DASHBOARD = {
   tags: ['test'],
 };
 
-const MOCK_ALERT = {
-  channel: { type: 'webhook' as const, webhookId: 'abcde' },
+const makeMockAlert = (webhookId: string) => ({
+  channel: { type: 'webhook' as const, webhookId },
   interval: '12h' as const,
   threshold: 1,
   thresholdType: AlertThresholdType.ABOVE,
-};
+});
 
 describe('dashboard router', () => {
   const server = getServer();
+  let agent: Awaited<ReturnType<typeof getLoggedInAgent>>['agent'];
+  let team: Awaited<ReturnType<typeof getLoggedInAgent>>['team'];
+  let user: Awaited<ReturnType<typeof getLoggedInAgent>>['user'];
+  let webhook: WebhookDocument;
 
   beforeAll(async () => {
     await server.start();
+  });
+
+  beforeEach(async () => {
+    const result = await getLoggedInAgent(server);
+    agent = result.agent;
+    team = result.team;
+    user = result.user;
+    webhook = await Webhook.create({
+      name: 'Test Webhook',
+      service: WebhookService.Slack,
+      url: 'https://hooks.slack.com/test',
+      team: team._id,
+    });
   });
 
   afterEach(async () => {
@@ -48,7 +68,6 @@ describe('dashboard router', () => {
   });
 
   it('can create a dashboard', async () => {
-    const { agent } = await getLoggedInAgent(server);
     const dashboard = await agent
       .post('/dashboards')
       .send(MOCK_DASHBOARD)
@@ -60,8 +79,121 @@ describe('dashboard router', () => {
     );
   });
 
+  // Server-side migration shim for legacy `chart-1`..`chart-10` tokens
+  // shipped by #2265. Stale-bundle React clients during a rolling deploy
+  // and non-React HTTP callers (CI scripts, MCP, future external API
+  // writes) can still send the numeric tokens; the route normalizes
+  // them to hue-named equivalents *before* the strict
+  // `ChartPaletteTokenSchema` runs, otherwise the request would 400.
+  it('migrates legacy chart-N tile colors on POST', async () => {
+    const tileWithLegacyColor = makeTile();
+    tileWithLegacyColor.config = {
+      ...tileWithLegacyColor.config,
+      color: 'chart-1' as any,
+    };
+
+    const created = await agent
+      .post('/dashboards')
+      .send({
+        name: 'Legacy Color Dashboard',
+        tiles: [tileWithLegacyColor],
+        tags: [],
+      })
+      .expect(200);
+
+    expect(created.body.tiles[0].config.color).toBe('chart-green');
+  });
+
+  it('migrates legacy chart-N tile colors on PATCH', async () => {
+    const created = await agent
+      .post('/dashboards')
+      .send(MOCK_DASHBOARD)
+      .expect(200);
+
+    const patchedTile = {
+      ...created.body.tiles[0],
+      config: { ...created.body.tiles[0].config, color: 'chart-10' },
+    };
+
+    const updated = await agent
+      .patch(`/dashboards/${created.body.id}`)
+      .send({ tiles: [patchedTile, ...created.body.tiles.slice(1)] })
+      .expect(200);
+
+    expect(updated.body.tiles[0].config.color).toBe('chart-gray');
+  });
+
+  // Wire-format guarantee: GET emits canonical hue-named tokens even for
+  // dashboards that pre-date the rename and still hold `chart-1`..`chart-10`
+  // in Mongo. Without this, a non-React client (or a stale React bundle
+  // that bypasses `normalizeDashboardTileColors`) could GET a legacy
+  // color and round-trip it back through PATCH where the strict schema
+  // would 400. Bypasses the API to seed the legacy value directly into
+  // Mongo because the POST/PATCH middleware would otherwise rewrite it
+  // before it ever reached the DB.
+  //
+  // The dashboards router currently only exposes a list GET (no
+  // `/:id` single GET handler — single-dashboard reads on the React
+  // side go through `useDashboards` and filter client-side). The
+  // controller's `getDashboard` healer is still exercised in the same
+  // process: `updateDashboard` calls `getDashboard` internally before
+  // PATCH, so a follow-up no-op PATCH would surface a regression.
+  it('returns hue-named tokens on GET (list) for a Mongo-seeded legacy chart-N tile', async () => {
+    const tileWithLegacy = makeTile();
+    (tileWithLegacy.config as any).color = 'chart-1';
+    const seeded = await Dashboard.create({
+      name: 'Pre-rename Dashboard',
+      team: team._id,
+      tiles: [tileWithLegacy],
+      tags: [],
+    });
+
+    const list = await agent.get('/dashboards').expect(200);
+    const fromList = list.body.find(d => d._id === seeded._id.toString());
+    expect(fromList).toBeDefined();
+    expect(fromList.tiles[0].config.color).toBe('chart-green');
+  });
+
+  it('sets createdBy and updatedBy on create and populates them in GET', async () => {
+    const created = await agent
+      .post('/dashboards')
+      .send(MOCK_DASHBOARD)
+      .expect(200);
+
+    // GET all dashboards
+    const allDashboards = await agent.get('/dashboards').expect(200);
+    const dashboard = allDashboards.body.find(d => d._id === created.body.id);
+    expect(dashboard.createdBy).toMatchObject({ email: user.email });
+    expect(dashboard.updatedBy).toMatchObject({ email: user.email });
+  });
+
+  it('populates updatedBy with a different user after DB update', async () => {
+    const created = await agent
+      .post('/dashboards')
+      .send(MOCK_DASHBOARD)
+      .expect(200);
+
+    // Create a second user on the same team
+    const secondUser = await User.create({
+      email: 'second@test.com',
+      name: 'Second User',
+      team: team._id,
+    });
+
+    // Simulate a different user updating the dashboard
+    await Dashboard.findByIdAndUpdate(created.body.id, {
+      updatedBy: secondUser._id,
+    });
+
+    const allDashboards = await agent.get('/dashboards').expect(200);
+    const dashboard = allDashboards.body.find(d => d._id === created.body.id);
+    expect(dashboard.createdBy).toMatchObject({ email: user.email });
+    expect(dashboard.updatedBy).toMatchObject({
+      email: 'second@test.com',
+    });
+  });
+
   it('can update a dashboard', async () => {
-    const { agent } = await getLoggedInAgent(server);
     const dashboard = await agent
       .post('/dashboards')
       .send(MOCK_DASHBOARD)
@@ -85,7 +217,6 @@ describe('dashboard router', () => {
   });
 
   it('can delete a dashboard', async () => {
-    const { agent } = await getLoggedInAgent(server);
     const dashboard = await agent
       .post('/dashboards')
       .send(MOCK_DASHBOARD)
@@ -96,12 +227,12 @@ describe('dashboard router', () => {
   });
 
   it('alerts are created when creating dashboard', async () => {
-    const { agent } = await getLoggedInAgent(server);
+    const mockAlert = makeMockAlert(webhook._id.toString());
     const dashboard = await agent
       .post('/dashboards')
       .send({
         name: 'Test Dashboard',
-        tiles: [makeTile({ alert: MOCK_ALERT })],
+        tiles: [makeTile({ alert: mockAlert })],
         tags: [],
       })
       .expect(200);
@@ -109,14 +240,14 @@ describe('dashboard router', () => {
     const alerts = await agent.get(`/alerts`).expect(200);
     expect(alerts.body.data).toMatchObject([
       {
-        ...omit(MOCK_ALERT, 'channel.webhookId'),
+        ...omit(mockAlert, 'channel.webhookId'),
         tileId: dashboard.body.tiles[0].id,
       },
     ]);
   });
 
   it('alerts are created when updating dashboard (adding alert to tile)', async () => {
-    const { agent } = await getLoggedInAgent(server);
+    const mockAlert = makeMockAlert(webhook._id.toString());
     const dashboard = await agent
       .post('/dashboards')
       .send(MOCK_DASHBOARD)
@@ -126,26 +257,26 @@ describe('dashboard router', () => {
       .patch(`/dashboards/${dashboard.body.id}`)
       .send({
         ...dashboard.body,
-        tiles: [...dashboard.body.tiles, makeTile({ alert: MOCK_ALERT })],
+        tiles: [...dashboard.body.tiles, makeTile({ alert: mockAlert })],
       })
       .expect(200);
 
     const alerts = await agent.get(`/alerts`).expect(200);
     expect(alerts.body.data).toMatchObject([
       {
-        ...omit(MOCK_ALERT, 'channel.webhookId'),
+        ...omit(mockAlert, 'channel.webhookId'),
         tileId: updatedDashboard.body.tiles[MOCK_DASHBOARD.tiles.length].id,
       },
     ]);
   });
 
   it('alerts are deleted when updating dashboard (deleting tile alert settings)', async () => {
-    const { agent } = await getLoggedInAgent(server);
+    const mockAlert = makeMockAlert(webhook._id.toString());
     const dashboard = await agent
       .post('/dashboards')
       .send({
         name: 'Test Dashboard',
-        tiles: [makeTile({ alert: MOCK_ALERT })],
+        tiles: [makeTile({ alert: mockAlert })],
         tags: [],
       })
       .expect(200);
@@ -163,12 +294,12 @@ describe('dashboard router', () => {
   });
 
   it('alerts are deleted when removing alert from tile (keeping tile)', async () => {
-    const { agent } = await getLoggedInAgent(server);
+    const mockAlert = makeMockAlert(webhook._id.toString());
     const dashboard = await agent
       .post('/dashboards')
       .send({
         name: 'Test Dashboard',
-        tiles: [makeTile({ alert: MOCK_ALERT })],
+        tiles: [makeTile({ alert: mockAlert })],
         tags: [],
       })
       .expect(200);
@@ -195,18 +326,18 @@ describe('dashboard router', () => {
   });
 
   it('alerts are updated when updating dashboard (updating tile alert settings)', async () => {
-    const { agent } = await getLoggedInAgent(server);
+    const mockAlert = makeMockAlert(webhook._id.toString());
     const dashboard = await agent
       .post('/dashboards')
       .send({
         name: 'Test Dashboard',
-        tiles: [makeTile({ alert: MOCK_ALERT })],
+        tiles: [makeTile({ alert: mockAlert })],
         tags: [],
       })
       .expect(200);
 
     const updatedAlert = {
-      ...MOCK_ALERT,
+      ...mockAlert,
       threshold: 2,
     };
 
@@ -235,9 +366,39 @@ describe('dashboard router', () => {
     ]);
   });
 
-  it('deletes attached alerts when deleting tiles', async () => {
-    const { agent } = await getLoggedInAgent(server);
+  it('deletes alert when tile is updated from builder to raw SQL config', async () => {
+    const builderTile = makeTile();
+    const dashboard = await agent
+      .post('/dashboards')
+      .send({ name: 'Test Dashboard', tiles: [builderTile], tags: [] })
+      .expect(200);
 
+    // Create a standalone alert for the builder tile
+    await agent
+      .post('/alerts')
+      .send(
+        makeAlertInput({
+          dashboardId: dashboard.body.id,
+          tileId: builderTile.id,
+          webhookId: webhook._id.toString(),
+        }),
+      )
+      .expect(200);
+
+    expect((await agent.get('/alerts').expect(200)).body.data.length).toBe(1);
+
+    // Update the tile to a raw SQL config (same tile ID)
+    const rawSqlTile = makeRawSqlTile({ id: builderTile.id });
+    await agent
+      .patch(`/dashboards/${dashboard.body.id}`)
+      .send({ tiles: [rawSqlTile] })
+      .expect(200);
+
+    const alertsAfter = await agent.get('/alerts').expect(200);
+    expect(alertsAfter.body.data).toEqual([]);
+  });
+
+  it('deletes attached alerts when deleting tiles', async () => {
     await agent.post('/dashboards').send(MOCK_DASHBOARD).expect(200);
     const initialDashboards = await agent.get('/dashboards').expect(200);
 
@@ -251,6 +412,7 @@ describe('dashboard router', () => {
             makeAlertInput({
               dashboardId: dashboard._id,
               tileId: tile.id,
+              webhookId: webhook._id.toString(),
             }),
           )
           .expect(200),
@@ -294,15 +456,58 @@ describe('dashboard router', () => {
     expect(allTilesPostDelete).toEqual(alertsPostDeleteTiles);
   });
 
+  it('alert on a tile only appears on the dashboard that owns it, not on another dashboard with the same tile ID', async () => {
+    const sharedTileId = new mongoose.Types.ObjectId().toHexString();
+    const mockAlert = makeMockAlert(webhook._id.toString());
+
+    // Create dashboard A with an alert on the tile
+    const dashboardA = await agent
+      .post('/dashboards')
+      .send({
+        name: 'Dashboard A',
+        tiles: [makeTile({ id: sharedTileId, alert: mockAlert })],
+        tags: [],
+      })
+      .expect(200);
+
+    // Create dashboard B with a tile that has the same ID, but no alert
+    const dashboardB = await agent
+      .post('/dashboards')
+      .send({
+        name: 'Dashboard B',
+        tiles: [makeTile({ id: sharedTileId })],
+        tags: [],
+      })
+      .expect(200);
+
+    // Fetch all dashboards
+    const dashboards = await agent.get('/dashboards').expect(200);
+
+    const fetchedA = dashboards.body.find(
+      (d: any) => d._id === dashboardA.body.id,
+    );
+    const fetchedB = dashboards.body.find(
+      (d: any) => d._id === dashboardB.body.id,
+    );
+
+    // The alert should appear on dashboard A's tile
+    expect(fetchedA.tiles[0].config.alert).toBeTruthy();
+    expect(fetchedA.tiles[0].config.alert.tileId).toBe(sharedTileId);
+
+    // The alert should NOT appear on dashboard B's tile
+    expect(fetchedB.tiles[0].config.alert).toBeUndefined();
+  });
+
   it('preserves alert creator when different user updates dashboard', async () => {
-    const { agent, user: currentUser } = await getLoggedInAgent(server);
+    const mockAlert = makeMockAlert(webhook._id.toString());
+    const currentUser = user;
 
     // Arrange: Create dashboard with alert
     const dashboardResponse = await agent
       .post('/dashboards')
       .send({
         name: 'Test Dashboard',
-        tiles: [makeTile({ alert: MOCK_ALERT })],
+        tiles: [makeTile({ alert: mockAlert })],
         tags: [],
       })
       .expect(200);
@@ -325,7 +530,7 @@ describe('dashboard router', () => {
     // Act: Current user updates the dashboard (modifies alert threshold)
     const updatedThreshold = 5;
     const updatedAlert = {
-      ...MOCK_ALERT,
+      ...mockAlert,
       threshold: updatedThreshold,
     };
 
@@ -370,7 +575,7 @@ describe('dashboard router', () => {
   });
 
   describe('preset dashboards', () => {
-    const MOCK_SOURCE: Omit<Extract<TSourceUnion, { kind: 'log' }>, 'id'> = {
+    const MOCK_SOURCE: Omit<Extract<TSource, { kind: 'log' }>, 'id'> = {
       kind: SourceKind.Log,
       name: 'Test Source',
       connection: new Types.ObjectId().toString(),
@@ -391,8 +596,6 @@ describe('dashboard router', () => {
 
     describe('GET /preset/:presetDashboard/filters', () => {
       it('returns preset dashboard filters for a given source', async () => {
-        const { agent, team } = await getLoggedInAgent(server);
-
         // Create a test source
         const source = await Source.create({
           ...MOCK_SOURCE,
@@ -423,8 +626,6 @@ describe('dashboard router', () => {
       });
 
       it('returns empty array when no filters exist for source', async () => {
-        const { agent, team } = await getLoggedInAgent(server);
-
         const source = await Source.create({
           ...MOCK_SOURCE,
           team: team._id,
@@ -439,16 +640,12 @@ describe('dashboard router', () => {
       });
 
       it('returns 400 when sourceId is missing', async () => {
-        const { agent } = await getLoggedInAgent(server);
-
         await agent
           .get(`/dashboards/preset/${PresetDashboard.Services}/filters`)
           .expect(400);
       });
 
       it('returns 400 when sourceId is empty', async () => {
-        const { agent } = await getLoggedInAgent(server);
-
         await agent
           .get(`/dashboards/preset/${PresetDashboard.Services}/filters`)
           .query({ sourceId: '' })
@@ -456,8 +653,6 @@ describe('dashboard router', () => {
       });
 
       it('returns 400 for invalid preset dashboard type', async () => {
-        const { agent, team } = await getLoggedInAgent(server);
-
         const source = await Source.create({
           ...MOCK_SOURCE,
           team: team._id,
@@ -470,12 +665,11 @@ describe('dashboard router', () => {
       });
 
       it('does not return filters from other teams in GET', async () => {
-        const { agent: agent1, team: team1 } = await getLoggedInAgent(server);
         const team2 = new mongoose.Types.ObjectId();
 
         const source1 = await Source.create({
           ...MOCK_SOURCE,
-          team: team1._id,
+          team: team._id,
         });
 
         const source2 = await Source.create({
@@ -485,7 +679,7 @@ describe('dashboard router', () => {
 
         await PresetDashboardFilter.create({
           ...MOCK_PRESET_DASHBOARD_FILTER,
-          team: team1._id,
+          team: team._id,
           source: source1._id,
         });
 
@@ -495,20 +689,18 @@ describe('dashboard router', () => {
           source: source2._id,
         });
 
-        const response = await agent1
+        const response = await agent
           .get(`/dashboards/preset/${PresetDashboard.Services}/filters`)
           .query({ sourceId: source1._id.toString() })
           .expect(200);
 
         expect(response.body).toHaveLength(1);
-        expect(response.body[0].team).toEqual(team1._id.toString());
+        expect(response.body[0].team).toEqual(team._id.toString());
       });
     });
 
     describe('POST /preset/:presetDashboard/filter', () => {
       it('creates a new preset dashboard filter', async () => {
-        const { agent, team } = await getLoggedInAgent(server);
-
         const source = await Source.create({
           ...MOCK_SOURCE,
           team: team._id,
@@ -549,8 +741,6 @@ describe('dashboard router', () => {
       });
 
       it('creates filter with optional sourceMetricType', async () => {
-        const { agent, team } = await getLoggedInAgent(server);
-
         const source = await Source.create({
           ...MOCK_SOURCE,
           team: team._id,
@@ -572,8 +762,6 @@ describe('dashboard router', () => {
       });
 
       it('returns 400 when filter preset dashboard does not match params', async () => {
-        const { agent, team } = await getLoggedInAgent(server);
-
         const source = await Source.create({
           ...MOCK_SOURCE,
           team: team._id,
@@ -594,8 +782,6 @@ describe('dashboard router', () => {
       });
 
       it('returns 400 when filter is missing required fields', async () => {
-        const { agent, team } = await getLoggedInAgent(server);
-
         const source = await Source.create({
           ...MOCK_SOURCE,
           team: team._id,
@@ -614,8 +800,6 @@ describe('dashboard router', () => {
       });
 
       it('returns 400 when filter body is missing', async () => {
-        const { agent } = await getLoggedInAgent(server);
-
         await agent
           .post(`/dashboards/preset/${PresetDashboard.Services}/filter`)
           .send({})
@@ -625,8 +809,6 @@ describe('dashboard router', () => {
 
     describe('PUT /preset/:presetDashboard/filter', () => {
       it('updates an existing preset dashboard filter', async () => {
-        const { agent, team } = await getLoggedInAgent(server);
-
         const source = await Source.create({
           ...MOCK_SOURCE,
           team: team._id,
@@ -667,8 +849,6 @@ describe('dashboard router', () => {
       });
 
       it('returns an error when the filter does not exist', async () => {
-        const { agent, team } = await getLoggedInAgent(server);
-
         const source = await Source.create({
           ...MOCK_SOURCE,
           team: team._id,
@@ -690,8 +870,6 @@ describe('dashboard router', () => {
       });
 
       it('updates filter with sourceMetricType', async () => {
-        const { agent, team } = await getLoggedInAgent(server);
-
         const source = await Source.create({
           ...MOCK_SOURCE,
           team: team._id,
@@ -722,8 +900,6 @@ describe('dashboard router', () => {
       });
 
       it('returns 400 when filter preset dashboard does not match params', async () => {
-        const { agent, team } = await getLoggedInAgent(server);
-
         const source = await Source.create({
           ...MOCK_SOURCE,
           team: team._id,
@@ -746,8 +922,6 @@ describe('dashboard router', () => {
       });
 
       it('returns 400 when filter is missing required fields', async () => {
-        const { agent } = await getLoggedInAgent(server);
-
         const incompleteFilter = {
           id: new Types.ObjectId().toString(),
           name: 'Test Filter',
@@ -763,8 +937,6 @@ describe('dashboard router', () => {
 
     describe('DELETE /preset/:presetDashboard/filter/:id', () => {
       it('deletes a preset dashboard filter', async () => {
-        const { agent, team } = await getLoggedInAgent(server);
-
         const source = await Source.create({
           ...MOCK_SOURCE,
           team: team._id,
@@ -793,8 +965,6 @@ describe('dashboard router', () => {
       });
 
       it('returns 404 when filter does not exist', async () => {
-        const { agent } = await getLoggedInAgent(server);
-
         const nonExistentId = new Types.ObjectId().toString();
 
         await agent
@@ -805,16 +975,12 @@ describe('dashboard router', () => {
       });
 
       it('returns 400 when id is invalid', async () => {
-        const { agent } = await getLoggedInAgent(server);
-
         await agent
           .delete('/dashboards/preset/services/filter/invalid-id')
           .expect(400);
       });
 
       it('returns 400 for invalid preset dashboard type', async () => {
-        const { agent } = await getLoggedInAgent(server);
-
         const filterId = new Types.ObjectId().toString();
 
         await agent
@@ -823,7 +989,6 @@ describe('dashboard router', () => {
       });
 
       it('does not delete filters from other teams', async () => {
-        const { agent: agent } = await getLoggedInAgent(server); // team 1
         const team2Id = new mongoose.Types.ObjectId();
 
         const source = await Source.create({

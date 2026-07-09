@@ -2,14 +2,14 @@ import express, { Express } from 'express';
 import request from 'supertest';
 import { z } from 'zod';
 
-import { validateRequestWithEnhancedErrors as validateRequest } from '../enhancedErrors';
+import { validateRequestWithEnhancedErrors as validateRequest } from '@/utils/enhancedErrors';
 import {
   alertSchema,
   externalDashboardTileSchema,
   externalQueryChartSeriesSchema,
   objectIdSchema,
   tagsSchema,
-} from '../zod';
+} from '@/utils/zod';
 
 describe('enhancedErrors', () => {
   let app: Express;
@@ -155,7 +155,7 @@ describe('enhancedErrors', () => {
           source: 'tile',
           tileId: '507f1f77bcf86cd799439011',
           dashboardId: '507f1f77bcf86cd799439011',
-          threshold: -5, // Invalid: negative threshold
+          threshold: -5,
           interval: '99m', // Invalid: not a valid interval
           thresholdType: 'above',
           channel: {
@@ -166,7 +166,7 @@ describe('enhancedErrors', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.message).toEqual(
-        "Body validation failed: interval: Invalid enum value. Expected '1m' | '5m' | '15m' | '30m' | '1h' | '6h' | '12h' | '1d', received '99m'; threshold: Number must be greater than or equal to 0; Params validation failed: id: Invalid input",
+        "Body validation failed: interval: Invalid enum value. Expected '1m' | '5m' | '15m' | '30m' | '1h' | '6h' | '12h' | '1d', received '99m'; Params validation failed: id: Invalid ObjectId",
       );
     });
   });

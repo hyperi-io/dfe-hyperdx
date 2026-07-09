@@ -8,8 +8,12 @@ import {
   getAlertById,
   getAlerts,
   updateAlert,
+  validateAlertInput,
 } from '@/controllers/alerts';
-import { validateRequestWithEnhancedErrors as validateRequest } from '@/utils/enhancedErrors';
+import {
+  processRequestWithEnhancedErrors as processRequest,
+  validateRequestWithEnhancedErrors as validateRequest,
+} from '@/utils/enhancedErrors';
 import { translateAlertDocumentToExternalAlert } from '@/utils/externalApi';
 import { alertSchema, objectIdSchema } from '@/utils/zod';
 
@@ -22,13 +26,15 @@ import { alertSchema, objectIdSchema } from '@/utils/zod';
  *       properties:
  *         message:
  *           type: string
+ *           description: Human-readable error message.
+ *           example: "NOT_FOUND: Alert not found"
  *     AlertInterval:
  *       type: string
  *       enum: [1m, 5m, 15m, 30m, 1h, 6h, 12h, 1d]
  *       description: Evaluation interval.
  *     AlertThresholdType:
  *       type: string
- *       enum: [above, below]
+ *       enum: [above, below, above_exclusive, below_or_equal, equal, not_equal, between, not_between]
  *       description: Threshold comparison direction.
  *     AlertSource:
  *       type: string
@@ -42,6 +48,31 @@ import { alertSchema, objectIdSchema } from '@/utils/zod';
  *       type: string
  *       enum: [webhook]
  *       description: Channel type.
+ *     AlertErrorType:
+ *       type: string
+ *       enum: [QUERY_ERROR, WEBHOOK_ERROR, INVALID_ALERT, UNKNOWN]
+ *       description: Category of error recorded during alert execution.
+ *     AlertExecutionError:
+ *       type: object
+ *       description: An error recorded during a recent alert execution.
+ *       required:
+ *         - timestamp
+ *         - type
+ *         - message
+ *       properties:
+ *         timestamp:
+ *           type: string
+ *           format: date-time
+ *           description: When the error occurred.
+ *           example: "2026-04-17T12:00:00.000Z"
+ *         type:
+ *           $ref: '#/components/schemas/AlertErrorType'
+ *           description: Category of the error.
+ *           example: "QUERY_ERROR"
+ *         message:
+ *           type: string
+ *           description: Human-readable error message.
+ *           example: "Query timed out after 30s"
  *     AlertSilenced:
  *       type: object
  *       description: Silencing metadata.
@@ -50,14 +81,17 @@ import { alertSchema, objectIdSchema } from '@/utils/zod';
  *           type: string
  *           description: User ID who silenced the alert.
  *           nullable: true
+ *           example: "65f5e4a3b9e77c001a234567"
  *         at:
  *           type: string
  *           description: Silence start timestamp.
  *           format: date-time
+ *           example: "2026-03-19T08:00:00.000Z"
  *         until:
  *           type: string
  *           description: Silence end timestamp.
  *           format: date-time
+ *           example: "2026-03-20T08:00:00.000Z"
  *     AlertChannelWebhook:
  *       type: object
  *       required:
@@ -66,6 +100,7 @@ import { alertSchema, objectIdSchema } from '@/utils/zod';
  *       properties:
  *         type:
  *           $ref: '#/components/schemas/AlertChannelType'
+ *           description: Channel type. Must be "webhook" for webhook alerts.
  *         webhookId:
  *           type: string
  *           description: Webhook destination ID.
@@ -85,7 +120,7 @@ import { alertSchema, objectIdSchema } from '@/utils/zod';
  *           example: "65f5e4a3b9e77c001a567890"
  *         tileId:
  *           type: string
- *           description: Tile ID for tile-based alerts.
+ *           description: Tile ID for tile-based alerts. Must be a line, stacked bar, or number type tile.
  *           nullable: true
  *           example: "65f5e4a3b9e77c001a901234"
  *         savedSearchId:
@@ -100,16 +135,36 @@ import { alertSchema, objectIdSchema } from '@/utils/zod';
  *           example: "ServiceName"
  *         threshold:
  *           type: number
- *           description: Threshold value for triggering the alert.
+ *           description: Threshold value for triggering the alert. For between and not_between threshold types, this is the lower bound.
  *           example: 100
+ *         thresholdMax:
+ *           type: number
+ *           nullable: true
+ *           description: Upper bound for between and not_between threshold types. Required when thresholdType is between or not_between, must be >= threshold.
+ *           example: 500
  *         interval:
  *           $ref: '#/components/schemas/AlertInterval'
+ *           description: Evaluation interval for the alert.
  *           example: "1h"
+ *         scheduleOffsetMinutes:
+ *           type: integer
+ *           minimum: 0
+ *           description: Offset from the interval boundary in minutes. For example, 2 with a 5m interval evaluates windows at :02, :07, :12, etc. (UTC).
+ *           nullable: true
+ *           example: 2
+ *         scheduleStartAt:
+ *           type: string
+ *           format: date-time
+ *           description: Absolute UTC start time anchor. Alert windows start from this timestamp and repeat every interval.
+ *           nullable: true
+ *           example: "2026-02-08T10:00:00.000Z"
  *         source:
  *           $ref: '#/components/schemas/AlertSource'
+ *           description: Alert source type (tile-based or saved search).
  *           example: "tile"
  *         thresholdType:
  *           $ref: '#/components/schemas/AlertThresholdType'
+ *           description: Threshold comparison direction.
  *           example: "above"
  *         channel:
  *           $ref: '#/components/schemas/AlertChannel'
@@ -124,6 +179,13 @@ import { alertSchema, objectIdSchema } from '@/utils/zod';
  *           description: Alert message template.
  *           nullable: true
  *           example: "Test Alert Message"
+ *         note:
+ *           type: string
+ *           description: Freeform note for the alert. Supports markdown formatting.
+ *           nullable: true
+ *           minLength: 1
+ *           maxLength: 4096
+ *           example: "Threshold raised from 50 to 100 on 2026-01-15. See [runbook](https://wiki.example.com/runbook)."
  *
  *     AlertResponse:
  *       allOf:
@@ -136,6 +198,7 @@ import { alertSchema, objectIdSchema } from '@/utils/zod';
  *               example: "65f5e4a3b9e77c001a123456"
  *             state:
  *               $ref: '#/components/schemas/AlertState'
+ *               description: Current alert state.
  *               example: "ALERT"
  *             teamId:
  *               type: string
@@ -145,6 +208,12 @@ import { alertSchema, objectIdSchema } from '@/utils/zod';
  *               $ref: '#/components/schemas/AlertSilenced'
  *               description: Silencing metadata.
  *               nullable: true
+ *             executionErrors:
+ *               type: array
+ *               nullable: true
+ *               description: Errors recorded during the most recent alert execution, if any.
+ *               items:
+ *                 $ref: '#/components/schemas/AlertExecutionError'
  *             createdAt:
  *               type: string
  *               nullable: true
@@ -165,7 +234,6 @@ import { alertSchema, objectIdSchema } from '@/utils/zod';
  *           required:
  *             - threshold
  *             - interval
- *             - source
  *             - thresholdType
  *             - channel
  *
@@ -176,7 +244,6 @@ import { alertSchema, objectIdSchema } from '@/utils/zod';
  *           required:
  *             - threshold
  *             - interval
- *             - source
  *             - thresholdType
  *             - channel
  *
@@ -185,12 +252,14 @@ import { alertSchema, objectIdSchema } from '@/utils/zod';
  *       properties:
  *         data:
  *           $ref: '#/components/schemas/AlertResponse'
+ *           description: The alert object.
  *
  *     AlertsListResponse:
  *       type: object
  *       properties:
  *         data:
  *           type: array
+ *           description: List of alert objects.
  *           items:
  *             $ref: '#/components/schemas/AlertResponse'
  *
@@ -396,7 +465,7 @@ router.get('/', async (req, res, next) => {
  */
 router.post(
   '/',
-  validateRequest({
+  processRequest({
     body: alertSchema,
   }),
   async (req, res, next) => {
@@ -407,6 +476,8 @@ router.post(
     }
     try {
       const alertInput = req.body;
+      await validateAlertInput(teamId, alertInput);
+
       const createdAlert = await createAlert(teamId, alertInput, userId);
 
       return res.json({
@@ -483,7 +554,7 @@ router.post(
  */
 router.put(
   '/:id',
-  validateRequest({
+  processRequest({
     body: alertSchema,
     params: z.object({
       id: objectIdSchema,
@@ -499,6 +570,8 @@ router.put(
       const { id } = req.params;
 
       const alertInput = req.body;
+      await validateAlertInput(teamId, alertInput);
+
       const alert = await updateAlert(id, teamId, alertInput);
 
       if (alert == null) {

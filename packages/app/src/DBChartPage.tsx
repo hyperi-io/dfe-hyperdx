@@ -25,14 +25,18 @@ import {
 
 import api from '@/api';
 import { DEFAULT_CHART_CONFIG } from '@/ChartUtils';
+import { DFE_CHART_AI_ASSISTANT_ENABLED } from '@/dfe/embedFeatures';
 import EditTimeChartForm from '@/components/DBEditTimeChartForm';
 import { InputControlled } from '@/components/InputControlled';
 import { SourceSelectControlled } from '@/components/SourceSelect';
 import { useChartAssistant } from '@/hooks/ai';
 import { withAppNav } from '@/layout';
 import { useSources } from '@/source';
+import { useBrandDisplayName } from '@/theme/ThemeProvider';
 import { parseTimeQuery, useNewTimeQuery } from '@/timeQuery';
 import { useLocalStorage } from '@/utils';
+
+import OnboardingModal from './components/OnboardingModal';
 
 // Autocomplete can focus on column/map keys
 
@@ -52,12 +56,13 @@ function AIAssistant({
   submitRef: React.RefObject<(() => void) | undefined>;
   aiAssistantEnabled: boolean;
 }) {
+  const brandName = useBrandDisplayName();
   const [opened, setOpened] = useState(false);
   const [alertDismissed, setAlertDismissed] = useLocalStorage(
     'ai-assistant-alert-dismissed',
     false,
   );
-  const { control, setValue, handleSubmit } = useForm<{
+  const { control, handleSubmit } = useForm<{
     text: string;
     source: string;
   }>({
@@ -131,8 +136,8 @@ function AIAssistant({
         >
           <Text size="xs" pt="2px">
             New AI Assistant available, enable with configuring the{' '}
-            <code>ANTHROPIC_API_KEY</code> environment variable on the DFE
-            server.
+            <code>ANTHROPIC_API_KEY</code> environment variable on the{' '}
+            {brandName} server.
           </Text>
         </Alert>
         <Divider mt="sm" />
@@ -145,12 +150,7 @@ function AIAssistant({
   return (
     <Box mb="sm">
       <Group gap="md" align="center" mb="sm">
-        <Button
-          onClick={() => setOpened(o => !o)}
-          size="xs"
-          variant="subtle"
-          color="gray"
-        >
+        <Button onClick={() => setOpened(o => !o)} size="xs" variant="subtle">
           <Group gap="xs">
             {opened ? (
               <IconChevronUp size={14} />
@@ -162,7 +162,7 @@ function AIAssistant({
         </Button>
         <Pill size="xs">Experimental</Pill>
       </Group>
-      <Collapse in={opened}>
+      <Collapse expanded={opened}>
         {opened && (
           // eslint-disable-next-line react-hooks/refs
           <form onSubmit={handleSubmit(onSubmit)}>
@@ -202,6 +202,7 @@ function AIAssistant({
 }
 
 function DBChartExplorerPage() {
+  const brandName = useBrandDisplayName();
   const {
     searchedTimeRange,
     displayedTimeInputValue,
@@ -223,20 +224,26 @@ function DBChartExplorerPage() {
     parseAsJson<SavedChartConfig>().withDefault({
       ...DEFAULT_CHART_CONFIG,
       source: sources?.[0]?.id ?? '',
+      connection: sources?.[0]?.connection,
     }),
   );
 
   return (
     <Box data-testid="chart-explorer-page" p="sm">
       <Head>
-        <title>Chart Explorer - DFE</title>
+        <title>Chart Explorer - {brandName}</title>
       </Head>
-      <AIAssistant
-        setConfig={setChartConfig}
-        onTimeRangeSelect={onTimeRangeSelect}
-        submitRef={submitRef}
-        aiAssistantEnabled={me?.aiAssistantEnabled ?? false}
-      />
+      <OnboardingModal />
+      {/* DFE: the experimental CHART AI Assistant is hidden unless explicitly enabled
+          (NEXT_PUBLIC_DFE_CHART_AI_ASSISTANT=true) - hides the teaser bar too. */}
+      {DFE_CHART_AI_ASSISTANT_ENABLED && (
+        <AIAssistant
+          setConfig={setChartConfig}
+          onTimeRangeSelect={onTimeRangeSelect}
+          submitRef={submitRef}
+          aiAssistantEnabled={me?.aiAssistantEnabled ?? false}
+        />
+      )}
       <EditTimeChartForm
         data-testid="chart-explorer-form"
         chartConfig={chartConfig}
@@ -249,6 +256,7 @@ function DBChartExplorerPage() {
         onTimeRangeSearch={onSearch}
         onTimeRangeSelect={onTimeRangeSelect}
         submitRef={submitRef}
+        autoRun
       />
     </Box>
   );

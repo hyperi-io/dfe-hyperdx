@@ -9,13 +9,14 @@ import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { IconPencil, IconX } from '@tabler/icons-react';
 
-import api from '../../api';
-import { useConfirm } from '../../useConfirm';
+import api from '@/api';
+import { useBrandDisplayName } from '@/theme/ThemeProvider';
+import { useConfirm } from '@/useConfirm';
 import {
   getWebhookServiceConfig,
   getWebhookServiceName,
   groupWebhooksByService,
-} from '../../utils/webhookIcons';
+} from '@/utils/webhookIcons';
 
 import { WebhookForm } from './WebhookForm';
 
@@ -28,6 +29,7 @@ function DeleteWebhookButton({
   webhookName: string;
   onSuccess: VoidFunction;
 }) {
+  const brandName = useBrandDisplayName();
   const confirm = useConfirm();
   const deleteWebhook = api.useDeleteWebhook();
 
@@ -51,7 +53,8 @@ function DeleteWebhookButton({
         const message =
           (e instanceof HTTPError
             ? (await e.response.json())?.message
-            : null) || 'Something went wrong. Please contact HyperDX team.';
+            : null) ||
+          `Something went wrong. Please contact ${brandName} team.`;
         notifications.show({
           message,
           color: 'red',
@@ -101,7 +104,13 @@ export default function WebhooksSection() {
 
       <Stack>
         {groupedWebhooks.length === 0 ? (
-          <Text size="sm" c="dimmed" ta="center" py="xl">
+          <Text
+            data-testid="webhooks-empty-state"
+            size="sm"
+            c="dimmed"
+            ta="center"
+            py="xl"
+          >
             No webhooks configured yet
           </Text>
         ) : (
@@ -187,7 +196,11 @@ export default function WebhooksSection() {
       </Stack>
 
       {!isAddWebhookModalOpen ? (
-        <Button variant="secondary" onClick={openWebhookModal}>
+        <Button
+          data-testid="add-webhook-section-button"
+          variant="secondary"
+          onClick={openWebhookModal}
+        >
           Add Webhook
         </Button>
       ) : (

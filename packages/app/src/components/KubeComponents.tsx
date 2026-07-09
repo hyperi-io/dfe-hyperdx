@@ -4,11 +4,11 @@ import { sub } from 'date-fns';
 import type { ResponseJSON } from '@hyperdx/common-utils/dist/clickhouse';
 import { renderChartConfig } from '@hyperdx/common-utils/dist/core/renderChartConfig';
 import {
-  ChartConfigWithDateRange,
+  BuilderChartConfigWithDateRange,
   DateRange,
   SearchCondition,
   SearchConditionLanguage,
-  TSource,
+  TLogSource,
 } from '@hyperdx/common-utils/dist/types';
 import { Badge, Group, Text, Timeline } from '@mantine/core';
 import { useQuery, UseQueryOptions } from '@tanstack/react-query';
@@ -16,9 +16,8 @@ import { useQuery, UseQueryOptions } from '@tanstack/react-query';
 import { useClickhouseClient } from '@/clickhouse';
 import { useMetadataWithSettings } from '@/hooks/useMetadata';
 import { getDisplayedTimestampValueExpression } from '@/source';
-
-import { KubePhase } from '../types';
-import { FormatTime } from '../useFormatTime';
+import { KubePhase } from '@/types';
+import { FormatTime } from '@/useFormatTime';
 
 type KubeEvent = {
   id: string;
@@ -47,9 +46,9 @@ export const useV2LogBatch = <T = any,>(
     whereLanguage,
   }: {
     dateRange: DateRange['dateRange'];
-    extraSelects?: ChartConfigWithDateRange['select'];
+    extraSelects?: BuilderChartConfigWithDateRange['select'];
     limit?: number;
-    logSource: TSource;
+    logSource: TLogSource;
     order: 'asc' | 'desc';
     where: SearchCondition;
     whereLanguage: SearchConditionLanguage;
@@ -89,6 +88,9 @@ export const useV2LogBatch = <T = any,>(
           dateRange,
           timestampValueExpression: logSource.timestampValueExpression,
           implicitColumnExpression: logSource.implicitColumnExpression,
+          bodyExpression: logSource.bodyExpression,
+          useTextIndexForImplicitColumn:
+            logSource.useTextIndexForImplicitColumn,
           where,
           whereLanguage,
           connection: logSource.connection,
@@ -117,7 +119,7 @@ export const useV2LogBatch = <T = any,>(
   });
 };
 
-const renderKubeEvent = (source: TSource) => (event: KubeEvent) => {
+const renderKubeEvent = (source: TLogSource) => (event: KubeEvent) => {
   let href = '#';
   try {
     // FIXME: should check if it works in v2
@@ -126,7 +128,7 @@ const renderKubeEvent = (source: TSource) => (event: KubeEvent) => {
     )}&source=${source.id}&from=${new Date(event.timestamp).getTime() - 1000 * 60 * 15}&to=${
       new Date(event.timestamp).getTime() + 1
     }`;
-  } catch (_) {
+  } catch {
     // ignore
   }
 
@@ -171,15 +173,17 @@ export const KubeTimeline = ({
   dateRange,
 }: {
   q: string;
-  logSource: TSource;
+  logSource: TLogSource;
   dateRange?: [Date, Date];
   anchorEvent?: AnchorEvent;
 }) => {
   const startDate = React.useMemo(
+    // eslint-disable-next-line no-restricted-syntax
     () => dateRange?.[0] ?? sub(new Date(), { days: 1 }),
     [dateRange],
   );
   const endDate = React.useMemo(
+    // eslint-disable-next-line no-restricted-syntax
     () => dateRange?.[1] ?? new Date(),
     [dateRange],
   );
@@ -275,7 +279,7 @@ export const KubeTimeline = ({
 
   if (isLoading) {
     return (
-      <Text color="muted" ta="center">
+      <Text c="muted" ta="center">
         Loading...
       </Text>
     );
@@ -283,7 +287,7 @@ export const KubeTimeline = ({
 
   if (allPodEvents.length === 0) {
     return (
-      <Text color="muted" ta="center">
+      <Text c="muted" ta="center">
         No events
       </Text>
     );

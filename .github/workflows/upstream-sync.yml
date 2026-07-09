@@ -1,0 +1,167 @@
+# Project:   dfe-hyperdx
+# File:      .github/workflows/upstream-sync.yml
+# Purpose:   Scheduled upstream-drift sync -- merge hyperdxio/hyperdx into a bot
+#            branch, let git rerere replay our resolved conflicts, build+test,
+#            then open a PR (clean) or an issue (unresolved conflicts remain).
+#
+# License:   MIT - HYPERI PTY LIMITED
+# Copyright: (c) 2026 HYPERI PTY LIMITED
+#
+# WHY: our fork carries divergence merged into `main` (see FORK.md), so an
+# upstream bump is a real 3-way merge, not a clean rebase. `git rerere` records
+# each conflict resolution once and replays it on every later merge, so recurring
+# conflicts on the same upstream files resolve themselves. This job runs that
+# merge on a schedule against a bot branch and surfaces the result -- it NEVER
+# touches `main` directly. A human reviews + merges the PR.
+#
+# The rr-cache (recorded resolutions) is persisted between runs via actions/cache
+# because it lives under .git and is not committed. First run for a given
+# conflict is unresolved (-> issue); once a human resolves it on the PR branch and
+# that resolution reaches the cache, subsequent runs replay it automatically.
+
+name: upstream-sync
+
+'on':
+  schedule:
+    - cron: '17 6 * * 1'    # Mondays 06:17 UTC -- weekly drift check
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        type: string
+        required: false
+        default: ''
+        description: "Upstream ref to merge (tag/branch). Empty -> upstream/main."
+
+permissions:
+  contents: write        # push the bot branch
+  pull-requests: write   # open the sync PR
+  issues: write          # file the drift issue when conflicts remain
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_URL: https://github.com/hyperdxio/hyperdx.git
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # rerere resolutions live in .git/rr-cache (not committed) -- persist them
+      # so a resolution recorded on one run replays on the next.
+      - name: Restore rerere cache
+        uses: actions/cache@v4
+        with:
+          path: .git/rr-cache
+          key: rr-cache-${{ github.run_id }}
+          restore-keys: |
+            rr-cache-
+
+      - name: Configure git + rerere
+        run: |
+          git config user.name  "dfe-upstream-bot"
+          git config user.email "bot@dfe.hyperi.io"
+          git config rerere.enabled true
+          git config rerere.autoupdate true
+
+      - name: Resolve upstream ref
+        id: ref
+        run: |
+          git remote add upstream "$UPSTREAM_URL" 2>/dev/null || true
+          git fetch --tags upstream
+          ref="${{ inputs.upstream_ref }}"
+          if [ -z "$ref" ]; then ref="upstream/main"; fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "short=$(git rev-parse --short "$ref")" >> "$GITHUB_OUTPUT"
+
+      - name: Merge upstream (rerere replays)
+        id: merge
+        run: |
+          ref='${{ steps.ref.outputs.ref }}'
+          short='${{ steps.ref.outputs.short }}'
+          branch="chore/upstream-sync-${short}"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          git checkout -B "$branch" origin/main
+          if git merge --no-edit "$ref"; then
+            echo "status=clean" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # rerere may have staged resolutions but left the merge in-progress.
+          unresolved="$(git diff --name-only --diff-filter=U)"
+          if [ -z "$unresolved" ]; then
+            # every conflict was replayed by rerere -> finalise the merge commit.
+            git commit --no-edit
+            echo "status=replayed" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+            { echo 'files<<EOF'; echo "$unresolved"; echo 'EOF'; } >> "$GITHUB_OUTPUT"
+            git merge --abort
+          fi
+
+      - name: Save rerere cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .git/rr-cache
+          key: rr-cache-${{ github.run_id }}
+
+      # Clean / replayed: push the branch, build+test, open a PR for review.
+      - name: Push sync branch
+        if: steps.merge.outputs.status == 'clean' || steps.merge.outputs.status == 'replayed'
+        run: git push --force-with-lease origin '${{ steps.merge.outputs.branch }}'
+
+      # THE SAFETY NET. rerere only replays TEXTUAL conflict resolutions; it
+      # cannot tell whether an upstream change silently broke the behaviour of
+      # our DFE deltas (embed gating, theme/fonts, oidc-identity, ...). A green
+      # merge is NOT proof our fork still works -- these tests are. Never gate
+      # solely on "the merge applied": gate on "our deltas still pass".
+      - name: Build + test (DFE delta gate)
+        id: test
+        if: steps.merge.outputs.status == 'clean' || steps.merge.outputs.status == 'replayed'
+        continue-on-error: true    # a failure must still surface a PR, not just red the run
+        run: |
+          corepack enable
+          yarn install --immutable
+          yarn build
+          yarn test
+
+      - name: Open sync PR
+        if: steps.merge.outputs.status == 'clean' || steps.merge.outputs.status == 'replayed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TEST: ${{ steps.test.outcome }}
+        run: |
+          if [ "$TEST" = "success" ]; then
+            draft=""
+            note="Build+test GREEN -- our DFE deltas survived this upstream bump."
+          else
+            draft="--draft"
+            note="WARNING: build+test FAILED after rerere replay -- an upstream change broke our DFE deltas. DO NOT MERGE until fixed; the fix (new resolution) will be recorded into rr-cache for future replay. See FORK.md."
+          fi
+          gh pr create $draft \
+            --base main --head '${{ steps.merge.outputs.branch }}' \
+            --title 'chore: sync upstream hyperdxio/hyperdx@${{ steps.ref.outputs.short }}' \
+            --body "Automated upstream drift sync (rerere replay: ${{ steps.merge.outputs.status }}).
+
+          $note
+
+          Review FORK.md deltas, re-derive any drifted upstream copies, then merge." \
+            || echo "PR may already exist for this branch."
+
+      # Unresolved conflicts: no push, file/refresh a drift issue for a human.
+      - name: File drift issue
+        if: steps.merge.outputs.status == 'conflict'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title 'upstream-sync: manual merge needed for hyperdxio/hyperdx@${{ steps.ref.outputs.short }}' \
+            --label 'upstream-sync' \
+            --body "$(printf 'rerere could not replay all conflicts. Resolve manually per FORK.md (Syncing with upstream), which records the resolution into rr-cache so future runs replay it.\n\nUnresolved files:\n```\n%s\n```\n' '${{ steps.merge.outputs.files }}')" \
+            || echo "Issue may already exist."

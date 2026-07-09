@@ -56,17 +56,21 @@ router.post(
       const { teamId } = getNonNullUserWithTeam(req);
       const { chartConfig, startTime, endTime } = req.body;
 
-      // Resolve the source to get table and connection info
+      // Resolve the source to get table and connection info. In 2.29+ the chart
+      // config's `source` is optional (SavedChartConfig is a union), so guard it.
+      if (!chartConfig.source) {
+        return res
+          .status(400)
+          .json({ error: 'chartConfig.source is required for SQL export' });
+      }
       const source = await getSource(teamId.toString(), chartConfig.source);
       if (!source) {
         return res.status(404).json({ error: 'Source not found' });
       }
 
-      // Resolve the connection for ClickHouse access
-      const connectionId =
-        typeof source.connection === 'string'
-          ? source.connection
-          : source.connection.toString();
+      // Resolve the connection for ClickHouse access. source.connection is a
+      // connection-id string in 2.29+.
+      const connectionId = String(source.connection);
       const connection = await getConnectionById(
         teamId.toString(),
         connectionId,
@@ -79,7 +83,14 @@ router.post(
 
       // Build the full chart config with optional date range.
       // renderChartConfig requires connection and from; add them from the resolved source.
-      const fullConfig: ChartConfigWithOptDateRange = {
+      // `where` only exists on the builder (search/select) chart-config variant,
+      // not the raw-SQL / PromQL variants (2.29 made SavedChartConfig a union).
+      const existingWhere =
+        'where' in chartConfig && chartConfig.where
+          ? (chartConfig.where as string)
+          : undefined;
+
+      const fullConfig = {
         ...chartConfig,
         connection: connectionId,
         ...(startTime && endTime
@@ -93,14 +104,14 @@ router.post(
           databaseName: '{{org_id}}',
           tableName: '{{source_table_name}}',
         },
-        where: chartConfig.where
-          ? `${chartConfig.where} AND {timestamp_condition}`
+        where: existingWhere
+          ? `${existingWhere} AND {timestamp_condition}`
           : '{timestamp_condition}',
         // When where is empty, the effective where is only {timestamp_condition}
         // (a SQL placeholder). It must not be parsed as Lucene—the Lucene parser
         // expects {a TO b} range syntax and fails on {timestamp_condition}.
-        ...(chartConfig.where ? {} : { whereLanguage: 'sql' as const }),
-      };
+        ...(existingWhere ? {} : { whereLanguage: 'sql' as const }),
+      } as ChartConfigWithOptDateRange;
 
       // Create a ClickHouse client to fetch metadata
       const clickhouseClient = new ClickhouseClient({

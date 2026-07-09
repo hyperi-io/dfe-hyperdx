@@ -1,11 +1,17 @@
-// @eslint-disable @typescript-eslint/no-var-requires
 jest.retryTimes(1, { logErrorsBeforeRetry: true });
 
-global.console = {
-  ...console,
-  // Turn off console.debug logs in tests (useful since we log db queries aggressively)
-  debug: jest.fn(),
-};
+// http-proxy-middleware v4 is ESM-only and Jest's CJS module loader cannot
+// load ESM packages. Auto-mock since no test exercises the proxy directly.
+jest.mock('http-proxy-middleware', () => ({
+  createProxyMiddleware: jest.fn(() => jest.fn()),
+}));
+
+// Suppress noisy console output during test runs.
+// - debug/info: ClickHouse query logging, server startup messages
+// - warn: expected column-not-found warnings from renderChartConfig on CTE tables
+jest.spyOn(console, 'debug').mockImplementation(() => {});
+jest.spyOn(console, 'info').mockImplementation(() => {});
+jest.spyOn(console, 'warn').mockImplementation(() => {});
 
 // Mock alert notification functions to prevent HTTP calls during tests
 jest.mock('@/utils/slack', () => ({

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { pick } from 'lodash';
+import Head from 'next/head';
+import Link from 'next/link';
 import {
   parseAsString,
   parseAsStringEnum,
@@ -8,21 +9,46 @@ import {
   useQueryStates,
 } from 'nuqs';
 import { UseControllerProps, useForm, useWatch } from 'react-hook-form';
+import SqlString from 'sqlstring';
 import { tcFromSource } from '@hyperdx/common-utils/dist/core/metadata';
 import { convertDateRangeToGranularityString } from '@hyperdx/common-utils/dist/core/utils';
+import type { TSource } from '@hyperdx/common-utils/dist/types';
 import {
-  ChartConfigWithDateRange,
-  ChartConfigWithOptDateRange,
+  BuilderChartConfigWithDateRange,
   CteChartConfig,
   DisplayType,
   Filter,
+  isLogSource,
+  isTraceSource,
+  pickSampleWeightExpressionProps,
   PresetDashboard,
   SourceKind,
-  TSource,
+  TTraceSource,
 } from '@hyperdx/common-utils/dist/types';
+
+// Extract common chart config fields from a source.
+// This avoids union type issues with lodash `pick` on discriminated unions.
+function pickSourceConfigFields(source: TSource) {
+  return {
+    timestampValueExpression: source.timestampValueExpression,
+    connection: source.connection,
+    from: source.from,
+    ...(isLogSource(source) || isTraceSource(source)
+      ? {
+          implicitColumnExpression: source.implicitColumnExpression,
+          useTextIndexForImplicitColumn: source.useTextIndexForImplicitColumn,
+        }
+      : {}),
+    // Logs-only body fallback for bare-text Lucene search.
+    ...(isLogSource(source) ? { bodyExpression: source.bodyExpression } : {}),
+    ...pickSampleWeightExpressionProps(source),
+  };
+}
 import {
   ActionIcon,
+  Anchor,
   Box,
+  Breadcrumbs,
   Button,
   Grid,
   Group,
@@ -52,22 +78,23 @@ import DBListBarChart from '@/components/DBListBarChart';
 import DBTableChart from '@/components/DBTableChart';
 import { DBTimeChart } from '@/components/DBTimeChart';
 import OnboardingModal from '@/components/OnboardingModal';
+import SearchWhereInput, {
+  getStoredLanguage,
+} from '@/components/SearchInput/SearchWhereInput';
 import SelectControlled from '@/components/SelectControlled';
 import ServiceDashboardDbQuerySidePanel from '@/components/ServiceDashboardDbQuerySidePanel';
 import ServiceDashboardEndpointSidePanel from '@/components/ServiceDashboardEndpointSidePanel';
 import { SourceSelectControlled } from '@/components/SourceSelect';
-import { SQLInlineEditorControlled } from '@/components/SQLInlineEditor';
 import { TimePicker } from '@/components/TimePicker';
-import WhereLanguageControlled from '@/components/WhereLanguageControlled';
 import { useQueriedChartConfig } from '@/hooks/useChartConfig';
 import { useDashboardRefresh } from '@/hooks/useDashboardRefresh';
 import { withAppNav } from '@/layout';
-import SearchInputV2 from '@/SearchInputV2';
 import {
   getExpressions,
   useServiceDashboardExpressions,
 } from '@/serviceDashboard';
 import { useSource, useSources } from '@/source';
+import { useBrandDisplayName } from '@/theme/ThemeProvider';
 import { parseTimeQuery, useNewTimeQuery } from '@/timeQuery';
 
 import DisplaySwitcher from './components/charts/DisplaySwitcher';
@@ -91,6 +118,13 @@ type AppliedConfig = AppliedConfigParams & {
 
 const MAX_NUM_SERIES = HARD_LINES_LIMIT;
 
+export function buildInFilterCondition(
+  columnExpression: string,
+  value: string,
+): string {
+  return SqlString.format('? IN (?)', [SqlString.raw(columnExpression), value]);
+}
+
 function getScopedFilters({
   appliedConfig,
   expressions,
@@ -113,7 +147,10 @@ function getScopedFilters({
   if (appliedConfig.service) {
     filters.push({
       type: 'sql',
-      condition: `${expressions.service} IN ('${appliedConfig.service}')`,
+      condition: buildInFilterCondition(
+        expressions.service,
+        appliedConfig.service,
+      ),
     });
   }
   if (includeNonEmptyEndpointFilter) {
@@ -136,7 +173,10 @@ function ServiceSelectControlled({
   dateRange: [Date, Date];
   onCreate?: () => void;
 } & UseControllerProps<any>) {
-  const { data: source } = useSource({ id: sourceId });
+  const { data: source } = useSource({
+    id: sourceId,
+    kinds: [SourceKind.Trace],
+  });
   const { expressions } = useServiceDashboardExpressions({ source });
 
   const queriedConfig = {
@@ -200,10 +240,10 @@ function ServiceSelectControlled({
 export function EndpointLatencyChart({
   source,
   dateRange,
-  appliedConfig = {},
-  extraFilters = [],
+  appliedConfig,
+  extraFilters,
 }: {
-  source: TSource;
+  source: TTraceSource;
   dateRange: [Date, Date];
   appliedConfig?: AppliedConfig;
   extraFilters?: Filter[];
@@ -250,13 +290,10 @@ export function EndpointLatencyChart({
             ]}
             config={{
               source: source.id,
-              ...pick(source, [
-                'timestampValueExpression',
-                'connection',
-                'from',
-              ]),
-              where: appliedConfig.where || '',
-              whereLanguage: appliedConfig.whereLanguage || 'sql',
+              ...pickSourceConfigFields(source),
+              where: appliedConfig?.where || '',
+              whereLanguage:
+                (appliedConfig?.whereLanguage ?? getStoredLanguage()) || 'sql',
               select: [
                 // Separate the aggregations from the conversion to ms so that AggregatingMergeTree MVs can be used
                 {
@@ -293,8 +330,11 @@ export function EndpointLatencyChart({
                 },
               ],
               filters: [
-                ...extraFilters,
-                ...getScopedFilters({ appliedConfig, expressions }),
+                ...(extraFilters ?? []),
+                ...getScopedFilters({
+                  appliedConfig: appliedConfig ?? {},
+                  expressions,
+                }),
               ],
               numberFormat: MS_NUMBER_FORMAT,
               dateRange,
@@ -306,13 +346,10 @@ export function EndpointLatencyChart({
             toolbarSuffix={[displaySwitcher]}
             config={{
               source: source.id,
-              ...pick(source, [
-                'timestampValueExpression',
-                'connection',
-                'from',
-              ]),
-              where: appliedConfig.where || '',
-              whereLanguage: appliedConfig.whereLanguage || 'sql',
+              ...pickSourceConfigFields(source),
+              where: appliedConfig?.where || '',
+              whereLanguage:
+                (appliedConfig?.whereLanguage ?? getStoredLanguage()) || 'sql',
               select: [
                 {
                   alias: 'data_nanoseconds',
@@ -326,8 +363,11 @@ export function EndpointLatencyChart({
                 },
               ],
               filters: [
-                ...extraFilters,
-                ...getScopedFilters({ appliedConfig, expressions }),
+                ...(extraFilters ?? []),
+                ...getScopedFilters({
+                  appliedConfig: appliedConfig ?? {},
+                  expressions,
+                }),
               ],
               dateRange,
             }}
@@ -344,7 +384,10 @@ function HttpTab({
   searchedTimeRange: [Date, Date];
   appliedConfig: AppliedConfig;
 }) {
-  const { data: source } = useSource({ id: appliedConfig.source });
+  const { data: source } = useSource({
+    id: appliedConfig.source,
+    kinds: [SourceKind.Trace],
+  });
   const { expressions } = useServiceDashboardExpressions({ source });
 
   const [reqChartType, setReqChartType] = useQueryState(
@@ -366,14 +409,15 @@ function HttpTab({
   }, []);
 
   const requestErrorRateConfig =
-    useMemo<ChartConfigWithDateRange | null>(() => {
+    useMemo<BuilderChartConfigWithDateRange | null>(() => {
       if (!source || !expressions) return null;
       if (reqChartType === 'overall') {
         return {
           source: source.id,
-          ...pick(source, ['timestampValueExpression', 'connection', 'from']),
+          ...pickSourceConfigFields(source),
           where: appliedConfig.where || '',
-          whereLanguage: appliedConfig.whereLanguage || 'sql',
+          whereLanguage:
+            (appliedConfig.whereLanguage ?? getStoredLanguage()) || 'sql',
           displayType: DisplayType.Line,
           select: [
             // Separate the aggregations from the rate calculation so that AggregatingMergeTree MVs can be used
@@ -397,10 +441,22 @@ function HttpTab({
           numberFormat: ERROR_RATE_PERCENTAGE_NUMBER_FORMAT,
           filters: getScopedFilters({ appliedConfig, expressions }),
           dateRange: searchedTimeRange,
-        } satisfies ChartConfigWithDateRange;
+        } satisfies BuilderChartConfigWithDateRange;
       }
       return {
         timestampValueExpression: 'series_time_bucket',
+        implicitColumnExpression:
+          isLogSource(source) || isTraceSource(source)
+            ? source.implicitColumnExpression
+            : undefined,
+        useTextIndexForImplicitColumn:
+          isLogSource(source) || isTraceSource(source)
+            ? source.useTextIndexForImplicitColumn
+            : undefined,
+        // No bodyExpression threading here: the HttpTab calls
+        // useSource({ kinds: [SourceKind.Trace] }) above (L387-390),
+        // so `source` is type-narrowed to TTraceSource and the
+        // logs-only body fallback can't apply at this surface.
         connection: source.connection,
         source: source.id,
         with: [
@@ -408,13 +464,22 @@ function HttpTab({
             name: 'error_series',
             chartConfig: {
               timestampValueExpression: source?.timestampValueExpression || '',
+              implicitColumnExpression:
+                isLogSource(source) || isTraceSource(source)
+                  ? source?.implicitColumnExpression || ''
+                  : '',
+              useTextIndexForImplicitColumn:
+                isLogSource(source) || isTraceSource(source)
+                  ? source?.useTextIndexForImplicitColumn
+                  : undefined,
               connection: source?.connection ?? '',
               from: source?.from ?? {
                 databaseName: '',
                 tableName: '',
               },
               where: appliedConfig.where || '',
-              whereLanguage: appliedConfig.whereLanguage || 'sql',
+              whereLanguage:
+                (appliedConfig.whereLanguage ?? getStoredLanguage()) || 'sql',
               select: [
                 {
                   valueExpression: '',
@@ -452,7 +517,7 @@ function HttpTab({
               dateRange: searchedTimeRange,
               granularity:
                 convertDateRangeToGranularityString(searchedTimeRange),
-            } as ChartConfigWithOptDateRange,
+            } as CteChartConfig,
             isSubquery: true,
           },
           // Select the top N series from the search as we don't want to crash the browser.
@@ -526,13 +591,16 @@ function HttpTab({
         displayType: DisplayType.Line,
         numberFormat: ERROR_RATE_PERCENTAGE_NUMBER_FORMAT,
         groupBy: 'zipped, endpoint',
-      } satisfies ChartConfigWithDateRange;
+      } satisfies BuilderChartConfigWithDateRange;
     }, [source, searchedTimeRange, appliedConfig, expressions, reqChartType]);
 
   return (
-    <Grid mt="md" grow={false} w="100%" maw="100%" overflow="hidden">
+    <Grid mt="md" grow={false} w="100%" maw="100%">
       <Grid.Col span={6}>
-        <ChartBox style={{ height: 350 }}>
+        <ChartBox
+          style={{ height: 350 }}
+          data-testid="services-request-error-rate-chart"
+        >
           {source && requestErrorRateConfig && (
             <DBTimeChart
               title="Request Error Rate"
@@ -559,20 +627,20 @@ function HttpTab({
         </ChartBox>
       </Grid.Col>
       <Grid.Col span={6}>
-        <ChartBox style={{ height: 350 }}>
+        <ChartBox
+          style={{ height: 350 }}
+          data-testid="services-request-throughput-chart"
+        >
           {source && expressions && (
             <DBTimeChart
               title="Request Throughput"
               sourceId={source.id}
               config={{
                 source: source.id,
-                ...pick(source, [
-                  'timestampValueExpression',
-                  'connection',
-                  'from',
-                ]),
+                ...pickSourceConfigFields(source),
                 where: appliedConfig.where || '',
-                whereLanguage: appliedConfig.whereLanguage || 'sql',
+                whereLanguage:
+                  (appliedConfig.whereLanguage ?? getStoredLanguage()) || 'sql',
                 displayType: DisplayType.Line,
                 select: [
                   {
@@ -597,7 +665,7 @@ function HttpTab({
             <DBListBarChart
               title="Top 20 Most Time Consuming Endpoints"
               groupColumn="Endpoint"
-              valueColumn="Total (ms)"
+              valueColumn="Total"
               getRowSearchLink={getRowSearchLink}
               hiddenSeries={[
                 'duration_ns',
@@ -608,13 +676,10 @@ function HttpTab({
               ]}
               config={{
                 source: source.id,
-                ...pick(source, [
-                  'timestampValueExpression',
-                  'connection',
-                  'from',
-                ]),
+                ...pickSourceConfigFields(source),
                 where: appliedConfig.where || '',
-                whereLanguage: appliedConfig.whereLanguage || 'sql',
+                whereLanguage:
+                  (appliedConfig.whereLanguage ?? getStoredLanguage()) || 'sql',
                 select: [
                   // Separate the aggregations from the conversion to ms and rate so that AggregatingMergeTree MVs can be used
                   {
@@ -628,9 +693,10 @@ function HttpTab({
                     aggCondition: '',
                   },
                   {
-                    alias: 'Total (ms)',
+                    alias: 'Total',
                     valueExpression: `duration_ns / ${expressions.durationDivisorForMillis}`,
                     aggCondition: '',
+                    numberFormat: MS_NUMBER_FORMAT,
                   },
                   {
                     alias: 'total_requests',
@@ -651,8 +717,9 @@ function HttpTab({
                     aggCondition: '',
                   },
                   {
-                    alias: 'P95 (ms)',
+                    alias: 'P95',
                     valueExpression: `duration_p95_ns / ${expressions.durationDivisorForMillis}`,
+                    numberFormat: MS_NUMBER_FORMAT,
                   },
                   {
                     alias: 'duration_p50_ns',
@@ -662,8 +729,9 @@ function HttpTab({
                     aggCondition: '',
                   },
                   {
-                    alias: 'Median (ms)',
+                    alias: 'Median',
                     valueExpression: `duration_p50_ns / ${expressions.durationDivisorForMillis}`,
+                    numberFormat: MS_NUMBER_FORMAT,
                   },
                   {
                     alias: 'error_requests',
@@ -680,10 +748,10 @@ function HttpTab({
                 ],
                 selectGroupBy: false,
                 groupBy: expressions.endpoint,
-                orderBy: '"Total (ms)" DESC',
+                orderBy: '"Total" DESC',
                 filters: [...getScopedFilters({ appliedConfig, expressions })],
                 dateRange: searchedTimeRange,
-                numberFormat: MS_NUMBER_FORMAT,
+                numberFormat: INTEGER_NUMBER_FORMAT,
                 limit: { limit: 20 },
               }}
             />
@@ -691,7 +759,7 @@ function HttpTab({
         </ChartBox>
       </Grid.Col>
       <Grid.Col span={6}>
-        {source && (
+        {source && isTraceSource(source) && (
           <EndpointLatencyChart
             appliedConfig={appliedConfig}
             dateRange={searchedTimeRange}
@@ -700,7 +768,10 @@ function HttpTab({
         )}
       </Grid.Col>
       <Grid.Col span={12}>
-        <ChartBox style={{ height: 350 }}>
+        <ChartBox
+          style={{ height: 350 }}
+          data-testid="services-top-endpoints-table"
+        >
           {source && expressions && (
             <DBTableChart
               title={
@@ -737,13 +808,10 @@ function HttpTab({
               ]}
               config={{
                 source: source.id,
-                ...pick(source, [
-                  'timestampValueExpression',
-                  'connection',
-                  'from',
-                ]),
+                ...pickSourceConfigFields(source),
                 where: appliedConfig.where || '',
-                whereLanguage: appliedConfig.whereLanguage || 'sql',
+                whereLanguage:
+                  (appliedConfig.whereLanguage ?? getStoredLanguage()) || 'sql',
                 select: [
                   // Separate the aggregations from the conversion to ms and rate so that AggregatingMergeTree MVs can be used
                   {
@@ -767,8 +835,9 @@ function HttpTab({
                     level: 0.95,
                   },
                   {
-                    alias: 'P95 (ms)',
+                    alias: 'P95',
                     valueExpression: `round(p95_duration_ns / ${expressions.durationDivisorForMillis}, 2)`,
+                    numberFormat: MS_NUMBER_FORMAT,
                   },
                   {
                     alias: 'p50_duration_ns',
@@ -777,8 +846,9 @@ function HttpTab({
                     level: 0.5,
                   },
                   {
-                    alias: 'Median (ms)',
+                    alias: 'Median',
                     valueExpression: `round(p50_duration_ns / ${expressions.durationDivisorForMillis}, 2)`,
+                    numberFormat: MS_NUMBER_FORMAT,
                   },
                   {
                     alias: 'duration_sum_ns',
@@ -786,8 +856,9 @@ function HttpTab({
                     aggFn: 'sum',
                   },
                   {
-                    alias: 'Total (ms)',
+                    alias: 'Total',
                     valueExpression: `round(duration_sum_ns / ${expressions.durationDivisorForMillis}, 2)`,
+                    numberFormat: MS_NUMBER_FORMAT,
                   },
                   {
                     alias: 'error_count',
@@ -800,6 +871,7 @@ function HttpTab({
                     alias: 'Errors/Min',
                     valueExpression: `round(error_count /
                       age('mi', toDateTime(${startTime / 1000}), toDateTime(${endTime / 1000})), 1)`,
+                    numberFormat: INTEGER_NUMBER_FORMAT,
                   },
                 ],
                 filters: getScopedFilters({
@@ -812,9 +884,10 @@ function HttpTab({
                 dateRange: searchedTimeRange,
                 orderBy:
                   topEndpointsChartType === 'time'
-                    ? '"Total (ms)" DESC'
+                    ? '"Total" DESC'
                     : '"Errors/Min" DESC',
                 limit: { limit: 20 },
+                numberFormat: INTEGER_NUMBER_FORMAT,
               }}
             />
           )}
@@ -832,7 +905,10 @@ function DatabaseTab({
   searchedTimeRange: [Date, Date];
   appliedConfig: AppliedConfig;
 }) {
-  const { data: source } = useSource({ id: appliedConfig.source });
+  const { data: source } = useSource({
+    id: appliedConfig.source,
+    kinds: [SourceKind.Trace],
+  });
   const { expressions } = useServiceDashboardExpressions({ source });
 
   const [chartType, setChartType] = useState<'table' | 'list'>('list');
@@ -844,7 +920,7 @@ function DatabaseTab({
   }, []);
 
   const totalTimePerQueryConfig =
-    useMemo<ChartConfigWithDateRange | null>(() => {
+    useMemo<BuilderChartConfigWithDateRange | null>(() => {
       if (!source || !expressions) return null;
 
       return {
@@ -853,13 +929,10 @@ function DatabaseTab({
             name: 'queries_by_total_time',
             isSubquery: true,
             chartConfig: {
-              ...pick(source, [
-                'timestampValueExpression',
-                'connection',
-                'from',
-              ]),
+              ...pickSourceConfigFields(source),
               where: appliedConfig.where || '',
-              whereLanguage: appliedConfig.whereLanguage || 'sql',
+              whereLanguage:
+                (appliedConfig.whereLanguage ?? getStoredLanguage()) || 'sql',
               select: [
                 // Separate the aggregations from the conversion to ms so that AggregatingMergeTree MVs can be used
                 {
@@ -961,11 +1034,11 @@ function DatabaseTab({
         timestampValueExpression: 'series_time_bucket',
         connection: source.connection,
         source: source.id,
-      } satisfies ChartConfigWithDateRange;
+      } satisfies BuilderChartConfigWithDateRange;
     }, [appliedConfig, expressions, searchedTimeRange, source]);
 
   const totalThroughputPerQueryConfig =
-    useMemo<ChartConfigWithDateRange | null>(() => {
+    useMemo<BuilderChartConfigWithDateRange | null>(() => {
       if (!source || !expressions) return null;
 
       return {
@@ -974,13 +1047,10 @@ function DatabaseTab({
             name: 'queries_by_total_count',
             isSubquery: true,
             chartConfig: {
-              ...pick(source, [
-                'timestampValueExpression',
-                'connection',
-                'from',
-              ]),
+              ...pickSourceConfigFields(source),
               where: appliedConfig.where || '',
-              whereLanguage: appliedConfig.whereLanguage || 'sql',
+              whereLanguage:
+                (appliedConfig.whereLanguage ?? getStoredLanguage()) || 'sql',
               select: [
                 {
                   alias: 'total_query_count',
@@ -1080,7 +1150,7 @@ function DatabaseTab({
         timestampValueExpression: 'series_time_bucket',
         connection: source.connection,
         source: source.id,
-      } satisfies ChartConfigWithDateRange;
+      } satisfies BuilderChartConfigWithDateRange;
     }, [appliedConfig, expressions, searchedTimeRange, source]);
 
   const displaySwitcher = (
@@ -1104,7 +1174,7 @@ function DatabaseTab({
   );
 
   return (
-    <Grid mt="md" grow={false} w="100%" maw="100%" overflow="hidden">
+    <Grid mt="md" grow={false} w="100%" maw="100%">
       <Grid.Col span={6}>
         <ChartBox style={{ height: 350 }}>
           {source && totalTimePerQueryConfig && (
@@ -1151,13 +1221,11 @@ function DatabaseTab({
                 ]}
                 config={{
                   source: source.id,
-                  ...pick(source, [
-                    'timestampValueExpression',
-                    'connection',
-                    'from',
-                  ]),
+                  ...pickSourceConfigFields(source),
                   where: appliedConfig.where || '',
-                  whereLanguage: appliedConfig.whereLanguage || 'sql',
+                  whereLanguage:
+                    (appliedConfig.whereLanguage ?? getStoredLanguage()) ||
+                    'sql',
                   dateRange: searchedTimeRange,
                   groupBy: 'Statement',
                   selectGroupBy: false,
@@ -1177,6 +1245,7 @@ function DatabaseTab({
                     {
                       alias: 'Total',
                       valueExpression: `total_duration_ns / ${expressions.durationDivisorForMillis}`,
+                      numberFormat: MS_NUMBER_FORMAT,
                     },
                     {
                       alias: 'total_queries',
@@ -1186,6 +1255,7 @@ function DatabaseTab({
                     {
                       alias: 'Queries/Min',
                       valueExpression: `total_queries / age('mi', toDateTime(${searchedTimeRange[0].getTime() / 1000}), toDateTime(${searchedTimeRange[1].getTime() / 1000}))`,
+                      numberFormat: INTEGER_NUMBER_FORMAT,
                     },
                     {
                       alias: 'p95_duration_ns',
@@ -1195,8 +1265,9 @@ function DatabaseTab({
                       aggCondition: '',
                     },
                     {
-                      alias: 'P95 (ms)',
+                      alias: 'P95',
                       valueExpression: `p95_duration_ns / ${expressions.durationDivisorForMillis}`,
+                      numberFormat: MS_NUMBER_FORMAT,
                     },
                     {
                       alias: 'p50_duration_ns',
@@ -1206,8 +1277,9 @@ function DatabaseTab({
                       aggCondition: '',
                     },
                     {
-                      alias: 'Median (ms)',
+                      alias: 'Median',
                       valueExpression: `p50_duration_ns / ${expressions.durationDivisorForMillis}`,
+                      numberFormat: MS_NUMBER_FORMAT,
                     },
                   ],
                   filters: [
@@ -1219,6 +1291,7 @@ function DatabaseTab({
                     { type: 'sql', condition: expressions.isDbSpan },
                   ],
                   limit: { limit: 20 },
+                  numberFormat: INTEGER_NUMBER_FORMAT,
                 }}
               />
             ) : (
@@ -1234,13 +1307,11 @@ function DatabaseTab({
                 ]}
                 config={{
                   source: source.id,
-                  ...pick(source, [
-                    'timestampValueExpression',
-                    'connection',
-                    'from',
-                  ]),
+                  ...pickSourceConfigFields(source),
                   where: appliedConfig.where || '',
-                  whereLanguage: appliedConfig.whereLanguage || 'sql',
+                  whereLanguage:
+                    (appliedConfig.whereLanguage ?? getStoredLanguage()) ||
+                    'sql',
                   dateRange: searchedTimeRange,
                   groupBy: 'Statement',
                   orderBy: '"Total" DESC',
@@ -1259,6 +1330,7 @@ function DatabaseTab({
                     {
                       alias: 'Total',
                       valueExpression: `duration_ns / ${expressions.durationDivisorForMillis}`,
+                      numberFormat: MS_NUMBER_FORMAT,
                     },
                     {
                       alias: 'total_count',
@@ -1277,8 +1349,9 @@ function DatabaseTab({
                       level: 0.95,
                     },
                     {
-                      alias: 'P95 (ms)',
+                      alias: 'P95',
                       valueExpression: `p95_duration_ns / ${expressions.durationDivisorForMillis}`,
+                      numberFormat: MS_NUMBER_FORMAT,
                     },
                     {
                       alias: 'p50_duration_ns',
@@ -1288,8 +1361,9 @@ function DatabaseTab({
                       level: 0.5,
                     },
                     {
-                      alias: 'Median (ms)',
+                      alias: 'Median',
                       valueExpression: `p50_duration_ns / ${expressions.durationDivisorForMillis}`,
+                      numberFormat: MS_NUMBER_FORMAT,
                     },
                   ],
                   filters: [
@@ -1301,6 +1375,7 @@ function DatabaseTab({
                     { type: 'sql', condition: expressions.isDbSpan },
                   ],
                   limit: { limit: 20 },
+                  numberFormat: INTEGER_NUMBER_FORMAT,
                 }}
               />
             ))}
@@ -1318,11 +1393,14 @@ function ErrorsTab({
   searchedTimeRange: [Date, Date];
   appliedConfig: AppliedConfig;
 }) {
-  const { data: source } = useSource({ id: appliedConfig.source });
+  const { data: source } = useSource({
+    id: appliedConfig.source,
+    kinds: [SourceKind.Trace],
+  });
   const { expressions } = useServiceDashboardExpressions({ source });
 
   return (
-    <Grid mt="md" grow={false} w="100%" maw="100%" overflow="hidden">
+    <Grid mt="md" grow={false} w="100%" maw="100%">
       <Grid.Col span={12}>
         <ChartBox style={{ height: 350 }}>
           {source && expressions && (
@@ -1331,13 +1409,10 @@ function ErrorsTab({
               sourceId={source.id}
               config={{
                 source: source.id,
-                ...pick(source, [
-                  'timestampValueExpression',
-                  'connection',
-                  'from',
-                ]),
+                ...pickSourceConfigFields(source),
                 where: appliedConfig.where || '',
-                whereLanguage: appliedConfig.whereLanguage || 'sql',
+                whereLanguage:
+                  (appliedConfig.whereLanguage ?? getStoredLanguage()) || 'sql',
                 displayType: DisplayType.StackedBar,
                 select: [
                   {
@@ -1353,7 +1428,10 @@ function ErrorsTab({
                   },
                   ...getScopedFilters({ appliedConfig, expressions }),
                 ],
-                groupBy: source.serviceNameExpression || expressions.service,
+                groupBy:
+                  (isLogSource(source) || isTraceSource(source)
+                    ? source.serviceNameExpression
+                    : undefined) || expressions.service,
                 dateRange: searchedTimeRange,
               }}
             />
@@ -1375,6 +1453,7 @@ const appliedConfigMap = {
 };
 
 function ServicesDashboardPage() {
+  const brandName = useBrandDisplayName();
   const [tab, setTab] = useQueryState(
     'tab',
     parseAsStringEnum<string>(['http', 'database', 'errors']).withDefault(
@@ -1391,7 +1470,9 @@ function ServicesDashboardPage() {
   const appliedConfigWithoutFilters = useMemo(() => {
     if (!sources?.length) return appliedConfigParams;
 
-    const traceSources = sources?.filter(s => s.kind === SourceKind.Trace);
+    const traceSources = sources?.filter(
+      s => s.kind === SourceKind.Trace && !s.disabled,
+    );
     const paramsSourceIdIsTraceSource = traceSources?.find(
       s => s.id === appliedConfigParams.source,
     );
@@ -1406,10 +1487,15 @@ function ServicesDashboardPage() {
     };
   }, [appliedConfigParams, sources]);
 
-  const { control, setValue, handleSubmit } = useForm({
+  // Services dashboard is SQL-first (WHERE filters are applied to metric/SQL queries).
+  // Default to 'sql' here; Search and Dashboard pages default to 'lucene'.
+  const effectiveWhereLanguage =
+    appliedConfigWithoutFilters?.whereLanguage ?? getStoredLanguage() ?? 'sql';
+
+  const { control, handleSubmit } = useForm({
     defaultValues: {
       where: '',
-      whereLanguage: 'sql' as 'sql' | 'lucene',
+      whereLanguage: effectiveWhereLanguage as 'sql' | 'lucene',
       service: appliedConfigWithoutFilters?.service || '',
       source: appliedConfigWithoutFilters?.source ?? '',
     },
@@ -1512,6 +1598,17 @@ function ServicesDashboardPage() {
 
   return (
     <Box p="sm" data-testid="services-dashboard-page">
+      <Head>
+        <title>Services Dashboard – {brandName}</title>
+      </Head>
+      <Breadcrumbs mb="sm" mt="xs" fz="sm">
+        <Anchor component={Link} href="/dashboards/list" fz="sm" c="dimmed">
+          Dashboards
+        </Anchor>
+        <Text fz="sm" c="dimmed">
+          Services
+        </Text>
+      </Breadcrumbs>
       <OnboardingModal requireSource={false} />
       <ServiceDashboardEndpointSidePanel
         service={service}
@@ -1543,43 +1640,14 @@ function ServicesDashboardPage() {
               name="service"
               dateRange={searchedTimeRange}
             />
-            <WhereLanguageControlled
-              name="whereLanguage"
+            <SearchWhereInput
+              tableConnection={tcFromSource(source)}
               control={control}
-              sqlInput={
-                <SQLInlineEditorControlled
-                  tableConnection={tcFromSource(source)}
-                  onSubmit={onSubmit}
-                  control={control}
-                  name="where"
-                  placeholder="SQL WHERE clause (ex. column = 'foo')"
-                  onLanguageChange={lang =>
-                    setValue('whereLanguage', lang, {
-                      shouldDirty: true,
-                    })
-                  }
-                  language="sql"
-                  label="WHERE"
-                  enableHotkey
-                  allowMultiline={true}
-                />
-              }
-              luceneInput={
-                <SearchInputV2
-                  tableConnection={tcFromSource(source)}
-                  control={control}
-                  name="where"
-                  onLanguageChange={lang =>
-                    setValue('whereLanguage', lang, {
-                      shouldDirty: true,
-                    })
-                  }
-                  language="lucene"
-                  placeholder="Search your events w/ Lucene ex. column:foo"
-                  enableHotkey
-                  onSubmit={onSubmit}
-                />
-              }
+              name="where"
+              onSubmit={onSubmit}
+              enableHotkey
+              data-testid="services-search-input"
+              minWidth="200px"
             />
             <TimePicker
               inputValue={displayedTimeInputValue}

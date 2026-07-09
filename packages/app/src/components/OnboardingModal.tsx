@@ -19,7 +19,7 @@ import {
   useUpdateSource,
 } from '@/source';
 
-import { TableSourceForm } from './Sources';
+import { TableSourceForm } from './Sources/SourceForm';
 
 const DFE_SHOW_SOURCE_ADD =
   process.env.NEXT_PUBLIC_DFE_SHOW_SOURCE_ADD === 'true';
@@ -50,6 +50,18 @@ function OnboardingModalComponent({
       setStep(startStep);
     }
   }, [startStep, step]);
+  useEffect(() => {
+    if (
+      (step === 'auto-detect' || step === 'source') &&
+      sources &&
+      sources.length > 0
+    ) {
+      // Sources may load in late once a connection is defined.
+      // If this happens, close the modal, we don't want to bother the user
+      // by forcing redefining their sources
+      setStep('closed');
+    }
+  }, [step, sources]);
 
   const createSourceMutation = useCreateSource();
   const updateSourceMutation = useUpdateSource();
@@ -80,16 +92,19 @@ function OnboardingModalComponent({
         // Create Log Source if available
         if (otelTables.tables.logs) {
           const inferredConfig = await inferTableSourceConfig({
+            kind: SourceKind.Log,
             databaseName: otelTables.database,
             tableName: otelTables.tables.logs,
             connectionId,
             metadata,
           });
 
-          if (inferredConfig.timestampValueExpression != null) {
+          if (
+            inferredConfig.kind === SourceKind.Log &&
+            inferredConfig.timestampValueExpression != null
+          ) {
             const logSource = await createSourceMutation.mutateAsync({
               source: {
-                kind: SourceKind.Log,
                 name: 'Logs',
                 connection: connectionId,
                 from: {
@@ -99,6 +114,8 @@ function OnboardingModalComponent({
                 ...inferredConfig,
                 timestampValueExpression:
                   inferredConfig.timestampValueExpression,
+                defaultTableSelectExpression:
+                  inferredConfig.defaultTableSelectExpression ?? '',
               },
             });
             createdSources.push(logSource);
@@ -113,16 +130,19 @@ function OnboardingModalComponent({
         // Create Trace Source if available
         if (otelTables.tables.traces) {
           const inferredConfig = await inferTableSourceConfig({
+            kind: SourceKind.Trace,
             databaseName: otelTables.database,
             tableName: otelTables.tables.traces,
             connectionId,
             metadata,
           });
 
-          if (inferredConfig.timestampValueExpression != null) {
+          if (
+            inferredConfig.kind === SourceKind.Trace &&
+            inferredConfig.timestampValueExpression != null
+          ) {
             const traceSource = await createSourceMutation.mutateAsync({
               source: {
-                kind: SourceKind.Trace,
                 name: 'Traces',
                 connection: connectionId,
                 from: {
@@ -131,8 +151,18 @@ function OnboardingModalComponent({
                 },
                 ...inferredConfig,
                 // Help typescript understand it's not null
+                defaultTableSelectExpression:
+                  inferredConfig.defaultTableSelectExpression ?? '',
                 timestampValueExpression:
                   inferredConfig.timestampValueExpression,
+                durationExpression: inferredConfig.durationExpression ?? '',
+                durationPrecision: inferredConfig.durationPrecision ?? 9,
+                traceIdExpression: inferredConfig.traceIdExpression ?? '',
+                spanIdExpression: inferredConfig.spanIdExpression ?? '',
+                parentSpanIdExpression:
+                  inferredConfig.parentSpanIdExpression ?? '',
+                spanNameExpression: inferredConfig.spanNameExpression ?? '',
+                spanKindExpression: inferredConfig.spanKindExpression ?? '',
               },
             });
             createdSources.push(traceSource);
@@ -186,7 +216,6 @@ function OnboardingModalComponent({
                 tableName: '',
               },
               timestampValueExpression: 'TimeUnix',
-              serviceNameExpression: 'ServiceName',
               metricTables,
               resourceAttributesExpression: 'ResourceAttributes',
             },
@@ -197,6 +226,7 @@ function OnboardingModalComponent({
         // Create Session Source if available
         if (otelTables.tables.sessions) {
           const inferredConfig = await inferTableSourceConfig({
+            kind: SourceKind.Session,
             databaseName: otelTables.database,
             tableName: otelTables.tables.sessions,
             connectionId,
@@ -207,12 +237,12 @@ function OnboardingModalComponent({
           );
 
           if (
+            inferredConfig.kind === SourceKind.Session &&
             inferredConfig.timestampValueExpression != null &&
             traceSource != null
           ) {
             const sessionSource = await createSourceMutation.mutateAsync({
               source: {
-                kind: SourceKind.Session,
                 name: 'Sessions',
                 connection: connectionId,
                 from: {
@@ -262,7 +292,6 @@ function OnboardingModalComponent({
                 ...logSource,
                 ...(traceSource ? { traceSourceId: traceSource.id } : {}),
                 ...(metricsSource ? { metricSourceId: metricsSource.id } : {}),
-                ...(sessionSource ? { sessionSourceId: sessionSource.id } : {}),
               },
             }),
           );

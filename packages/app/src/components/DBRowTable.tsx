@@ -1,9 +1,9 @@
 import React, {
   memo,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import cx from 'classnames';
@@ -31,13 +31,17 @@ import {
 } from '@hyperdx/common-utils/dist/clickhouse';
 import { splitAndTrimWithBracket } from '@hyperdx/common-utils/dist/core/utils';
 import {
-  ChartConfigWithDateRange,
+  DENOISE_NOISE_THRESHOLD,
+  DENOISE_SAMPLE_SIZE,
+} from '@hyperdx/common-utils/dist/drain';
+import {
+  BuilderChartConfigWithDateRange,
   SelectList,
+  SourceKind,
   TSource,
 } from '@hyperdx/common-utils/dist/types';
 import {
   Box,
-  Code,
   Flex,
   Group,
   Modal,
@@ -74,7 +78,7 @@ import {
   useRenderedSqlChartConfig,
 } from '@/hooks/useChartConfig';
 import { useCsvExport } from '@/hooks/useCsvExport';
-import { useTableMetadata } from '@/hooks/useMetadata';
+import { useColumns, useTableMetadata } from '@/hooks/useMetadata';
 import useOffsetPaginatedQuery from '@/hooks/useOffsetPaginatedQuery';
 import { useGroupedPatterns } from '@/hooks/usePatterns';
 import useRowWhere, {
@@ -84,17 +88,24 @@ import useRowWhere, {
 } from '@/hooks/useRowWhere';
 import { useTableSearch } from '@/hooks/useTableSearch';
 import { useSource } from '@/source';
-import { UNDEFINED_WIDTH } from '@/tableUtils';
+import {
+  MIN_COLUMN_WIDTH,
+  MIN_LAST_COLUMN_WIDTH,
+  UNDEFINED_WIDTH,
+} from '@/tableUtils';
 import { FormatTime } from '@/useFormatTime';
 import { useUserPreferences } from '@/useUserPreferences';
 import {
-  COLORS,
+  getChartColorInfo,
   getLogLevelClass,
   logLevelColor,
   useLocalStorage,
   usePrevious,
 } from '@/utils';
 
+import ChartErrorState, {
+  ChartErrorStateVariant,
+} from './charts/ChartErrorState';
 import DBRowTableFieldWithPopover from './DBTable/DBRowTableFieldWithPopover';
 import DBRowTableRowButtons from './DBTable/DBRowTableRowButtons';
 import TableHeader from './DBTable/TableHeader';
@@ -105,6 +116,7 @@ import {
 } from './DBTable/TableSearchInput';
 import { SQLPreview } from './ChartSQLPreview';
 import { CsvExportButton } from './CsvExportButton';
+import { RowSidePanelContext } from './DBRowSidePanel';
 import {
   createExpandButtonColumn,
   ExpandedLogRow,
@@ -112,7 +124,7 @@ import {
 } from './ExpandableRowTable';
 import LogLevel from './LogLevel';
 
-import styles from '../../styles/LogTable.module.scss';
+import styles from '@styles/LogTable.module.scss';
 
 type Row = Record<string, any> & { duration: number };
 type AccessorFn = (row: Row, column: string) => any;
@@ -123,11 +135,13 @@ const SPECIAL_VALUES = {
 const ACCESSOR_MAP: Record<string, AccessorFn> = {
   duration: row =>
     row.duration >= 0 ? row.duration : SPECIAL_VALUES.not_available,
+  severityText: row => row.severityText ?? row.statusCode,
   default: (row, column) => row[column],
 };
 
 const MAX_SCROLL_FETCH_LINES = 1000;
 const MAX_CELL_LENGTH = 500;
+const MAX_CELL_LENGTH_WRAPPED = 50_000;
 
 const getRowId = (row: Record<string, any>): string =>
   row[INTERNAL_ROW_FIELDS.ID];
@@ -135,6 +149,24 @@ const getRowId = (row: Record<string, any>): string =>
 function retrieveColumnValue(column: string, row: Row): any {
   const accessor = ACCESSOR_MAP[column] ?? ACCESSOR_MAP.default;
   return accessor(row, column);
+}
+
+function getResolvedColumnSize(
+  column: string,
+  opts: {
+    aliasMap?: Record<string, string>;
+    columnTypeMap: Map<string, { _type: JSDataType | null }>;
+    logLevelColumn?: string;
+    columnSizeStorage: Record<string, number>;
+  },
+): number {
+  const columnId = opts.aliasMap?.[column] ? `"${column}"` : column;
+  const stored = opts.columnSizeStorage[columnId];
+  if (stored != null) return stored;
+  const jsType = opts.columnTypeMap.get(column)?._type;
+  if (jsType === JSDataType.Date) return 170;
+  if (column === opts.logLevelColumn) return 115;
+  return 160;
 }
 
 function inferLogLevelColumn(rows: Record<string, any>[]) {
@@ -176,7 +208,7 @@ const PatternTrendChartTooltip = () => {
   return null;
 };
 
-export const PatternTrendChart = ({
+const PatternTrendChart = ({
   data,
   dateRange,
   color,
@@ -243,16 +275,19 @@ export const PatternTrendChart = ({
               isAnimationActive={false}
               dataKey="count"
               stackId="a"
-              fill={color || COLORS[0]}
+              // `getChartColorInfo()` resolves a CSS var via
+              // `getComputedStyle(document.documentElement)` and is
+              // invoked once per row render. Kept inline (instead of
+              // hoisted into a memo) because memoizing would either
+              // require a stable theme-class subscription this
+              // component doesn't already have, or risk a stale
+              // value on theme toggle. The per-row cost is acceptable:
+              // pattern rows render in a virtualized list and the
+              // `getComputedStyle` read is sub-microsecond. Revisit
+              // if this surfaces in a profile.
+              fill={color || getChartColorInfo()}
               maxBarSize={24}
             />
-            {/* <Line
-              key={'count'}
-              type="monotone"
-              dataKey={'count'}
-              stroke={COLORS[0]}
-              dot={false}
-            /> */}
             <Tooltip content={<PatternTrendChartTooltip />} />
           </BarChart>
         </ResponsiveContainer>
@@ -268,7 +303,7 @@ const SqlModal = ({
 }: {
   opened: boolean;
   onClose: () => void;
-  config: ChartConfigWithDateRange;
+  config: BuilderChartConfigWithDateRange;
 }) => {
   const { data: sql, isLoading: isLoadingSql } = useRenderedSqlChartConfig(
     config,
@@ -308,18 +343,15 @@ export const RawLogTable = memo(
     isLoading,
     rows,
     generateRowId,
-    onInstructionsClick,
-    // onPropertySearchClick,
     onRowDetailsClick,
     onScroll,
     onSettingsClick,
-    onShowPatternsClick,
     wrapLines = false,
     columnNameMap,
-    showServiceColumn = true,
     dedupRows,
     isError,
     error,
+    errorVariant = 'inline',
     columnTypeMap,
     dateRange,
     loadingDate,
@@ -335,36 +367,31 @@ export const RawLogTable = memo(
     showExpandButton = true,
     getRowWhere,
     variant = 'default',
+    onRemoveColumn,
   }: {
     wrapLines?: boolean;
     displayedColumns: string[];
     onSettingsClick?: () => void;
-    onInstructionsClick?: () => void;
     rows: Record<string, any>[];
     isLoading?: boolean;
     fetchNextPage?: (options?: FetchNextPageOptions | undefined) => any;
     onRowDetailsClick: (row: Record<string, any>) => void;
     generateRowId: (row: Record<string, any>) => RowWhereResult;
-    // onPropertySearchClick: (
-    //   name: string,
-    //   value: string | number | boolean,
-    // ) => void;
     hasNextPage?: boolean;
     highlightedLineId?: string;
     onScroll?: (scrollTop: number) => void;
     isLive?: boolean;
-    onShowPatternsClick?: () => void;
     tableId?: string;
     columnNameMap?: Record<string, string>;
-    showServiceColumn?: boolean;
     dedupRows?: boolean;
     columnTypeMap: Map<string, { _type: JSDataType | null }>;
 
     isError?: boolean;
     error?: ClickHouseQueryError | Error;
+    errorVariant?: ChartErrorStateVariant;
     dateRange?: [Date, Date];
     loadingDate?: Date;
-    config?: ChartConfigWithDateRange;
+    config?: BuilderChartConfigWithDateRange;
     onChildModalOpen?: (open: boolean) => void;
     source?: TSource;
     onExpandedRowsChange?: (hasExpandedRows: boolean) => void;
@@ -380,6 +407,7 @@ export const RawLogTable = memo(
     onSortingChange?: (v: SortingState | null) => void;
     getRowWhere?: (row: Record<string, any>) => RowWhereResult;
     variant?: DBRowTableVariant;
+    onRemoveColumn?: (column: string) => void;
   }) => {
     const dedupedRows = useMemo(() => {
       const lIds = new Set();
@@ -437,6 +465,19 @@ export const RawLogTable = memo(
       [],
     );
 
+    const [containerWidth, setContainerWidth] = useState(0);
+    useEffect(() => {
+      if (!tableContainerRef) return;
+      setContainerWidth(tableContainerRef.clientWidth);
+      const observer = new ResizeObserver(entries => {
+        for (const entry of entries) {
+          setContainerWidth(entry.contentRect.width);
+        }
+      });
+      observer.observe(tableContainerRef);
+      return () => observer.disconnect();
+    }, [tableContainerRef]);
+
     // Get the alias map from the config so we resolve correct column ids
     const { data: aliasMap } = useAliasMapFromChartConfig(config);
 
@@ -481,6 +522,43 @@ export const RawLogTable = memo(
       debounceMs: 300,
     });
 
+    const columnSizeOpts = useMemo(
+      () => ({ aliasMap, columnTypeMap, logLevelColumn, columnSizeStorage }),
+      [aliasMap, columnTypeMap, logLevelColumn, columnSizeStorage],
+    );
+
+    const lastColumnWidth = useMemo(() => {
+      if (displayedColumns.length === 0) return MIN_LAST_COLUMN_WIDTH;
+
+      const lastCol = displayedColumns[displayedColumns.length - 1];
+      const lastColId = columnSizeOpts.aliasMap?.[lastCol]
+        ? `"${lastCol}"`
+        : lastCol;
+      const storedLast = columnSizeOpts.columnSizeStorage[lastColId];
+
+      if (storedLast != null) {
+        return Math.max(MIN_LAST_COLUMN_WIDTH, storedLast);
+      }
+
+      const expandWidth = showExpandButton ? 32 : 0;
+      const nonLastSum = displayedColumns
+        .slice(0, -1)
+        .reduce(
+          (total, column) =>
+            total + getResolvedColumnSize(column, columnSizeOpts),
+          0,
+        );
+      return Math.max(
+        MIN_LAST_COLUMN_WIDTH,
+        containerWidth - nonLastSum - expandWidth,
+      );
+    }, [displayedColumns, columnSizeOpts, showExpandButton, containerWidth]);
+
+    const [wrapLinesEnabled, setWrapLinesEnabled] = useLocalStorage<boolean>(
+      `${tableId}-wrap-lines`,
+      wrapLines ?? false,
+    );
+
     const columns = useMemo<ColumnDef<any>[]>(
       () => [
         ...(showExpandButton
@@ -495,7 +573,6 @@ export const RawLogTable = memo(
         ...(displayedColumns.map((column, i) => {
           const jsColumnType = columnTypeMap.get(column)?._type;
           const isDate = jsColumnType === JSDataType.Date;
-          const isMaybeSeverityText = column === logLevelColumn;
           return {
             meta: {
               column,
@@ -516,7 +593,10 @@ export const RawLogTable = memo(
                     <PatternTrendChart
                       data={value.data}
                       dateRange={value.dateRange}
-                      color={logLevelColor(info.row.original.severityText)}
+                      color={logLevelColor(
+                        info.row.original.severityText ??
+                          info.row.original.statusCode,
+                      )}
                     />
                   </div>
                 );
@@ -542,9 +622,12 @@ export const RawLogTable = memo(
                 return <LogLevel level={strValue} />;
               }
 
+              const maxLen = wrapLinesEnabled
+                ? MAX_CELL_LENGTH_WRAPPED
+                : MAX_CELL_LENGTH;
               const truncatedStrValue =
-                strValue.length > MAX_CELL_LENGTH
-                  ? `${strValue.slice(0, MAX_CELL_LENGTH)}...`
+                strValue.length > maxLen
+                  ? `${strValue.slice(0, maxLen)}...`
                   : strValue;
 
               // Apply search highlighting if there's a search query
@@ -573,9 +656,8 @@ export const RawLogTable = memo(
             },
             size:
               i === displayedColumns.length - 1
-                ? UNDEFINED_WIDTH // last column is always whatever is left
-                : (columnSizeStorage[column] ??
-                  (isDate ? 170 : isMaybeSeverityText ? 115 : 160)),
+                ? lastColumnWidth
+                : getResolvedColumnSize(column, columnSizeOpts),
           };
         }) as ColumnDef<any>[]),
       ],
@@ -583,7 +665,7 @@ export const RawLogTable = memo(
         isUTC,
         highlightedLineId,
         displayedColumns,
-        columnSizeStorage,
+        columnSizeOpts,
         columnNameMap,
         columnTypeMap,
         logLevelColumn,
@@ -591,6 +673,8 @@ export const RawLogTable = memo(
         toggleRowExpansion,
         showExpandButton,
         aliasMap,
+        lastColumnWidth,
+        wrapLinesEnabled,
         tableSearch.searchQuery,
         tableSearch.matchIndices,
         tableSearch.currentMatchIndex,
@@ -648,6 +732,9 @@ export const RawLogTable = memo(
         state: {
           sorting: sortOrder ?? [],
         },
+        defaultColumn: {
+          minSize: MIN_COLUMN_WIDTH,
+        },
         enableColumnResizing: true,
         columnResizeMode: 'onChange' as ColumnResizeMode,
       } satisfies TableOptions<any>;
@@ -674,6 +761,24 @@ export const RawLogTable = memo(
     ]);
 
     const table = useReactTable(reactTableProps);
+
+    // Sum actual column widths to derive a pixel min-width for the table.
+    // This enables horizontal scrolling when the viewport is narrower than
+    // the total column widths.
+    const tableMinWidth = useMemo(() => {
+      const EXPAND_COLUMN_SIZE = 32;
+      const expandWidth = showExpandButton ? EXPAND_COLUMN_SIZE : 0;
+      return (
+        expandWidth +
+        displayedColumns.reduce((total, column, i) => {
+          const size = getResolvedColumnSize(column, columnSizeOpts);
+          if (i === displayedColumns.length - 1) {
+            return total + Math.max(MIN_LAST_COLUMN_WIDTH, size);
+          }
+          return total + size;
+        }, 0)
+      );
+    }, [displayedColumns, columnSizeOpts, showExpandButton]);
 
     const { rows: _rows } = table.getRowModel();
 
@@ -706,10 +811,6 @@ export const RawLogTable = memo(
     // Scroll to log id if it's not in window yet
     const [scrolledToHighlightedLine, setScrolledToHighlightedLine] =
       useState(false);
-    const [wrapLinesEnabled, setWrapLinesEnabled] = useLocalStorage<boolean>(
-      `${tableId}-wrap-lines`,
-      wrapLines ?? false,
-    );
     const [showSql, setShowSql] = useState(false);
 
     const handleSqlModalOpen = (open: boolean) => {
@@ -842,6 +943,15 @@ export const RawLogTable = memo(
       shiftHighlightedLineId(-1);
     });
 
+    const getCsvFilename = useCallback(() => {
+      // eslint-disable-next-line no-restricted-syntax
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[:.]/g, '-')
+        .slice(0, 19);
+      return `hyperdx_search_results_${timestamp}.csv`;
+    }, []);
+
     return (
       <Flex direction="column" h="100%">
         <Box pos="relative" style={{ flex: 1, minHeight: 0 }}>
@@ -859,7 +969,7 @@ export const RawLogTable = memo(
           />
           <div
             data-testid="search-results-table"
-            className={cx('overflow-auto h-100 fs-8', styles.tableWrapper, {
+            className={cx(styles.tableWrapper, {
               [styles.muted]: variant === 'muted',
             })}
             onScroll={e => {
@@ -881,7 +991,11 @@ export const RawLogTable = memo(
                 config={config}
               />
             )}
-            <table className={cx('w-100', styles.table)} id={tableId}>
+            <table
+              className={styles.table}
+              style={{ minWidth: tableMinWidth }}
+              id={tableId}
+            >
               <thead className={styles.tableHead}>
                 {displayedColumns.length > 0 &&
                   table.getHeaderGroups().map(headerGroup => (
@@ -894,13 +1008,30 @@ export const RawLogTable = memo(
                             key={header.id}
                             header={header}
                             isLast={isLast}
+                            onRemoveColumn={
+                              onRemoveColumn &&
+                              (header.column.columnDef.meta as any)?.column
+                                ? () => {
+                                    onRemoveColumn(
+                                      (header.column.columnDef.meta as any)
+                                        ?.column,
+                                    );
+                                  }
+                                : undefined
+                            }
                             lastItemButtons={
-                              <Group gap={8} mr={8}>
+                              <Group
+                                gap={8}
+                                mr={8}
+                                wrap="nowrap"
+                                align="center"
+                              >
                                 {tableId &&
                                   Object.keys(columnSizeStorage).length > 0 && (
                                     <UnstyledButton
                                       onClick={() => setColumnSizeStorage({})}
                                       title="Reset Column Widths"
+                                      display="flex"
                                     >
                                       <MantineTooltip label="Reset Column Widths">
                                         <IconRotateClockwise size={16} />
@@ -912,6 +1043,7 @@ export const RawLogTable = memo(
                                     onClick={() => handleSqlModalOpen(true)}
                                     title="Show Generated SQL"
                                     tabIndex={0}
+                                    display="flex"
                                   >
                                     <MantineTooltip label="Show Generated SQL">
                                       <IconCode size={16} />
@@ -923,6 +1055,7 @@ export const RawLogTable = memo(
                                     setWrapLinesEnabled(prev => !prev)
                                   }
                                   title={`${wrapLinesEnabled ? 'Disable' : 'Enable'}  Wrap Lines`}
+                                  display="flex"
                                 >
                                   <MantineTooltip
                                     label={`${wrapLinesEnabled ? 'Disable' : 'Enable'} Wrap Lines`}
@@ -937,7 +1070,7 @@ export const RawLogTable = memo(
 
                                 <CsvExportButton
                                   data={csvData}
-                                  filename={`hyperdx_search_results_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`}
+                                  filename={getCsvFilename}
                                   className="fs-6"
                                 >
                                   <MantineTooltip
@@ -950,6 +1083,7 @@ export const RawLogTable = memo(
                                   <UnstyledButton
                                     onClick={() => onSettingsClick()}
                                     title="Settings"
+                                    display="flex"
                                   >
                                     <MantineTooltip label="Settings">
                                       <IconSettings size={16} />
@@ -1010,7 +1144,7 @@ export const RawLogTable = memo(
                               [styles.isWrapped]: wrapLinesEnabled,
                               [styles.isTruncated]: !wrapLinesEnabled,
                             })}
-                            onClick={e => {
+                            onClick={() => {
                               _onRowExpandClick(row.original);
                             }}
                             aria-label="View details for log entry"
@@ -1035,12 +1169,16 @@ export const RawLogTable = memo(
                                     style={{
                                       width:
                                         columnSize === UNDEFINED_WIDTH
-                                          ? 'auto'
+                                          ? 0
                                           : `${columnSize}px`,
                                       flex:
                                         columnSize === UNDEFINED_WIDTH
-                                          ? '1'
+                                          ? '1 1 0'
                                           : 'none',
+                                      minWidth:
+                                        columnSize === UNDEFINED_WIDTH
+                                          ? MIN_LAST_COLUMN_WIDTH
+                                          : undefined,
                                     }}
                                   >
                                     <div className={styles.fieldTextContainer}>
@@ -1104,7 +1242,16 @@ export const RawLogTable = memo(
                 })}
                 <tr>
                   <td colSpan={800}>
-                    <div className="rounded fs-7 bg-muted text-center d-flex align-items-center justify-content-center mt-3">
+                    <div
+                      className={cx(
+                        'rounded fs-7 d-flex align-items-center justify-content-center mt-3',
+                        // Errors render the shared ChartErrorState, which carries
+                        // its own styling/alignment; drop the muted background and
+                        // centered text so it matches the error state of other
+                        // chart types.
+                        { 'bg-muted text-center': !isError },
+                      )}
+                    >
                       {isLoading ? (
                         <div className="my-3">
                           <div className="d-inline-block">
@@ -1143,46 +1290,17 @@ export const RawLogTable = memo(
                         isLoading == false &&
                         dedupedRows.length > 0 ? (
                         <div className="my-3">End of Results</div>
-                      ) : isError ? (
-                        <div className="my-3">
-                          <Text ta="center" size="sm">
-                            Error loading results, please check your query or
-                            try again.
-                          </Text>
-                          <Box p="sm">
-                            <Box mt="sm">
-                              <Code
-                                block
-                                style={{
-                                  whiteSpace: 'pre-wrap',
-                                }}
-                              >
-                                {error?.message}
-                              </Code>
-                            </Box>
-                            {error instanceof ClickHouseQueryError && (
-                              <>
-                                <Text my="sm" size="sm" ta="center">
-                                  Sent Query:
-                                </Text>
-                                <Flex
-                                  w="100%"
-                                  ta="initial"
-                                  align="center"
-                                  justify="center"
-                                >
-                                  <SQLPreview data={error?.query} />
-                                </Flex>
-                              </>
-                            )}
-                          </Box>
-                        </div>
+                      ) : isError && error ? (
+                        <ChartErrorState error={error} variant={errorVariant} />
                       ) : hasNextPage == false &&
                         isLoading == false &&
                         dedupedRows.length === 0 ? (
                         <div
                           className="my-3"
                           data-testid="db-row-table-no-results"
+                          // Empty-state PROSE uses the body font (Inter), not the
+                          // results table's IBM Plex Mono (which is for data/log rows).
+                          style={{ fontFamily: 'var(--mantine-font-family)' }}
                         >
                           No results found.
                           <Text mt="sm">
@@ -1240,14 +1358,26 @@ export const RawLogTable = memo(
   },
 );
 
-export function appendSelectWithPrimaryAndPartitionKey(
+export function appendSelectWithAdditionalKeys(
   select: SelectList,
   primaryKeys: string,
   partitionKey: string,
+  extraKeys: string[] = [],
 ): { select: SelectList; additionalKeysLength: number } {
+  // Include both the raw key expressions (e.g. toStartOfFiveMinutes(Timestamp))
+  // and the extracted column references (e.g. Timestamp). The raw expressions
+  // are needed so the row WHERE clause can filter on PK expressions directly.
   const partitionKeyArr = extractColumnReferencesFromKey(partitionKey);
   const primaryKeyArr = extractColumnReferencesFromKey(primaryKeys);
-  const allKeys = new Set([...partitionKeyArr, ...primaryKeyArr]);
+  const rawPartitionExprs = splitAndTrimWithBracket(partitionKey);
+  const rawPrimaryExprs = splitAndTrimWithBracket(primaryKeys);
+  const allKeys = new Set([
+    ...partitionKeyArr,
+    ...primaryKeyArr,
+    ...rawPartitionExprs,
+    ...rawPrimaryExprs,
+    ...extraKeys,
+  ]);
   if (typeof select === 'string') {
     const selectSplit = splitAndTrimWithBracket(select);
     const selectColumns = new Set(selectSplit);
@@ -1273,8 +1403,9 @@ function getSelectLength(select: SelectList): number {
   }
 }
 
-export function useConfigWithPrimaryAndPartitionKey(
-  config: ChartConfigWithDateRange,
+export function useConfigWithAdditionalSelect(
+  config: BuilderChartConfigWithDateRange,
+  sourceId?: string,
 ) {
   const { data: tableMetadata } = useTableMetadata({
     databaseName: config.from.databaseName,
@@ -1282,27 +1413,73 @@ export function useConfigWithPrimaryAndPartitionKey(
     connectionId: config.connection,
   });
 
+  // Only check for row-ID columns for row-level queries (sourceId present).
+  // Skip for aggregate queries (e.g. patterns) where extra keys are irrelevant.
+  const { data: columns } = useColumns(
+    {
+      databaseName: config.from.databaseName,
+      tableName: config.from.tableName,
+      connectionId: config.connection,
+    },
+    { enabled: !!sourceId },
+  );
+
   const primaryKey = tableMetadata?.primary_key;
   const partitionKey = tableMetadata?.partition_key;
 
-  const mergedConfig = useMemo(() => {
+  return useMemo(() => {
     if (primaryKey == null || partitionKey == null) {
       return undefined;
     }
 
-    const { select, additionalKeysLength } =
-      appendSelectWithPrimaryAndPartitionKey(
-        config.select,
-        primaryKey,
-        partitionKey,
-      );
-    return { ...config, select, additionalKeysLength };
-  }, [primaryKey, partitionKey, config]);
+    let extraKeys: string[] = [];
 
-  return mergedConfig;
+    if (sourceId) {
+      const engineFull = tableMetadata?.engine_full ?? '';
+
+      const hasBlockColumns =
+        engineFull.includes('enable_block_number_column = 1') &&
+        engineFull.includes('enable_block_offset_column = 1');
+
+      if (hasBlockColumns) {
+        extraKeys = ['_block_number', '_block_offset'];
+      } else if (columns?.some(c => c.name === '__hdx_id')) {
+        extraKeys = ['__hdx_id'];
+      }
+    }
+
+    const { select, additionalKeysLength } = appendSelectWithAdditionalKeys(
+      config.select,
+      primaryKey,
+      partitionKey,
+      extraKeys,
+    );
+
+    // When block columns are available, the PK + partition + block columns
+    // uniquely identify a row. Compute the full set of key column names
+    // (both raw expressions like toStartOfFiveMinutes(Timestamp) and bare
+    // column references like Timestamp, ServiceName) so the row WHERE clause
+    // can use only these, avoiding expensive index loading on large columns
+    // like Body.
+    const hasBlockColumns =
+      extraKeys.includes('_block_number') &&
+      extraKeys.includes('_block_offset');
+
+    const rowKeyColumns = hasBlockColumns
+      ? new Set([
+          ...splitAndTrimWithBracket(partitionKey),
+          ...splitAndTrimWithBracket(primaryKey),
+          ...extractColumnReferencesFromKey(partitionKey),
+          ...extractColumnReferencesFromKey(primaryKey),
+          ...extraKeys,
+        ])
+      : undefined;
+
+    return { ...config, select, additionalKeysLength, rowKeyColumns };
+  }, [primaryKey, partitionKey, config, tableMetadata, columns, sourceId]);
 }
 
-export function selectColumnMapWithoutAdditionalKeys(
+function selectColumnMapWithoutAdditionalKeys(
   selectMeta: ColumnMetaType[] | undefined,
   additionalKeysLength: number | undefined,
 ): Map<
@@ -1352,8 +1529,12 @@ function DBSqlRowTableComponent({
   onSortingChange,
   initialSortBy,
   variant = 'default',
+  enableSmallFirstWindow,
+  tableId,
+  errorVariant,
+  onResolvedColumnsChange,
 }: {
-  config: ChartConfigWithDateRange;
+  config: BuilderChartConfigWithDateRange;
   sourceId?: string;
   onRowDetailsClick?: (rowWhere: RowWhereResult) => void;
   highlightedLineId?: string;
@@ -1375,8 +1556,14 @@ function DBSqlRowTableComponent({
   initialSortBy?: SortingState;
   onSortingChange?: (v: SortingState | null) => void;
   variant?: DBRowTableVariant;
+  enableSmallFirstWindow?: boolean;
+  tableId?: string;
+  errorVariant?: ChartErrorStateVariant;
+  onResolvedColumnsChange?: (meta: ColumnMetaType[]) => void;
 }) {
   const { data: me } = api.useMe();
+  const { toggleColumn, displayedColumns: contextDisplayedColumns } =
+    useContext(RowSidePanelContext);
 
   const [orderBy, setOrderBy] = useState<SortingState[number] | null>(
     initialSortBy?.[0] ?? null,
@@ -1430,7 +1617,7 @@ function DBSqlRowTableComponent({
     return base;
   }, [me, config, orderByArray]);
 
-  const mergedConfig = useConfigWithPrimaryAndPartitionKey(mergedConfigObj);
+  const mergedConfig = useConfigWithAdditionalSelect(mergedConfigObj, sourceId);
 
   const { data, fetchNextPage, hasNextPage, isFetching, isError, error } =
     useOffsetPaginatedQuery(mergedConfig ?? config, {
@@ -1438,6 +1625,7 @@ function DBSqlRowTableComponent({
         enabled && mergedConfig != null && getSelectLength(config.select) > 0,
       isLive,
       queryKeyPrefix,
+      enableSmallFirstWindow,
     });
 
   // The first N columns are the select columns from the user
@@ -1454,6 +1642,43 @@ function DBSqlRowTableComponent({
   }, [data, mergedConfig]);
 
   const columns = useMemo(() => Array.from(columnMap.keys()), [columnMap]);
+
+  // CH may rewrite column names in the result set (e.g. expression formatting),
+  // so we cannot rely on string matching between CH column names and SELECT expressions.
+  // Instead, use position-based mapping: columns[i] (CH name) corresponds to
+  // contextDisplayedColumns[i] (the original SELECT expression), since both arrays
+  // are ordered by the user's SELECT list.
+  const onRemoveColumnFromTable = useCallback(
+    (chColumnName: string) => {
+      if (!toggleColumn || !contextDisplayedColumns) return;
+
+      const colIdx = columns.indexOf(chColumnName);
+      if (colIdx >= 0 && colIdx < contextDisplayedColumns.length) {
+        toggleColumn(contextDisplayedColumns[colIdx]);
+        return;
+      }
+
+      // Fallback: direct match
+      if (contextDisplayedColumns.includes(chColumnName)) {
+        toggleColumn(chColumnName);
+        return;
+      }
+
+      // Alias match: find the SELECT expression that ends with "AS chColumnName"
+      const exprWithAlias = contextDisplayedColumns.find(expr =>
+        expr.trim().toLowerCase().endsWith(` as ${chColumnName.toLowerCase()}`),
+      );
+      if (exprWithAlias) {
+        toggleColumn(exprWithAlias);
+      } else {
+        console.warn(
+          'onRemoveColumnFromTable: could not find SELECT expr for',
+          chColumnName,
+        );
+      }
+    },
+    [toggleColumn, contextDisplayedColumns, columns],
+  );
 
   // FIXME: do this on the db side ?
   // Or, the react-table should render object-type cells as JSON.stringify
@@ -1486,7 +1711,11 @@ function DBSqlRowTableComponent({
     [data],
   );
 
-  const getRowWhere = useRowWhere({ meta: data?.meta, aliasMap });
+  const getRowWhere = useRowWhere({
+    meta: data?.meta,
+    aliasMap,
+    primaryKeyColumns: mergedConfig?.rowKeyColumns,
+  });
 
   const _onRowDetailsClick = useCallback(
     (row: Record<string, any>) => {
@@ -1501,13 +1730,24 @@ function DBSqlRowTableComponent({
     }
   }, [isError, onError, error]);
 
+  // Surface the result-set column types upward.
+  // `data?.meta` keeps a stable identity per query result.
+  useEffect(() => {
+    if (data?.meta != null && data.meta.length > 0) {
+      onResolvedColumnsChange?.(data.meta);
+    }
+  }, [data?.meta, onResolvedColumnsChange]);
+
   const { data: source } = useSource({ id: sourceId });
   const patternColumn = columns[columns.length - 1];
   const groupedPatterns = useGroupedPatterns({
     config,
-    samples: 10_000,
+    samples: DENOISE_SAMPLE_SIZE,
     bodyValueExpression: patternColumn ?? '',
-    severityTextExpression: source?.severityTextExpression ?? '',
+    severityTextExpression:
+      (source?.kind === SourceKind.Log
+        ? source.severityTextExpression
+        : undefined) ?? '',
     totalCount: undefined,
     enabled: denoiseResults,
   });
@@ -1515,7 +1755,9 @@ function DBSqlRowTableComponent({
     queryKey: ['noisy-patterns', config],
     queryFn: async () => {
       return Object.values(groupedPatterns.data).filter(
-        p => p.count / (groupedPatterns.sampledRowCount ?? 1) > 0.1,
+        p =>
+          p.count / (groupedPatterns.sampledRowCount ?? 1) >
+          DENOISE_NOISE_THRESHOLD,
       );
     },
     enabled:
@@ -1622,6 +1864,7 @@ function DBSqlRowTableComponent({
         generateRowId={getRowWhere}
         isError={isError}
         error={error ?? undefined}
+        errorVariant={errorVariant}
         columnTypeMap={columnMap}
         dateRange={config.dateRange}
         loadingDate={loadingDate}
@@ -1636,6 +1879,8 @@ function DBSqlRowTableComponent({
         sortOrder={orderByArray}
         getRowWhere={getRowWhere}
         variant={variant}
+        onRemoveColumn={toggleColumn ? onRemoveColumnFromTable : undefined}
+        tableId={tableId}
       />
     </>
   );
