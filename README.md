@@ -1,13 +1,13 @@
-# hyperi-hyperdx
+# dfe-hyperdx
 
-This repository is a clone of our HyperDX fork at
-[https://github.com/hyperi-io/hyperdx](https://github.com/hyperi-io/hyperdx).
-The purpose of this repository is to pin to the version in our HyperDX fork.
-When performing maintenance, you should:
+This repository is the DFE fork of upstream
+[HyperDX](https://github.com/hyperdxio/hyperdx), embedded in the DFE platform as
+its visualisation and search layer. It is the ACTIVE fork - all DFE
+customisation lives here, one clean hop off upstream.
 
-1. First upgrade the fork at
-   [hyperi-io/hyperdx](https://github.com/hyperi-io/hyperdx)
-2. Then merge all changes with this private repository
+See [FORK.md](FORK.md) for the catalogue of what we changed and why, plus the
+upstream-sync recovery plan. Upstream syncs merge `hyperdxio/hyperdx` into this
+repo (`git rerere` replays our resolved conflicts).
 
 ## Original HyperDX Documentation
 
@@ -20,18 +20,23 @@ configuration, features, and more, please refer to:
 ## Quick Links
 
 - [HyperDX Official Documentation](https://www.hyperdx.io/docs)
-- [HyperDX GitHub Repository](https://github.com/hyperi-io/hyperdx)
-- [Our HyperDX Fork](https://github.com/hyperi-io/hyperdx)
+- [Upstream HyperDX](https://github.com/hyperdxio/hyperdx)
+- [FORK.md](FORK.md) - our divergence catalogue + upstream-sync recovery plan
 
-## Maintenance Workflow
+## Maintenance Workflow (upstream sync)
 
-When updating this repository:
+This is the single active fork - there is no second repo to hop through. To pull
+a newer upstream:
 
-1. **Upgrade the fork**: Update
-   [hyperi-io/hyperdx](https://github.com/hyperi-io/hyperdx) first
-2. **Merge changes**: Pull and merge changes from the fork into this repository
-3. **Test dashboards**: Verify that pinned dashboards work correctly with the
-   updated version
+1. **Add the upstream remote** (one-time):
+   `git remote add upstream https://github.com/hyperdxio/hyperdx.git`
+2. **Merge the target upstream tag** on a `sync/<tag>` branch. `git rerere`
+   replays our previously-resolved conflicts; conflicts should land only on
+   pristine upstream files.
+3. **Build + test** (see [DFE-DOCKER-LOCAL.md](DFE-DOCKER-LOCAL.md)), then open a
+   PR and verify pinned dashboards still work.
+
+Full recovery plan + change catalogue: [FORK.md](FORK.md).
 
 ### Running the app for development
 
