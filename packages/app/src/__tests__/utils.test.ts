@@ -1357,9 +1357,15 @@ describe('getColorFromCSSToken', () => {
       throw new Error('getComputedStyle unavailable');
     });
 
-    // Defaults to HyperDX in jsdom because the document has no
-    // theme-clickstack class.
-    expect(getColorFromCSSToken('chart-success')).toBe('#3ca951');
+    // Defaults to DFE in jsdom: the document carries neither theme-dfe nor
+    // theme-clickstack, and this fork's resolver falls through to 'dfe'
+    // (utils.ts: `isDFE ? 'dfe' : isClickStack ? 'clickstack' : 'dfe'`) -- DFE
+    // branding is the default here, not upstream's. Upstream asserts its own
+    // default (#3ca951); this expectation is FORK DIVERGENCE, not a bug, and it
+    // is why the 2.29 sync merged our utils.ts against upstream's test and left
+    // main red -- which blocked the fork's first image publish entirely.
+    // Only `success` differs; warning/error are identical across brands.
+    expect(getColorFromCSSToken('chart-success')).toBe('#00c28a');
     expect(getColorFromCSSToken('chart-warning')).toBe('#efb118');
     expect(getColorFromCSSToken('chart-error')).toBe('#ff725c');
   });

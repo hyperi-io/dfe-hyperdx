@@ -19,7 +19,14 @@ import { COLORS } from '@/utils';
 // move expected and actual in lockstep. Keep in sync with
 // `_chart-categorical-tokens.scss` (`chart-semantic-tokens` mixin) and
 // `SEMANTIC_CHART_PALETTE` in `packages/app/src/utils.ts`.
-const SEMANTIC_INFO_HEX = '#437eef';
+//
+// These are the DFE brand hexes, per that instruction: this fork's brand
+// resolver falls through to 'dfe' when the document carries no theme class
+// (utils.ts), which is the case in jsdom -- so the DFE palette IS the default
+// here, where upstream's is #437eef. Fork divergence, not a regression; the 2.29
+// sync merged our utils.ts against upstream's test and left main red, which
+// blocked the fork's first image publish.
+const SEMANTIC_INFO_HEX = '#2ea4f6';
 const SEMANTIC_ERROR_HEX = '#ff725c';
 
 describe('ChartUtils', () => {

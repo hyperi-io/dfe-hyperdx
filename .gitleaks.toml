@@ -17,16 +17,53 @@ paths = [
   # Git submodules (have their own scanning)
   '''(^|/)ci/''',
   '''(^|/)ai/''',
-  # Uncomment and customise as needed
-  # '''tests/.*\.py''',
-  # '''tests/fixtures/.*''',
-  # '''.env.example''',
+
+  # --- UPSTREAM HyperDX false positives (verified 2026-07-17) ---------------
+  # These blocked the FIRST EVER publish of the fork image. Every finding was
+  # inspected; none is a credential. They are allowlisted BY PATH (test/fixture
+  # /dev-default files only) rather than by disabling gitleaks or blanket-muting
+  # a rule -- a real secret in application code still fails the gate.
+  #
+  # Test suites that must contain fake secrets to test anything:
+  #   redactSecrets.test.ts flags rule `private-key` at lines 187/207 -- they are
+  #   TRUNCATED stub blocks ("-----BEGIN OPENSSH PRIVATE KEY-----" + 44 chars of
+  #   base64) inside `it('redacts a PKCS#8 PRIVATE KEY block')`. A test for secret
+  #   REDACTION cannot be written without them.
+  '''(^|/)packages/api/src/utils/__tests__/redactSecrets\.test\.ts$''',
+  '''(^|/)packages/common-utils/src/__tests__/metadata\.test\.ts$''',
+  '''(^|/)packages/api/src/routers/aggregator/__tests__/root\.test\.ts$''',
+  '''(^|/)packages/app/src/components/ClickStackOnboarding/__tests__/installSnippets\.test\.ts$''',
+  '''(^|/)packages/app/tests/e2e/fixtures/e2e-fixtures\.json$''',
+  '''(^|/)packages/app/tests/e2e/utils/constants\.ts$''',
 ]
 
 # Regex patterns for known false positives
 regexes = [
   '''^[a-zA-Z0-9].*XXXXXXXXXXXXXXXXXXXXXXXX|YYYYYYYYYYYYYYYYYYYYYYYY$''', # packages/api/src/routers/api/__tests__/webhooks.test.ts | packages/app/src/components/TeamSettings/WebhookForm.tsx
   '''abc123-def456-ghi789''',                                             # packages/api/src/routers/api/__tests__/webhooks.test.ts
+
+  # UPSTREAM HyperDX's OWN public usage-stats ingest key. Not ours, not secret:
+  # it is committed in the public hyperdxio/hyperdx OSS repo and ships inside every
+  # copy of the product (packages/api/src/tasks/usageStats.ts ->
+  # https://in-otel.hyperdx.io/v1/logs, service "hyperdx-oss-usage-stats"). It is
+  # in ~1900 commits of inherited history, so it cannot be removed without a
+  # history rewrite, and it is not ours to rotate.
+  #
+  # SEPARATELY: we DISABLE that phone-home in every DFE deploy
+  # (USAGE_STATS_ENABLED=false -- see the hyperdx chart). Its default is ON
+  # (config.ts: `env.USAGE_STATS_ENABLED !== 'false'`), which for a product other
+  # organisations deploy into their OWN estates would mean a customer's DFE
+  # silently reporting to a third party. Allowlisting the string here is about the
+  # scanner; the deploy default is the actual fix.
+  '''3f26ffad-14cf-4fb7-9dc9-e64fa0b84ee0''',
+
+  # ClickHouse ROLLUP TABLE NAMES, not credentials. gitleaks' generic-api-key
+  # rule fires on the DEFAULT_SOURCES JSON because the surrounding key is named
+  # "keyRollupTable" -- it sees `..."key...":"otel_logs_key_rollup_15m"` and calls
+  # the table name a secret. Hits docker-compose.yml, packages/api/.env.development
+  # and docker/hyperdx/entry.local.base.sh. Matched by VALUE, deliberately, so those
+  # files stay scanned for anything that IS a secret. Verified 2026-07-17.
+  '''^otel_\w+_key_rollup_\w+$''',
   #     '''YOUR_.*_TOKEN''',
   #     '''your-.*-token''',
   #     '''test-token''',
