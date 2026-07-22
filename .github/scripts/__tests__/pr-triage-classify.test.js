@@ -8,8 +8,12 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  isTestFile, isTrivialFile, isCriticalFile,
-  computeSignals, determineTier, buildTierComment,
+  isTestFile,
+  isTrivialFile,
+  isCriticalFile,
+  computeSignals,
+  determineTier,
+  buildTierComment,
 } = require('../pr-triage-classify');
 
 // ── Test helpers ─────────────────────────────────────────────────────────────
@@ -159,9 +163,9 @@ describe('computeSignals', () => {
   it('separates prod, test, and trivial file line counts', () => {
     const pr = makePR('alice', 'feature/foo');
     const files = [
-      makeFile('packages/app/src/Foo.tsx', 20, 5),                     // prod: 25 lines
-      makeFile('packages/app/src/__tests__/Foo.test.tsx', 50, 0),      // test: 50 lines
-      makeFile('README.md', 2, 1),                                      // trivial: excluded
+      makeFile('packages/app/src/Foo.tsx', 20, 5), // prod: 25 lines
+      makeFile('packages/app/src/__tests__/Foo.test.tsx', 50, 0), // test: 50 lines
+      makeFile('README.md', 2, 1), // trivial: excluded
     ];
     const s = computeSignals(pr, files);
     assert.equal(s.prodFiles.length, 1);
@@ -173,7 +177,7 @@ describe('computeSignals', () => {
     const pr = makePR('alice', 'feature/foo');
     const files = [
       makeFile('packages/app/src/Foo.tsx', 20, 5),
-      makeFile('.changeset/witty-foxes-run.md', 5, 0),  // trivial
+      makeFile('.changeset/witty-foxes-run.md', 5, 0), // trivial
     ];
     const s = computeSignals(pr, files);
     assert.equal(s.prodFiles.length, 1);
@@ -183,29 +187,41 @@ describe('computeSignals', () => {
   it('detects agent branches by prefix', () => {
     for (const prefix of ['claude/', 'agent/', 'ai/']) {
       const s = computeSignals(makePR('alice', `${prefix}fix-thing`), []);
-      assert.ok(s.isAgentBranch, `expected isAgentBranch for prefix "${prefix}"`);
+      assert.ok(
+        s.isAgentBranch,
+        `expected isAgentBranch for prefix "${prefix}"`,
+      );
     }
-    assert.ok(!computeSignals(makePR('alice', 'feature/normal'), []).isAgentBranch);
+    assert.ok(
+      !computeSignals(makePR('alice', 'feature/normal'), []).isAgentBranch,
+    );
   });
 
   it('detects bot authors', () => {
-    assert.ok(computeSignals(makePR('dependabot[bot]', 'dependabot/npm/foo'), []).isBotAuthor);
+    assert.ok(
+      computeSignals(makePR('dependabot[bot]', 'dependabot/npm/foo'), [])
+        .isBotAuthor,
+    );
     assert.ok(!computeSignals(makePR('alice', 'feature/foo'), []).isBotAuthor);
   });
 
   it('sets allFilesTrivial when every file is trivial', () => {
     const files = [makeFile('README.md'), makeFile('yarn.lock')];
-    assert.ok(computeSignals(makePR('alice', 'docs/update'), files).allFilesTrivial);
+    assert.ok(
+      computeSignals(makePR('alice', 'docs/update'), files).allFilesTrivial,
+    );
   });
 
   it('does not set allFilesTrivial for mixed files', () => {
     const files = [makeFile('README.md'), makeFile('packages/app/src/Foo.tsx')];
-    assert.ok(!computeSignals(makePR('alice', 'feat/foo'), files).allFilesTrivial);
+    assert.ok(
+      !computeSignals(makePR('alice', 'feat/foo'), files).allFilesTrivial,
+    );
   });
 
   it('detects cross-layer changes (frontend + backend)', () => {
     const files = [
-      makeFile('packages/app/src/NewFeature.tsx'),         // frontend
+      makeFile('packages/app/src/NewFeature.tsx'), // frontend
       makeFile('packages/api/src/services/newFeature.ts'), // backend (not models/routers)
     ];
     const s = computeSignals(makePR('alice', 'feat/new'), files);
@@ -243,7 +259,7 @@ describe('computeSignals', () => {
   it('blocks agent branch from Tier 2 when prod file count exceeds threshold', () => {
     // 5 prod files > AGENT_TIER2_MAX_PROD_FILES (3)
     const files = Array.from({ length: 5 }, (_, i) =>
-      makeFile(`packages/app/src/File${i}.tsx`, 5, 2)
+      makeFile(`packages/app/src/File${i}.tsx`, 5, 2),
     );
     const s = computeSignals(makePR('alice', 'claude/feature'), files);
     assert.ok(s.agentBlocksTier2);
@@ -263,187 +279,274 @@ describe('computeSignals', () => {
 describe('determineTier', () => {
   describe('Tier 1', () => {
     it('bot author', () => {
-      assert.equal(classify('dependabot[bot]', 'dependabot/npm/foo', [
-        makeFile('package.json', 5, 3),
-      ]), 1);
+      assert.equal(
+        classify('dependabot[bot]', 'dependabot/npm/foo', [
+          makeFile('package.json', 5, 3),
+        ]),
+        1,
+      );
     });
 
     // package.json is not in TIER1_PATTERNS (it's a production file), but bot
     // author short-circuits to Tier 1 before the trivial-file check fires.
     it('bot author with package.json (non-trivial file) is still Tier 1', () => {
-      assert.equal(classify('dependabot[bot]', 'dependabot/npm/lodash', [
-        makeFile('package.json', 5, 3),
-        makeFile('packages/api/package.json', 2, 2),
-      ]), 1);
+      assert.equal(
+        classify('dependabot[bot]', 'dependabot/npm/lodash', [
+          makeFile('package.json', 5, 3),
+          makeFile('packages/api/package.json', 2, 2),
+        ]),
+        1,
+      );
     });
 
     it('all trivial files (docs + lock)', () => {
-      assert.equal(classify('alice', 'docs/update-readme', [
-        makeFile('README.md', 10, 2),
-        makeFile('docs/setup.md', 5, 0),
-        makeFile('yarn.lock', 100, 80),
-      ]), 1);
+      assert.equal(
+        classify('alice', 'docs/update-readme', [
+          makeFile('README.md', 10, 2),
+          makeFile('docs/setup.md', 5, 0),
+          makeFile('yarn.lock', 100, 80),
+        ]),
+        1,
+      );
     });
 
     it('changeset-only PR', () => {
-      assert.equal(classify('alice', 'release/v2.1', [
-        makeFile('.changeset/witty-foxes-run.md', 4, 0),
-      ]), 1);
+      assert.equal(
+        classify('alice', 'release/v2.1', [
+          makeFile('.changeset/witty-foxes-run.md', 4, 0),
+        ]),
+        1,
+      );
     });
   });
 
   describe('Tier 4', () => {
     it('touches auth middleware', () => {
-      assert.equal(classify('alice', 'fix/auth-bug', [
-        makeFile('packages/api/src/middleware/auth.ts', 20, 5),
-      ]), 4);
+      assert.equal(
+        classify('alice', 'fix/auth-bug', [
+          makeFile('packages/api/src/middleware/auth.ts', 20, 5),
+        ]),
+        4,
+      );
     });
 
     it('touches ClickHouse docker config', () => {
-      assert.equal(classify('alice', 'infra/clickhouse-update', [
-        makeFile('docker/clickhouse/config.xml', 10, 2),
-      ]), 4);
+      assert.equal(
+        classify('alice', 'infra/clickhouse-update', [
+          makeFile('docker/clickhouse/config.xml', 10, 2),
+        ]),
+        4,
+      );
     });
 
     it('touches main.yml or release.yml', () => {
-      assert.equal(classify('alice', 'ci/add-step', [
-        makeFile('.github/workflows/main.yml', 15, 3),
-      ]), 4);
-      assert.equal(classify('alice', 'ci/release-fix', [
-        makeFile('.github/workflows/release.yml', 8, 2),
-      ]), 4);
+      assert.equal(
+        classify('alice', 'ci/add-step', [
+          makeFile('.github/workflows/main.yml', 15, 3),
+        ]),
+        4,
+      );
+      assert.equal(
+        classify('alice', 'ci/release-fix', [
+          makeFile('.github/workflows/release.yml', 8, 2),
+        ]),
+        4,
+      );
     });
 
     it('non-critical workflow-only changes are Tier 1 (workflow files are trivial)', () => {
-      assert.equal(classify('alice', 'ci/add-triage-step', [
-        makeFile('.github/workflows/pr-triage.yml', 10, 2),
-      ]), 1);
+      assert.equal(
+        classify('alice', 'ci/add-triage-step', [
+          makeFile('.github/workflows/pr-triage.yml', 10, 2),
+        ]),
+        1,
+      );
     });
 
     it('does NOT flag test files under critical paths as Tier 4', () => {
       // e.g. packages/api/src/tasks/tests/util.test.ts should not be critical
-      assert.equal(classify('alice', 'feat/alert-tests', [
-        makeFile('packages/api/src/tasks/tests/util.test.ts', 40, 0),
-        makeFile('packages/api/src/tasks/checkAlerts/tests/checkAlerts.test.ts', 80, 0),
-      ]), 2);
+      assert.equal(
+        classify('alice', 'feat/alert-tests', [
+          makeFile('packages/api/src/tasks/tests/util.test.ts', 40, 0),
+          makeFile(
+            'packages/api/src/tasks/checkAlerts/tests/checkAlerts.test.ts',
+            80,
+            0,
+          ),
+        ]),
+        2,
+      );
     });
 
     it('touches core user/team models', () => {
-      assert.equal(classify('alice', 'feat/user-fields', [
-        makeFile('packages/api/src/models/user.ts', 10, 2),
-      ]), 4);
+      assert.equal(
+        classify('alice', 'feat/user-fields', [
+          makeFile('packages/api/src/models/user.ts', 10, 2),
+        ]),
+        4,
+      );
     });
 
     it('escalates Tier 3 human branch past 1000 prod lines', () => {
-      assert.equal(classify('alice', 'feat/huge-refactor', [
-        makeFile('packages/app/src/BigComponent.tsx', 600, 450),  // 1050 lines
-      ]), 4);
+      assert.equal(
+        classify('alice', 'feat/huge-refactor', [
+          makeFile('packages/app/src/BigComponent.tsx', 600, 450), // 1050 lines
+        ]),
+        4,
+      );
     });
 
     it('escalates Tier 3 agent branch past 400 prod lines (stricter threshold)', () => {
-      assert.equal(classify('alice', 'claude/large-feature', [
-        makeFile('packages/app/src/BigFeature.tsx', 300, 120),  // 420 lines
-      ]), 4);
+      assert.equal(
+        classify('alice', 'claude/large-feature', [
+          makeFile('packages/app/src/BigFeature.tsx', 300, 120), // 420 lines
+        ]),
+        4,
+      );
     });
   });
 
   describe('Tier 2', () => {
     it('small single-layer frontend change', () => {
-      assert.equal(classify('alice', 'fix/button-style', [
-        makeFile('packages/app/src/components/Button.tsx', 20, 10),
-      ]), 2);
+      assert.equal(
+        classify('alice', 'fix/button-style', [
+          makeFile('packages/app/src/components/Button.tsx', 20, 10),
+        ]),
+        2,
+      );
     });
 
     it('small single-layer backend change (not models/routers)', () => {
-      assert.equal(classify('alice', 'fix/service-bug', [
-        makeFile('packages/api/src/services/logs.ts', 30, 15),
-      ]), 2);
+      assert.equal(
+        classify('alice', 'fix/service-bug', [
+          makeFile('packages/api/src/services/logs.ts', 30, 15),
+        ]),
+        2,
+      );
     });
 
     it('agent branch small enough to qualify (PR #1431 pattern: 1 file, 16 lines)', () => {
-      assert.equal(classify('mikeshi', 'claude/fix-mobile-nav', [
-        makeFile('packages/app/src/AppNav.tsx', 11, 5),
-      ]), 2);
+      assert.equal(
+        classify('mikeshi', 'claude/fix-mobile-nav', [
+          makeFile('packages/app/src/AppNav.tsx', 11, 5),
+        ]),
+        2,
+      );
     });
 
     it('agent branch exactly at file limit (3 prod files, small lines)', () => {
       const files = Array.from({ length: 3 }, (_, i) =>
-        makeFile(`packages/app/src/File${i}.tsx`, 10, 5)
+        makeFile(`packages/app/src/File${i}.tsx`, 10, 5),
       );
       assert.equal(classify('alice', 'claude/small-multi', files), 2);
     });
 
     it('human branch at 249 prod lines (just under threshold)', () => {
-      assert.equal(classify('alice', 'fix/component', [
-        makeFile('packages/app/src/Foo.tsx', 200, 49),  // 249 lines
-      ]), 2);
+      assert.equal(
+        classify('alice', 'fix/component', [
+          makeFile('packages/app/src/Foo.tsx', 200, 49), // 249 lines
+        ]),
+        2,
+      );
     });
 
     it('focused new UI component at 238 prod lines qualifies for Tier 2 (PR #2175 pattern)', () => {
-      assert.equal(classify('mikeshi', 'cursor/add-feedback-widget', [
-        makeFile('packages/app/src/components/AppNav/AppNavFeedback.tsx', 217, 0),
-        makeFile('packages/app/src/components/AppNav/AppNav.module.scss', 17, 0),
-        makeFile('packages/app/src/components/AppNav/AppNav.tsx', 4, 0),
-      ]), 2);
+      assert.equal(
+        classify('mikeshi', 'cursor/add-feedback-widget', [
+          makeFile(
+            'packages/app/src/components/AppNav/AppNavFeedback.tsx',
+            217,
+            0,
+          ),
+          makeFile(
+            'packages/app/src/components/AppNav/AppNav.module.scss',
+            17,
+            0,
+          ),
+          makeFile('packages/app/src/components/AppNav/AppNav.tsx', 4, 0),
+        ]),
+        2,
+      );
     });
 
     it('agent branch at exactly 49 prod lines qualifies for Tier 2', () => {
-      assert.equal(classify('alice', 'claude/fix', [
-        makeFile('packages/app/src/Foo.tsx', 49, 0),
-      ]), 2);
+      assert.equal(
+        classify('alice', 'claude/fix', [
+          makeFile('packages/app/src/Foo.tsx', 49, 0),
+        ]),
+        2,
+      );
     });
   });
 
   describe('Tier 3', () => {
     it('cross-layer change (frontend + backend)', () => {
-      assert.equal(classify('alice', 'feat/new-feature', [
-        makeFile('packages/app/src/NewFeature.tsx', 30, 5),
-        makeFile('packages/api/src/services/newFeature.ts', 40, 10),
-      ]), 3);
+      assert.equal(
+        classify('alice', 'feat/new-feature', [
+          makeFile('packages/app/src/NewFeature.tsx', 30, 5),
+          makeFile('packages/api/src/services/newFeature.ts', 40, 10),
+        ]),
+        3,
+      );
     });
 
     it('touches API routes (non-critical)', () => {
-      assert.equal(classify('alice', 'feat/new-route', [
-        makeFile('packages/api/src/routers/logs.ts', 30, 5),
-      ]), 3);
+      assert.equal(
+        classify('alice', 'feat/new-route', [
+          makeFile('packages/api/src/routers/logs.ts', 30, 5),
+        ]),
+        3,
+      );
     });
 
     it('touches API models (non-critical)', () => {
-      assert.equal(classify('alice', 'feat/model-field', [
-        makeFile('packages/api/src/models/alert.ts', 20, 3),
-      ]), 3);
+      assert.equal(
+        classify('alice', 'feat/model-field', [
+          makeFile('packages/api/src/models/alert.ts', 20, 3),
+        ]),
+        3,
+      );
     });
 
     it('agent branch at exactly 50 prod lines is blocked from Tier 2', () => {
-      assert.equal(classify('alice', 'claude/feature', [
-        makeFile('packages/app/src/Foo.tsx', 50, 0),  // exactly AGENT_TIER2_MAX_LINES — >= blocks it
-      ]), 3);
+      assert.equal(
+        classify('alice', 'claude/feature', [
+          makeFile('packages/app/src/Foo.tsx', 50, 0), // exactly AGENT_TIER2_MAX_LINES — >= blocks it
+        ]),
+        3,
+      );
     });
 
     it('agent branch over prod-line threshold (60 > 50) → Tier 3, not Tier 2', () => {
-      assert.equal(classify('alice', 'claude/medium-feature', [
-        makeFile('packages/app/src/Foo.tsx', 60, 0),
-      ]), 3);
+      assert.equal(
+        classify('alice', 'claude/medium-feature', [
+          makeFile('packages/app/src/Foo.tsx', 60, 0),
+        ]),
+        3,
+      );
     });
 
     it('agent branch over file count threshold (4 files) → Tier 3', () => {
       const files = Array.from({ length: 4 }, (_, i) =>
-        makeFile(`packages/app/src/File${i}.tsx`, 10, 5)
+        makeFile(`packages/app/src/File${i}.tsx`, 10, 5),
       );
       assert.equal(classify('alice', 'claude/big-feature', files), 3);
     });
 
     it('does NOT escalate agent branch at exactly 400 lines (threshold is exclusive)', () => {
       // prodLines > threshold, not >=, so 400 stays at Tier 3
-      assert.equal(classify('alice', 'claude/medium-large', [
-        makeFile('packages/app/src/Feature.tsx', 200, 200),  // exactly 400
-      ]), 3);
+      assert.equal(
+        classify('alice', 'claude/medium-large', [
+          makeFile('packages/app/src/Feature.tsx', 200, 200), // exactly 400
+        ]),
+        3,
+      );
     });
 
     it('large test additions with small prod change stay Tier 3 (PR #2122 pattern)', () => {
       // Alert threshold PR: 1300 total adds but ~1100 are tests
       const files = [
-        makeFile('packages/api/src/services/checkAlerts.ts', 180, 70),       // prod: 250 lines
+        makeFile('packages/api/src/services/checkAlerts.ts', 180, 70), // prod: 250 lines
         makeFile('packages/api/src/__tests__/checkAlerts.test.ts', 1100, 0), // test: excluded
       ];
       // 250 prod lines >= TIER2_MAX_LINES (250) → Tier 3, not Tier 4
@@ -451,15 +554,21 @@ describe('determineTier', () => {
     });
 
     it('human branch at exactly 250 prod lines is Tier 3, not Tier 2', () => {
-      assert.equal(classify('alice', 'fix/component', [
-        makeFile('packages/app/src/Foo.tsx', 150, 100),  // exactly TIER2_MAX_LINES — < is exclusive
-      ]), 3);
+      assert.equal(
+        classify('alice', 'fix/component', [
+          makeFile('packages/app/src/Foo.tsx', 150, 100), // exactly TIER2_MAX_LINES — < is exclusive
+        ]),
+        3,
+      );
     });
 
     it('does NOT escalate human branch at exactly 1000 prod lines', () => {
-      assert.equal(classify('alice', 'feat/medium-large', [
-        makeFile('packages/app/src/Feature.tsx', 500, 500),  // exactly 1000
-      ]), 3);
+      assert.equal(
+        classify('alice', 'feat/medium-large', [
+          makeFile('packages/app/src/Feature.tsx', 500, 500), // exactly 1000
+        ]),
+        3,
+      );
     });
   });
 });
@@ -490,7 +599,9 @@ describe('buildTierComment', () => {
   }
 
   it('always includes the pr-triage sentinel marker', () => {
-    assert.ok(buildTierComment(2, makeSignals()).includes('<!-- pr-triage -->'));
+    assert.ok(
+      buildTierComment(2, makeSignals()).includes('<!-- pr-triage -->'),
+    );
   });
 
   it('includes the correct headline for each tier', () => {
@@ -539,7 +650,9 @@ describe('buildTierComment', () => {
       agentBlocksTier2: true,
       branchName: 'claude/big-feature',
       prodLines: 80,
-      prodFiles: Array.from({ length: 5 }, (_, i) => makeFile(`packages/app/src/File${i}.tsx`)),
+      prodFiles: Array.from({ length: 5 }, (_, i) =>
+        makeFile(`packages/app/src/File${i}.tsx`),
+      ),
     });
     const body = buildTierComment(3, signals);
     assert.ok(body.includes('bumped to Tier 3'));
@@ -578,7 +691,10 @@ describe('buildTierComment', () => {
   });
 
   it('includes bot-author trigger for Tier 1 bot PRs', () => {
-    const body = buildTierComment(1, makeSignals({ isBotAuthor: true, author: 'dependabot[bot]' }));
+    const body = buildTierComment(
+      1,
+      makeSignals({ isBotAuthor: true, author: 'dependabot[bot]' }),
+    );
     assert.ok(body.includes('Bot author'));
   });
 });

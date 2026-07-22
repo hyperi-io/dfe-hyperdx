@@ -33,8 +33,8 @@ a newer upstream:
 2. **Merge the target upstream tag** on a `sync/<tag>` branch. `git rerere`
    replays our previously-resolved conflicts; conflicts should land only on
    pristine upstream files.
-3. **Build + test** (see [DFE-DOCKER-LOCAL.md](DFE-DOCKER-LOCAL.md)), then open a
-   PR and verify pinned dashboards still work.
+3. **Build + test** (see [DFE-DOCKER-LOCAL.md](DFE-DOCKER-LOCAL.md)), then open
+   a PR and verify pinned dashboards still work.
 
 Full recovery plan + change catalogue: [FORK.md](FORK.md).
 

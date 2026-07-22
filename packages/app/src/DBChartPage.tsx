@@ -25,10 +25,10 @@ import {
 
 import api from '@/api';
 import { DEFAULT_CHART_CONFIG } from '@/ChartUtils';
-import { DFE_CHART_AI_ASSISTANT_ENABLED } from '@/dfe/embedFeatures';
 import EditTimeChartForm from '@/components/DBEditTimeChartForm';
 import { InputControlled } from '@/components/InputControlled';
 import { SourceSelectControlled } from '@/components/SourceSelect';
+import { DFE_CHART_AI_ASSISTANT_ENABLED } from '@/dfe/embedFeatures';
 import { useChartAssistant } from '@/hooks/ai';
 import { withAppNav } from '@/layout';
 import { useSources } from '@/source';

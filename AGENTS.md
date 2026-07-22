@@ -194,12 +194,12 @@ efficient and accurate:
    Testing section below for the commands to use.
 
 5. **Ensure a changeset exists before pushing a PR.** Any change to a published
-   package (`@hyperdx/app`, `@hyperdx/api`, `@hyperdx/otel-collector`, etc.) that
-   is user-facing or affects behavior must include a changeset in `.changeset/`.
-   Add one with `yarn changeset` (or create the markdown file by hand following
-   the format of existing entries), choosing the appropriate semver bump, before
-   pushing the branch. Skip only for changes that don't warrant a release (docs,
-   internal tooling, tests, CI).
+   package (`@hyperdx/app`, `@hyperdx/api`, `@hyperdx/otel-collector`, etc.)
+   that is user-facing or affects behavior must include a changeset in
+   `.changeset/`. Add one with `yarn changeset` (or create the markdown file by
+   hand following the format of existing entries), choosing the appropriate
+   semver bump, before pushing the branch. Skip only for changes that don't
+   warrant a release (docs, internal tooling, tests, CI).
 
 ## GitHub Action Workflow (when invoked via @claude)
 
@@ -261,9 +261,9 @@ already be available.
 ### Starting the dev stack
 
 `yarn dev` uses `sh -c` to source `scripts/dev-env.sh`, which contains
-bash-specific syntax (`BASH_SOURCE`). On systems where `/bin/sh` is `dash`
-(e.g. Ubuntu), this fails with "Bad substitution". Work around it by running
-with bash directly:
+bash-specific syntax (`BASH_SOURCE`). On systems where `/bin/sh` is `dash` (e.g.
+Ubuntu), this fails with "Bad substitution". Work around it by running with bash
+directly:
 
 ```bash
 bash -c 'export PATH="/workspace/node_modules/.bin:$PATH" && source ./scripts/dev-env.sh && yarn build:common-utils && dotenvx run --convention=nextjs -- docker compose -p "$HDX_DEV_PROJECT" -f docker-compose.dev.yml up -d && yarn app:dev'

@@ -123,12 +123,12 @@ export default [
       ...nextPlugin.configs['core-web-vitals'].rules,
       ...reactHooksPlugin.configs.recommended.rules,
       ...eslintReactPlugin.configs['recommended-type-checked'].rules,
-      
+
       // Non-default react-hooks rules
       'react-hooks/set-state-in-render': 'error',
       'react-hooks/set-state-in-effect': 'warn',
       'react-hooks/exhaustive-deps': 'error',
-      
+
       // Disable rules from @eslint-react that have equivalent rules enabled in eslint-plugin-react-hooks
       '@eslint-react/rules-of-hooks': 'off',
       '@eslint-react/component-hook-factories': 'off',
@@ -143,7 +143,7 @@ export default [
       '@eslint-react/no-nested-lazy-component-declarations': 'off',
       '@eslint-react/unsupported-syntax': 'off',
       '@eslint-react/use-memo': 'off',
-      
+
       'react-hook-form/no-use-watch': 'error',
       '@eslint-react/no-unstable-default-props': 'error',
       '@typescript-eslint/ban-ts-comment': 'warn',

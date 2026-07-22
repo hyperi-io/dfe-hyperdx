@@ -23,19 +23,20 @@ name: upstream-sync
 
 'on':
   schedule:
-    - cron: '17 6 * * 1'    # Mondays 06:17 UTC -- weekly drift check
+    - cron: '17 6 * * 1' # Mondays 06:17 UTC -- weekly drift check
   workflow_dispatch:
     inputs:
       upstream_ref:
         type: string
         required: false
         default: ''
-        description: "Upstream ref to merge (tag/branch). Empty -> upstream/main."
+        description:
+          'Upstream ref to merge (tag/branch). Empty -> upstream/main.'
 
 permissions:
-  contents: write        # push the bot branch
-  pull-requests: write   # open the sync PR
-  issues: write          # file the drift issue when conflicts remain
+  contents: write # push the bot branch
+  pull-requests: write # open the sync PR
+  issues: write # file the drift issue when conflicts remain
 
 concurrency:
   group: upstream-sync
@@ -113,8 +114,11 @@ jobs:
 
       # Clean / replayed: push the branch, build+test, open a PR for review.
       - name: Push sync branch
-        if: steps.merge.outputs.status == 'clean' || steps.merge.outputs.status == 'replayed'
-        run: git push --force-with-lease origin '${{ steps.merge.outputs.branch }}'
+        if:
+          steps.merge.outputs.status == 'clean' || steps.merge.outputs.status ==
+          'replayed'
+        run:
+          git push --force-with-lease origin '${{ steps.merge.outputs.branch }}'
 
       # THE SAFETY NET. rerere only replays TEXTUAL conflict resolutions; it
       # cannot tell whether an upstream change silently broke the behaviour of
@@ -123,8 +127,10 @@ jobs:
       # solely on "the merge applied": gate on "our deltas still pass".
       - name: Build + test (DFE delta gate)
         id: test
-        if: steps.merge.outputs.status == 'clean' || steps.merge.outputs.status == 'replayed'
-        continue-on-error: true    # a failure must still surface a PR, not just red the run
+        if:
+          steps.merge.outputs.status == 'clean' || steps.merge.outputs.status ==
+          'replayed'
+        continue-on-error: true # a failure must still surface a PR, not just red the run
         run: |
           corepack enable
           yarn install --immutable
@@ -132,7 +138,9 @@ jobs:
           yarn test
 
       - name: Open sync PR
-        if: steps.merge.outputs.status == 'clean' || steps.merge.outputs.status == 'replayed'
+        if:
+          steps.merge.outputs.status == 'clean' || steps.merge.outputs.status ==
+          'replayed'
         env:
           GH_TOKEN: ${{ github.token }}
           TEST: ${{ steps.test.outcome }}

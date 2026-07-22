@@ -2,9 +2,9 @@
 
 Eval framework for benchmarking AI agents against observability MCP servers.
 Generates deterministic synthetic telemetry (traces + logs) with planted
-anomalies, spawns Claude Code as an SRE agent with access to any configured
-MCP, records full trajectories, and grades answers using programmatic checks and
-an LLM-as-judge. The framework is **MCP-agnostic** — compare any combination of
+anomalies, spawns Claude Code as an SRE agent with access to any configured MCP,
+records full trajectories, and grades answers using programmatic checks and an
+LLM-as-judge. The framework is **MCP-agnostic** — compare any combination of
 MCPs: HyperDX vs ClickHouse, feature-branch vs main, two different HyperDX
 instances, or any N-way comparison. MCPs are defined in a config registry and
 selected at run time.
@@ -15,16 +15,16 @@ selected at run time.
 - **`claude` CLI installed** (the harness spawns it in streaming JSON mode)
 - **`ANTHROPIC_API_KEY`** or **`AI_API_KEY`** in `.env.local` at the monorepo
   root (for `run` and `grade` commands)
-- **[`uv`](https://docs.astral.sh/uv/)** installed (only needed if you
-  configure a `stdio`-type ClickHouse MCP — it launches via
+- **[`uv`](https://docs.astral.sh/uv/)** installed (only needed if you configure
+  a `stdio`-type ClickHouse MCP — it launches via
   `uv run --with mcp-clickhouse`)
 
 ## Quick Start
 
 All eval commands derive ClickHouse and API ports from the `HDX_DEV_SLOT`
-environment variable. If your dev stack is running in a different worktree,
-the auto-detected slot won't match. Set `HDX_DEV_SLOT` to the slot your dev
-stack is using — you can find this in the banner printed by `yarn dev`.
+environment variable. If your dev stack is running in a different worktree, the
+auto-detected slot won't match. Set `HDX_DEV_SLOT` to the slot your dev stack is
+using — you can find this in the banner printed by `yarn dev`.
 
 ```bash
 # Set the slot for your session (must match the running dev stack)
@@ -53,10 +53,9 @@ yarn workspace @hyperdx/hdx-eval viewer
 
 ## Recommended: Dual-Slot Eval Setup
 
-For reliable A/B comparison of two HyperDX branches (e.g. feature vs main),
-we recommend reserving two fixed dev slots. This gives you two fully isolated
-HyperDX stacks (separate ClickHouse, MongoDB, API) that can run
-simultaneously.
+For reliable A/B comparison of two HyperDX branches (e.g. feature vs main), we
+recommend reserving two fixed dev slots. This gives you two fully isolated
+HyperDX stacks (separate ClickHouse, MongoDB, API) that can run simultaneously.
 
 ### 1. Start two dev stacks with fixed slots
 
@@ -70,12 +69,12 @@ HDX_DEV_SLOT=99 yarn dev
 
 This gives you:
 
-| | Slot 98 (baseline) | Slot 99 (candidate) |
-|---|---|---|
-| API | `http://localhost:30198` | `http://localhost:30199` |
-| App | `http://localhost:30298` | `http://localhost:30299` |
-| ClickHouse | `http://localhost:30598` | `http://localhost:30599` |
-| MCP | `http://localhost:30198/mcp` | `http://localhost:30199/mcp` |
+|            | Slot 98 (baseline)           | Slot 99 (candidate)          |
+| ---------- | ---------------------------- | ---------------------------- |
+| API        | `http://localhost:30198`     | `http://localhost:30199`     |
+| App        | `http://localhost:30298`     | `http://localhost:30299`     |
+| ClickHouse | `http://localhost:30598`     | `http://localhost:30599`     |
+| MCP        | `http://localhost:30198/mcp` | `http://localhost:30199/mcp` |
 
 ### 2. Run `setup-hyperdx` against each instance
 
@@ -87,9 +86,9 @@ yarn workspace @hyperdx/hdx-eval dev setup-hyperdx --api-url http://localhost:30
 yarn workspace @hyperdx/hdx-eval dev setup-hyperdx --api-url http://localhost:30199
 ```
 
-After setup, `eval.config.json` will have the `hyperdx` MCP pointing at the
-slot it was set up against. You can then manually add the second MCP entry
-(see [MCP Configuration](#mcp-configuration) below).
+After setup, `eval.config.json` will have the `hyperdx` MCP pointing at the slot
+it was set up against. You can then manually add the second MCP entry (see
+[MCP Configuration](#mcp-configuration) below).
 
 ### 3. Seed both ClickHouse instances
 
@@ -111,9 +110,9 @@ yarn workspace @hyperdx/hdx-eval dev run error-root-cause \
 
 ## MCP Configuration
 
-MCPs are defined in `eval.config.json` under the `mcps` key. Each entry
-fully specifies how to connect, which tools to allow/deny, and how to
-anonymize the MCP identity for fair LLM judging.
+MCPs are defined in `eval.config.json` under the `mcps` key. Each entry fully
+specifies how to connect, which tools to allow/deny, and how to anonymize the
+MCP identity for fair LLM judging.
 
 ### Config structure
 
@@ -142,29 +141,29 @@ anonymize the MCP identity for fair LLM judging.
 
 ### Field reference
 
-| Field | Required | Description |
-|---|---|---|
-| `type` | yes | `"http"` for HTTP/SSE transport, `"stdio"` for subprocess |
-| `url` | http | MCP server URL |
-| `headers` | no | HTTP headers (e.g. `Authorization: Bearer ...`) |
-| `command` | stdio | Executable to spawn |
-| `args` | no | Command arguments |
-| `env` | no | Environment variables for the subprocess |
-| `toolPattern` | yes | Glob for allowed tools (e.g. `mcp__myname__*`) |
-| `label` | yes | Human-readable name for reports |
-| `brandTerms` | no | Terms to redact when blinding answers for the LLM judge |
-| `deniedTools` | no | Tool names to deny (reduces tool count for faster schema loading) |
-| `enabled` | no | `false` to exclude from `--mcp all` (default: `true`). Can still be explicitly named with `--mcp name`. |
+| Field         | Required | Description                                                                                             |
+| ------------- | -------- | ------------------------------------------------------------------------------------------------------- |
+| `type`        | yes      | `"http"` for HTTP/SSE transport, `"stdio"` for subprocess                                               |
+| `url`         | http     | MCP server URL                                                                                          |
+| `headers`     | no       | HTTP headers (e.g. `Authorization: Bearer ...`)                                                         |
+| `command`     | stdio    | Executable to spawn                                                                                     |
+| `args`        | no       | Command arguments                                                                                       |
+| `env`         | no       | Environment variables for the subprocess                                                                |
+| `toolPattern` | yes      | Glob for allowed tools (e.g. `mcp__myname__*`)                                                          |
+| `label`       | yes      | Human-readable name for reports                                                                         |
+| `brandTerms`  | no       | Terms to redact when blinding answers for the LLM judge                                                 |
+| `deniedTools` | no       | Tool names to deny (reduces tool count for faster schema loading)                                       |
+| `enabled`     | no       | `false` to exclude from `--mcp all` (default: `true`). Can still be explicitly named with `--mcp name`. |
 
 ### Top-level config sections
 
-| Section | Required | Purpose |
-|---|---|---|
-| `mcps` | yes | MCP registry (see above) |
-| `scenarios` | no | Per-scenario HyperDX Source IDs (populated by `setup-hyperdx`) |
-| `hyperdxApi` | no | HyperDX API URL + access key (used only by `setup-hyperdx`) |
-| `clickhouse` | no | ClickHouse connection for `seed`, `drop`, `runs-instrument` commands |
-| `anchorTime` | no | Fixed "now" anchor (ISO 8601). Auto-generated and saved on first `run`. See [Anchor Time](#anchor-time). |
+| Section      | Required | Purpose                                                                                                  |
+| ------------ | -------- | -------------------------------------------------------------------------------------------------------- |
+| `mcps`       | yes      | MCP registry (see above)                                                                                 |
+| `scenarios`  | no       | Per-scenario HyperDX Source IDs (populated by `setup-hyperdx`)                                           |
+| `hyperdxApi` | no       | HyperDX API URL + access key (used only by `setup-hyperdx`)                                              |
+| `clickhouse` | no       | ClickHouse connection for `seed`, `drop`, `runs-instrument` commands                                     |
+| `anchorTime` | no       | Fixed "now" anchor (ISO 8601). Auto-generated and saved on first `run`. See [Anchor Time](#anchor-time). |
 
 ### Example: HTTP MCP (HyperDX)
 
@@ -189,7 +188,14 @@ anonymize the MCP identity for fair LLM judging.
 {
   "type": "stdio",
   "command": "uv",
-  "args": ["run", "--with", "mcp-clickhouse==0.3.0", "--python", "3.10", "mcp-clickhouse"],
+  "args": [
+    "run",
+    "--with",
+    "mcp-clickhouse==0.3.0",
+    "--python",
+    "3.10",
+    "mcp-clickhouse"
+  ],
   "env": {
     "CLICKHOUSE_HOST": "localhost",
     "CLICKHOUSE_PORT": "30598",
@@ -208,13 +214,13 @@ Each scenario writes into its own ClickHouse tables
 (`eval_<scenario>_otel_traces` / `eval_<scenario>_otel_logs`) whose schema
 mirrors HyperDX's `otel_traces` / `otel_logs` exactly.
 
-| Scenario | Agent Prompt | What's Planted |
-|---|---|---|
-| `error-root-cause` | "Checkout requests are failing..." | `payment-service` DB timeout cascading into `checkout-api` 5xx. 6M+ spans, 12M logs, 5 distractors. |
-| `latency-spike` | "p99 latency on api-server has jumped..." | `/api/orders/search` p99 spike for enterprise tenants. 12M+ spans, 5 regions, 5 distractors. |
-| `noisy-signals` | "We want to cut log ingest cost..." | ~16M logs across composite cells. Each noisy cell has a load-bearing pattern mixed in. |
-| `segmented-regression` | "API error rate has gone up..." | Enterprise x cache-miss errors at ~12%. Single-axis aggregates dilute the signal. |
-| `service-health-check` | "Generate a service health report..." | Peace-time report — no incident, but 4 novel signals to call out. |
+| Scenario               | Agent Prompt                              | What's Planted                                                                                      |
+| ---------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `error-root-cause`     | "Checkout requests are failing..."        | `payment-service` DB timeout cascading into `checkout-api` 5xx. 6M+ spans, 12M logs, 5 distractors. |
+| `latency-spike`        | "p99 latency on api-server has jumped..." | `/api/orders/search` p99 spike for enterprise tenants. 12M+ spans, 5 regions, 5 distractors.        |
+| `noisy-signals`        | "We want to cut log ingest cost..."       | ~16M logs across composite cells. Each noisy cell has a load-bearing pattern mixed in.              |
+| `segmented-regression` | "API error rate has gone up..."           | Enterprise x cache-miss errors at ~12%. Single-axis aggregates dilute the signal.                   |
+| `service-health-check` | "Generate a service health report..."     | Peace-time report — no incident, but 4 novel signals to call out.                                   |
 
 Use `--volume-factor` to scale background row counts for faster iteration.
 Planted anomaly counts stay fixed.
@@ -310,14 +316,13 @@ The viewer shows a **comparison dashboard** when you select a batch:
 
 Combined score = `0.4 * programmatic + 0.6 * judge - toolErrorPenalty`
 
-- **Programmatic (40%)** — regex-based keyword checks against the final
-  answer, defined per-scenario in `ground-truth.json`. Includes both positive
-  checks (must find the right thing) and negative checks (must not blame a
-  distractor).
+- **Programmatic (40%)** — regex-based keyword checks against the final answer,
+  defined per-scenario in `ground-truth.json`. Includes both positive checks
+  (must find the right thing) and negative checks (must not blame a distractor).
 - **LLM-as-judge (60%)** — multi-criteria rubric scored 0-5 by Claude Opus
-  (configurable). Criteria are scenario-specific. Answers are **blinded** —
-  MCP tool names and brand terms are redacted so the judge can't tell which
-  MCP produced the answer.
+  (configurable). Criteria are scenario-specific. Answers are **blinded** — MCP
+  tool names and brand terms are redacted so the judge can't tell which MCP
+  produced the answer.
 - **Tool error penalty** — up to 20% deducted for high tool-call error rates.
 
 ### Baseline + Challengers
@@ -340,22 +345,22 @@ meaningful — both MCPs query the exact same data.
 
 ### Anchor Time
 
-The anchor time is the "now" reference for both seeded data timestamps and
-the agent's system prompt. It is persisted in `eval.config.json` under
-`anchorTime` so that subsequent runs automatically reuse the same value.
+The anchor time is the "now" reference for both seeded data timestamps and the
+agent's system prompt. It is persisted in `eval.config.json` under `anchorTime`
+so that subsequent runs automatically reuse the same value.
 
 - **First run**: if `anchorTime` is not set in the config, the current
   wall-clock time is saved and used. If the scenario tables are empty or
   missing, data is auto-seeded — no separate `seed` step required.
-- **Subsequent runs**: the saved `anchorTime` is read from config. Data
-  is verified to exist before running; if it's missing (e.g. after a
-  `drop`), it's auto-seeded again.
-- **`--anchor-time <iso>`**: override the saved value with a specific
-  timestamp. The new value is saved to config for future runs. Pair with
-  `--reseed` if the data needs to be regenerated to match.
-- **`--live`**: ignore the saved anchor and use wall-clock time. The agent
-  does NOT receive a `FIXED CURRENT TIME` system prompt block. Implies
-  `--reseed` since the data must match the current time.
+- **Subsequent runs**: the saved `anchorTime` is read from config. Data is
+  verified to exist before running; if it's missing (e.g. after a `drop`), it's
+  auto-seeded again.
+- **`--anchor-time <iso>`**: override the saved value with a specific timestamp.
+  The new value is saved to config for future runs. Pair with `--reseed` if the
+  data needs to be regenerated to match.
+- **`--live`**: ignore the saved anchor and use wall-clock time. The agent does
+  NOT receive a `FIXED CURRENT TIME` system prompt block. Implies `--reseed`
+  since the data must match the current time.
 - **`--reseed`**: force re-seed even when data already exists (e.g. after
   changing the seed value or anchor time).
 
@@ -367,5 +372,5 @@ yarn workspace @hyperdx/hdx-eval dev:unit  # watch mode
 ```
 
 Unit tests verify PRNG determinism, planted anomaly invariants, grading
-pipeline, stream parsing, prompt construction, blinding, and report
-aggregation. No ClickHouse needed.
+pipeline, stream parsing, prompt construction, blinding, and report aggregation.
+No ClickHouse needed.

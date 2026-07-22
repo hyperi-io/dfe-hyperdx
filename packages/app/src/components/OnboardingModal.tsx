@@ -70,7 +70,9 @@ function OnboardingModalComponent({
   const [isAutoDetecting, setIsAutoDetecting] = useState(false);
   // We should only try to auto-detect once
   const [hasAutodetected, setHasAutodetected] = useState(false);
-  const [autoDetectedSources, setAutoDetectedSources] = useState<TSource[]>([]);
+  const [_autoDetectedSources, setAutoDetectedSources] = useState<TSource[]>(
+    [],
+  );
 
   const handleAutoDetectSources = useCallback(
     async (connectionId: string) => {

@@ -42,7 +42,9 @@ import {
 import { RowSidePanelContext } from './DBRowSidePanel';
 
 type JSONExtractFn =
-  'JSONExtractString' | 'JSONExtractFloat' | 'JSONExtractBool';
+  | 'JSONExtractString'
+  | 'JSONExtractFloat'
+  | 'JSONExtractBool';
 
 export function buildJSONExtractQuery(
   keyPath: string[],

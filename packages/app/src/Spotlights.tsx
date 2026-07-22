@@ -2,16 +2,11 @@ import * as React from 'react';
 import { useRouter } from 'next/router';
 import { Spotlight, SpotlightActionData } from '@mantine/spotlight';
 import {
-  IconActivityHeartbeat,
-  IconBell,
   IconChartLine,
-  IconDeviceLaptop,
   IconGridDots,
-  IconHelpCircle,
   IconLayout,
   IconLogs,
   IconSearch,
-  IconSettings,
 } from '@tabler/icons-react';
 
 import { useBrandDisplayName, useLogomark } from './theme/ThemeProvider';
@@ -23,8 +18,8 @@ import '@mantine/spotlight/styles.css';
 
 export const useSpotlightActions = () => {
   const router = useRouter();
-  const brandName = useBrandDisplayName();
-  const logomark = useLogomark({ size: 16 });
+  const _brandName = useBrandDisplayName();
+  const _logomark = useLogomark({ size: 16 });
 
   const { data: logViewsData } = useSavedSearches();
   const { data: dashboardsData } = useDashboards();

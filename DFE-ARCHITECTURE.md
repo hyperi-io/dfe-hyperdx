@@ -10,16 +10,16 @@ engine and hunt system.
 
 DFE embeds HyperDX with an **additive-only fork strategy**: authentication is
 handled externally via OIDC through Envoy, authorization is owned by the DFE
-engine (with ClickHouse GRANTs enforcing data access), and MongoDB is replaced by
-FerretDB backed by PostgreSQL. The HyperDX application code is left untouched to
-preserve clean upstream merge compatibility.
+engine (with ClickHouse GRANTs enforcing data access), and MongoDB is replaced
+by FerretDB backed by PostgreSQL. The HyperDX application code is left untouched
+to preserve clean upstream merge compatibility.
 
 > **Note (dfe-hyperdx v1):** The Casbin-based authorization described later in
-> this document has been REMOVED. Every HyperDX route handler already self-scopes
-> its queries by `team`, so tenant isolation holds without Casbin; authorization
-> is now owned by the DFE engine (the policy decision point), with ClickHouse
-> GRANTs enforcing data access. The Casbin sections below are retained as
-> historical design context pending a rewrite to the current model.
+> this document has been REMOVED. Every HyperDX route handler already
+> self-scopes its queries by `team`, so tenant isolation holds without Casbin;
+> authorization is now owned by the DFE engine (the policy decision point), with
+> ClickHouse GRANTs enforcing data access. The Casbin sections below are
+> retained as historical design context pending a rewrite to the current model.
 
 This document is a combination of the following:
 

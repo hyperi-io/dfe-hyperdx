@@ -69,16 +69,17 @@ The CSS vars exist for:
   add per-brand entries to `CATEGORICAL_HEX_BY_TOKEN`.
 
 The categorical hues and semantic chart colors live in a single shared partial,
-`packages/app/src/theme/themes/_chart-categorical-tokens.scss` (`chart-categorical-tokens`
-and `chart-semantic-tokens` mixins). Both brand themes `@use` it and `@include`
-both mixins inside their per-theme `chart-tokens` mixin. Each theme's
-`chart-tokens` mixin is then `@include`'d inside both `[data-mantine-color-scheme]`
-selectors. Sass inlines the bodies at each call site, so the emitted CSS has the
-same per-scheme specificity as a hand-duplicated block would — but the source
-lives in **one place** for both layers. **If you change a categorical hex in the
-shared partial, change it in `CATEGORICAL_HEX_BY_TOKEN` in `utils.ts` too. If
-you change a semantic hex, update `SEMANTIC_CHART_PALETTE` in `utils.ts` too —
-the SCSS and JS sources are intentionally mirrored.**
+`packages/app/src/theme/themes/_chart-categorical-tokens.scss`
+(`chart-categorical-tokens` and `chart-semantic-tokens` mixins). Both brand
+themes `@use` it and `@include` both mixins inside their per-theme
+`chart-tokens` mixin. Each theme's `chart-tokens` mixin is then `@include`'d
+inside both `[data-mantine-color-scheme]` selectors. Sass inlines the bodies at
+each call site, so the emitted CSS has the same per-scheme specificity as a
+hand-duplicated block would — but the source lives in **one place** for both
+layers. **If you change a categorical hex in the shared partial, change it in
+`CATEGORICAL_HEX_BY_TOKEN` in `utils.ts` too. If you change a semantic hex,
+update `SEMANTIC_CHART_PALETTE` in `utils.ts` too — the SCSS and JS sources are
+intentionally mirrored.**
 
 Brand identity for charts is carried by non-chart UI chrome (Mantine accent,
 sidebar gradient, Click UI globals), not by per-brand chart semantic colors —
@@ -415,13 +416,15 @@ preference:
 
 ### A new semantic color (e.g. `--color-chart-pending`)
 
-1. Pick the hex (unified across brands unless you have a deliberate per-brand split).
+1. Pick the hex (unified across brands unless you have a deliberate per-brand
+   split).
 2. Add `--color-chart-pending` and (if needed) `--color-chart-pending-highlight`
    to the `@mixin chart-semantic-tokens` block in
    `_chart-categorical-tokens.scss`. The mixin is `@include`'d in each theme's
-   `chart-tokens` mixin, which is `@include`'d in each scheme selector — one edit
-   covers dark and light for both brands. For a per-brand override only, declare
-   the var in that brand's `chart-tokens` mixin after the shared `@include`.
+   `chart-tokens` mixin, which is `@include`'d in each scheme selector — one
+   edit covers dark and light for both brands. For a per-brand override only,
+   declare the var in that brand's `chart-tokens` mixin after the shared
+   `@include`.
 3. Add `pending` (and optionally `pendingHighlight`) to
    `SEMANTIC_CHART_PALETTE.hyperdx` and `.clickstack` in `utils.ts`.
 4. Append `'chart-pending'` to `CHART_PALETTE_TOKENS` (and
@@ -491,7 +494,7 @@ Why each is wrong:
 | What                                                | Where                                                                            |
 | --------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Shared chart vars (10 categorical hues + semantics) | `packages/app/src/theme/themes/_chart-categorical-tokens.scss`                   |
-| Per-theme `chart-tokens` mixin (`@include` chain)   | `packages/app/src/theme/themes/hyperdx/_tokens.scss`, `clickstack/_tokens.scss` |
+| Per-theme `chart-tokens` mixin (`@include` chain)   | `packages/app/src/theme/themes/hyperdx/_tokens.scss`, `clickstack/_tokens.scss`  |
 | JS palette objects + reader functions               | `packages/app/src/utils.ts`                                                      |
 | Palette token enum + legacy migration               | `packages/common-utils/src/types.ts`                                             |
 | Multi-series wiring (`setLineColors` etc.)          | `packages/app/src/ChartUtils.tsx`                                                |

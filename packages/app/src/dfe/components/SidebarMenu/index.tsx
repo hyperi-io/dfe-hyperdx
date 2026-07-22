@@ -1,7 +1,7 @@
 import { ScrollArea } from '@mantine/core';
 
-import { ThemeToggle } from '../ThemeToggle';
-import { UserActionsButton } from '../UserActionsButton';
+import { ThemeToggle } from '@/dfe/components/ThemeToggle';
+import { UserActionsButton } from '@/dfe/components/UserActionsButton';
 
 import { featureFlagSidebarMenuItems } from './constants';
 import { HyperDxNavItems } from './HyperDxNavItems';

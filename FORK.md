@@ -19,11 +19,11 @@ is the _design_. Downstream repos (dfe-engine, dfe-infra, dfe-docs) should
 ## Upstream base
 
 - **Upstream:** <https://github.com/hyperdxio/hyperdx> (HyperDX v2)
-- **Synced to:** `@hyperdx/app@2.29.0` (merge `f95c8773`, 2026-07-07). Recorded as
-  a real 2-parent merge (base `e58f01d`), so future syncs are clean 3-way merges
-  off 2.29. `git rerere` is enabled for the fork (future conflict resolutions
-  auto-replay). Sync process: `git merge <new-upstream-tag>` on a `sync/<tag>`
-  branch, then build + test (see DFE-DOCKER-LOCAL.md).
+- **Synced to:** `@hyperdx/app@2.29.0` (merge `f95c8773`, 2026-07-07). Recorded
+  as a real 2-parent merge (base `e58f01d`), so future syncs are clean 3-way
+  merges off 2.29. `git rerere` is enabled for the fork (future conflict
+  resolutions auto-replay). Sync process: `git merge <new-upstream-tag>` on a
+  `sync/<tag>` branch, then build + test (see DFE-DOCKER-LOCAL.md).
 - **RETIRED - the `.dfe[CHG]` shadow-copy convention.** It was never wired (no
   swap alias/script/config; pages import the pristine originals; docker build
   ignores the `package.dfe[CHG].json`/`nx.dfe[CHG].json` variants), had drifted
@@ -33,8 +33,8 @@ is the _design_. Downstream repos (dfe-engine, dfe-infra, dfe-docs) should
   seam (e.g. the `brandName`/theme hooks) over shadowing.
 - **Imported at:** commit `e58f01d` "Initial HyperDX commit" (2026-02-16)
 - **No `upstream` remote is configured** as of this writing -- only `origin`
-  points at `github.com/hyperi-io/dfe-hyperdx`. To assess or pull upstream
-  you must add it (see [Syncing with upstream](#syncing-with-upstream)).
+  points at `github.com/hyperi-io/dfe-hyperdx`. To assess or pull upstream you
+  must add it (see [Syncing with upstream](#syncing-with-upstream)).
 - **Our changes live on `main`**, merged in as feature PRs (#2 config, #3 title
   tweaks, #4 dfe pg rbac OIDC, #10 generate-hunt-from-saved-search, #11
   source-create + json-parse, #13 hyperi rebrand). They are NOT a curated patch
@@ -118,10 +118,10 @@ to teams. Falls back to upstream session auth when headers are absent.
 
 Casbin RBAC (a shared `casbin_rule` PostgreSQL enforcer) was REMOVED in the
 dfe-hyperdx v1 line. It was redundant: every HyperDX route handler already
-self-scopes its Mongo queries by `team`, so tenant isolation holds without it and
-cross-team access was never possible. Authorization is owned by the DFE engine
-(the policy decision point) and enforced at the data layer by ClickHouse GRANTs;
-HyperDX trusts the identity injected at the edge. Removed:
+self-scopes its Mongo queries by `team`, so tenant isolation holds without it
+and cross-team access was never possible. Authorization is owned by the DFE
+engine (the policy decision point) and enforced at the data layer by ClickHouse
+GRANTs; HyperDX trusts the identity injected at the edge. Removed:
 `dfe/middleware/casbin-authz.ts`, `dfe/bootstrap.ts`,
 `rbac_with_tenants_model.conf`, and the `casbin` / `casbin-pg-adapter` deps.
 
@@ -225,11 +225,10 @@ second is the load-bearing one.
    upstream file ONCE and git records the preimage -> postimage. When the SAME
    conflict recurs on a later upstream bump, git replays our resolution
    automatically. Our conflict surface is exactly the pristine upstream files we
-   now modify **in place** (the `.dfe[CHG]` shadow convention was retired) -- the
-   recent embed work touched:
-   `packages/app/next.config.mjs` (CSP frame-ancestors),
-   `packages/app/pages/_app.tsx` (route-guard + colour-scheme feed),
-   `packages/app/src/layout.tsx` (hide AppNav in embed),
+   now modify **in place** (the `.dfe[CHG]` shadow convention was retired) --
+   the recent embed work touched: `packages/app/next.config.mjs` (CSP
+   frame-ancestors), `packages/app/pages/_app.tsx` (route-guard + colour-scheme
+   feed), `packages/app/src/layout.tsx` (hide AppNav in embed),
    `packages/app/src/components/AppNav/AppNav.tsx`,
    `packages/app/src/components/DBRowTable.tsx`,
    `packages/app/src/DBChartPage.tsx` (gate the chart AI assistant),
@@ -239,29 +238,29 @@ second is the load-bearing one.
    conflict.
 
    LIMIT (state it plainly): rerere replays a resolution only when the conflict
-   preimage matches. If upstream refactors the surrounding code the hunk changes,
-   the preimage no longer matches, and you get a FRESH conflict to resolve by
-   hand (which rerere then records for next time). rerere removes the toil of
-   identical recurring conflicts; it does NOT understand our intent and does NOT
-   prove the replayed result still behaves correctly.
+   preimage matches. If upstream refactors the surrounding code the hunk
+   changes, the preimage no longer matches, and you get a FRESH conflict to
+   resolve by hand (which rerere then records for next time). rerere removes the
+   toil of identical recurring conflicts; it does NOT understand our intent and
+   does NOT prove the replayed result still behaves correctly.
 
-2. **The test gate (the real guarantee).** Because rerere is textual, a merge can
-   apply cleanly yet silently break a DFE delta (e.g. upstream renames a prop our
-   sidebar-hide relied on). The merge result is trusted only once our tests pass.
-   `.github/workflows/upstream-sync.yml` runs the merge on a bot branch weekly
-   (and on demand), lets rerere replay, then runs build + test and opens a PR --
-   as a **draft flagged "upstream broke our deltas"** when tests fail. Remaining
-   unresolved conflicts file a drift issue instead. `main` is never touched
-   directly.
+2. **The test gate (the real guarantee).** Because rerere is textual, a merge
+   can apply cleanly yet silently break a DFE delta (e.g. upstream renames a
+   prop our sidebar-hide relied on). The merge result is trusted only once our
+   tests pass. `.github/workflows/upstream-sync.yml` runs the merge on a bot
+   branch weekly (and on demand), lets rerere replay, then runs build + test and
+   opens a PR -- as a **draft flagged "upstream broke our deltas"** when tests
+   fail. Remaining unresolved conflicts file a drift issue instead. `main` is
+   never touched directly.
 
-   Coverage today + the gap: `yarn test` (unit) catches breakage of code that has
-   tests; the embed integration net is `dfe-infra/scripts/verify_embed.py`
-   (playwright: nav gating, route-block, fonts, theme sync -- 8 checks). GAP: our
-   in-place DFE deltas above need dedicated fork-local unit tests (embedFeatures
-   gating, EmbedThemeSync, the brand mantine theme, the CSP header) so an upstream
-   break is caught in this repo's own CI, not only downstream. Those tests are the
-   executable form of "what must keep working" -- add them as the deltas
-   stabilise.
+   Coverage today + the gap: `yarn test` (unit) catches breakage of code that
+   has tests; the embed integration net is `dfe-infra/scripts/verify_embed.py`
+   (playwright: nav gating, route-block, fonts, theme sync -- 8 checks). GAP:
+   our in-place DFE deltas above need dedicated fork-local unit tests
+   (embedFeatures gating, EmbedThemeSync, the brand mantine theme, the CSP
+   header) so an upstream break is caught in this repo's own CI, not only
+   downstream. Those tests are the executable form of "what must keep working"
+   -- add them as the deltas stabilise.
 
 **Priming rerere:** rerere has nothing to replay until a resolution is recorded.
 Prime it by doing the first post-2.29 upstream merge by hand on a `sync/<tag>`

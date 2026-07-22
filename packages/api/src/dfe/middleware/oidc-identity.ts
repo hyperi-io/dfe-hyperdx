@@ -7,11 +7,10 @@
 
 import type { NextFunction, Request, Response } from 'express';
 
+import * as dfeConfig from '@/dfe/config';
+import { findOrCreateTeamByName } from '@/dfe/controllers/team-provisioning';
+import { findOrCreateUserFromOIDC } from '@/dfe/controllers/user-provisioning';
 import logger from '@/utils/logger';
-
-import * as dfeConfig from '../config';
-import { findOrCreateTeamByName } from '../controllers/team-provisioning';
-import { findOrCreateUserFromOIDC } from '../controllers/user-provisioning';
 
 /**
  * Express middleware that extracts identity from Envoy-set headers.

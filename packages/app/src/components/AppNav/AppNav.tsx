@@ -31,11 +31,11 @@ import api from '@/api';
 import { AlertStatusIcon } from '@/components/AlertStatusIcon';
 import { IS_LOCAL_MODE } from '@/config';
 import { Dashboard, useDashboards } from '@/dashboard';
+import { isEmbedFeatureEnabled } from '@/dfe/embedFeatures';
 import { useFavorites } from '@/favorites';
 import InstallInstructionModal from '@/InstallInstructionsModal';
 import OnboardingChecklist from '@/OnboardingChecklist';
 import { useSavedSearches } from '@/savedSearch';
-import { isEmbedFeatureEnabled } from '@/dfe/embedFeatures';
 import { useLogomark, useWordmark } from '@/theme/ThemeProvider';
 import { UserPreferencesModal } from '@/UserPreferencesModal';
 import { useUserPreferences } from '@/useUserPreferences';
@@ -423,17 +423,15 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
               link =>
                 isEmbedFeatureEnabled(link.id) &&
                 (!link.cloudOnly || !IS_LOCAL_MODE),
-            ).map(
-              link => (
-                <AppNavLink
-                  key={link.id}
-                  label={link.label}
-                  href={link.href}
-                  icon={link.icon}
-                  isBeta={link.isBeta}
-                />
-              ),
-            )}
+            ).map(link => (
+              <AppNavLink
+                key={link.id}
+                label={link.label}
+                href={link.href}
+                icon={link.icon}
+                isBeta={link.isBeta}
+              />
+            ))}
 
             {/* Dashboards */}
             <AppNavLink
@@ -496,21 +494,23 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
         </ScrollArea>
 
         <div className={styles.footer} style={{ width: navWidth }}>
-          {IS_LOCAL_MODE && !isCollapsed && isEmbedFeatureEnabled('careers') && (
-            <Link
-              href="/careers"
-              style={{
-                display: 'block',
-                padding: '4px 16px',
-                textDecoration: 'none',
-                pointerEvents: 'auto',
-              }}
-            >
-              <Text size="xs" c="dimmed">
-                Join us & build the future of high scale observability &rarr;
-              </Text>
-            </Link>
-          )}
+          {IS_LOCAL_MODE &&
+            !isCollapsed &&
+            isEmbedFeatureEnabled('careers') && (
+              <Link
+                href="/careers"
+                style={{
+                  display: 'block',
+                  padding: '4px 16px',
+                  textDecoration: 'none',
+                  pointerEvents: 'auto',
+                }}
+              >
+                <Text size="xs" c="dimmed">
+                  Join us & build the future of high scale observability &rarr;
+                </Text>
+              </Link>
+            )}
           <AppNavUserMenu
             userName={meData?.name}
             teamName={meData?.team?.name}

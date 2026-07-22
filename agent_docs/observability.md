@@ -11,9 +11,9 @@ aligned with the
 ## TL;DR (the non-negotiables)
 
 1. **Every team-scoped operation carries team + user context.** Use
-   `setBusinessContext(...)` so `hyperdx.team.id` / `user.id` end up on
-   the trace. Auth middleware already does this for HTTP requests; background
-   jobs and other entry points must do it themselves.
+   `setBusinessContext(...)` so `hyperdx.team.id` / `user.id` end up on the
+   trace. Auth middleware already does this for HTTP requests; background jobs
+   and other entry points must do it themselves.
 2. **If something is worth a log, it's usually worth a metric.** When a log line
    marks a countable event (an error, a skip, a fired alert, a query), emit a
    counter or histogram alongside it.
@@ -99,7 +99,7 @@ Standard attribute keys:
 | -------------------------- | ---------------------------------------------------------- |
 | `hyperdx.team.id`          | Owning team (multi-tenancy boundary). Set this everywhere. |
 | `user.id`                  | Acting user (OTel `user.*` semconv).                       |
-| `user.email`              | Acting user's email (OTel `user.*` semconv).               |
+| `user.email`               | Acting user's email (OTel `user.*` semconv).               |
 | `hyperdx.<domain>.<field>` | Domain IDs, e.g. `hyperdx.alert.id`, `hyperdx.source.id`.  |
 | `feature_flag.<name>`      | Evaluated feature/config flag state.                       |
 
@@ -148,10 +148,10 @@ To make a piece of functionality SLO-able, wrap it with `withOperationMetrics`
 a streaming proxy). Both emit a standard pair of SLI signals tagged with a
 stable, low-cardinality `operation` name and `outcome` (`success` | `error`):
 
-| Metric                          | Type      | Use as          |
-| ------------------------------- | --------- | --------------- |
+| Metric                          | Type      | Use as           |
+| ------------------------------- | --------- | ---------------- |
 | `hyperdx.operation.requests`    | counter   | availability SLI |
-| `hyperdx.operation.duration_ms` | histogram | latency SLI     |
+| `hyperdx.operation.duration_ms` | histogram | latency SLI      |
 
 ```ts
 import { withOperationMetrics } from '@/utils/instrumentation';
@@ -164,8 +164,8 @@ const chartConfig = await withOperationMetrics(
 ```
 
 Because every operation reports through the same two metrics, an SLO is just a
-filter on `operation` — availability = `outcome:success` / total, latency =
-the duration histogram. Keep `operation` a constant (e.g. `ai.assistant`,
+filter on `operation` — availability = `outcome:success` / total, latency = the
+duration histogram. Keep `operation` a constant (e.g. `ai.assistant`,
 `clickhouse_proxy.query`); never interpolate IDs or user input into it. Reach
 for this on functionality with real failure modes worth a target (external
 dependencies, query proxies, AI calls) — not on thin CRUD that the HTTP

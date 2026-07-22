@@ -45,7 +45,8 @@ yarn dev:down
 ```
 
 To enable self-instrumentation and demo logs, you can set the `HYPERDX_API_KEY`
-to your ingestion key (visit the Team settings page after creating your account).
+to your ingestion key (visit the Team settings page after creating your
+account).
 
 To do this, create a `.env.local` file in the root of the project and add the
 following:
@@ -125,25 +126,32 @@ yarn dev:unit
 
 ## AI-Assisted Development
 
-HyperDX includes an [MCP server](https://modelcontextprotocol.io/) that lets AI assistants query observability data, manage dashboards, and
-explore data sources. See [MCP.md](/MCP.md) for setup instructions.
+HyperDX includes an [MCP server](https://modelcontextprotocol.io/) that lets AI
+assistants query observability data, manage dashboards, and explore data
+sources. See [MCP.md](/MCP.md) for setup instructions.
 
-The repo also ships with configuration for AI coding assistants that enables interactive browser-based E2E test generation and debugging via
-the [Playwright MCP server](https://github.com/microsoft/playwright-mcp).
+The repo also ships with configuration for AI coding assistants that enables
+interactive browser-based E2E test generation and debugging via the
+[Playwright MCP server](https://github.com/microsoft/playwright-mcp).
 
 ### Claude Code
 
-The project includes agents and skills for test generation, healing, and planning under `.claude/`. These are loaded automatically when you open the project in Claude Code. No additional setup required.
+The project includes agents and skills for test generation, healing, and
+planning under `.claude/`. These are loaded automatically when you open the
+project in Claude Code. No additional setup required.
 
 ### Cursor
 
-A Playwright MCP server config is included at `.cursor/mcp.json`. To activate it:
+A Playwright MCP server config is included at `.cursor/mcp.json`. To activate
+it:
 
 1. Open **Cursor Settings → Tools & MCP**
-2. The `playwright-test` server should appear automatically from the project config
+2. The `playwright-test` server should appear automatically from the project
+   config
 3. Enable it
 
-This gives Cursor's AI access to a live browser for test exploration and debugging.
+This gives Cursor's AI access to a live browser for test exploration and
+debugging.
 
 ## Additional support
 

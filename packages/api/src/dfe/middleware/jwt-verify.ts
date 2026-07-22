@@ -14,14 +14,14 @@
 // This is a NEW file - it does not modify any upstream HyperDX files.
 
 import type { NextFunction, Request, Response } from 'express';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { JWTPayload, JWTVerifyGetKey } from 'jose';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
+import * as dfeConfig from '@/dfe/config';
+import { findOrCreateTeamByName } from '@/dfe/controllers/team-provisioning';
+import { findOrCreateUserFromOIDC } from '@/dfe/controllers/user-provisioning';
 import logger from '@/utils/logger';
 
-import * as dfeConfig from '../config';
-import { findOrCreateTeamByName } from '../controllers/team-provisioning';
-import { findOrCreateUserFromOIDC } from '../controllers/user-provisioning';
 import { oidcIdentityMiddleware } from './oidc-identity';
 
 // Lazily-built remote JWKS. createRemoteJWKSet returns a key-resolver that

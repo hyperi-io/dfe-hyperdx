@@ -71,9 +71,7 @@ if (!config.IS_LOCAL_APP_MODE) {
 {
   const { isDfeEnabled } = require('./dfe/config');
   if (isDfeEnabled) {
-    const {
-      dfeIdentityMiddleware,
-    } = require('./dfe/middleware/jwt-verify');
+    const { dfeIdentityMiddleware } = require('./dfe/middleware/jwt-verify');
 
     app.use(dfeIdentityMiddleware);
     logger.info('DFE: identity middleware enabled');

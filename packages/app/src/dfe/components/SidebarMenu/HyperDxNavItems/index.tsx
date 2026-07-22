@@ -63,7 +63,7 @@ type NavLinkConfig = {
   cloudOnly?: boolean; // Only show when not in local mode
 };
 
-const NAV_LINKS: NavLinkConfig[] = [
+const _NAV_LINKS: NavLinkConfig[] = [
   {
     id: 'chart',
     label: 'Chart Explorer',

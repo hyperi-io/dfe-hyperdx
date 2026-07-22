@@ -16,13 +16,13 @@ import {
 
 import { DynamicFavicon } from '@/components/DynamicFavicon';
 import { IS_LOCAL_MODE, parseResourceAttributes } from '@/config';
-import { isBlockedRoute } from '@/dfe/embedFeatures';
-import { useEmbedColorScheme } from '@/dfe/EmbedThemeSync';
 import {
   DEFAULT_FONT_VAR,
   FONT_VAR_MAP,
   MANTINE_FONT_MAP,
 } from '@/config/fonts';
+import { isBlockedRoute } from '@/dfe/embedFeatures';
+import { useEmbedColorScheme } from '@/dfe/EmbedThemeSync';
 import { ibmPlexMono, inter, roboto, robotoMono } from '@/fonts';
 import { AppThemeProvider, useAppTheme } from '@/theme/ThemeProvider';
 import { ThemeWrapper } from '@/ThemeWrapper';

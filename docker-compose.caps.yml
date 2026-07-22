@@ -58,7 +58,6 @@ services:
       resources:
         limits:
           memory: 300m
-
 # NB: the `app` container exists only in the prod-image stack
 # (docker-compose.dfe.yml), not in dev (app runs locally). Its memory cap lives
 # in docker-compose.dfe.yml directly - a service with only `deploy` and no

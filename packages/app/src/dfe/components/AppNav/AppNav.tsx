@@ -5,10 +5,9 @@ import { ActionIcon } from '@mantine/core';
 import { useLocalStorage } from '@mantine/hooks';
 import { IconLayoutSidebarLeftCollapse } from '@tabler/icons-react';
 
+import { SidebarMenu } from '@/dfe/components/SidebarMenu';
 import { useLogomark, useWordmark } from '@/theme/ThemeProvider';
 import { useWindowSize } from '@/utils';
-
-import { SidebarMenu } from '../SidebarMenu';
 
 import { AppNavContext } from './AppNav.components';
 

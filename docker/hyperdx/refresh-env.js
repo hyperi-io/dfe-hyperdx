@@ -8,12 +8,14 @@ const path = './packages/app/packages/app/public/__ENV.js';
 let existing = {};
 try {
   const content = fs.readFileSync(path, 'utf8');
-  const json = content.replace(/^window\.__ENV\s*=\s*/, '').replace(/;\s*$/, '');
+  const json = content
+    .replace(/^window\.__ENV\s*=\s*/, '')
+    .replace(/;\s*$/, '');
   existing = JSON.parse(json);
 } catch {}
 
 const runtime = Object.fromEntries(
-  Object.entries(process.env).filter(([k]) => k.startsWith('NEXT_PUBLIC_'))
+  Object.entries(process.env).filter(([k]) => k.startsWith('NEXT_PUBLIC_')),
 );
 
 const merged = { ...existing, ...runtime };
