@@ -17,6 +17,12 @@
 # .prettierignore is not seen - files there that we already modify stay
 # formatted, which costs no new surface.
 #
+# A TEST FILE is not a reason either. Our assertions go in a dfe/__tests__/
+# directory - upstream test files churn harder than almost anything else, and a
+# delta there buys a hand-resolve every sync for tests upstream has no stake in.
+# The guard WARNS on any test path listed below. The remaining ones are inherited
+# and should be migrated out as they are touched.
+#
 # Format: one path or glob per line, '#' comments, blank lines ignored.
 # Checked by .githooks/fork-surface-check.py (pre-commit + CI).
 # Derived from: git diff --name-only --diff-filter=M <upstream-merge-base> HEAD
@@ -66,7 +72,6 @@ packages/app/src/__tests__/ChartUtils.test.ts
 packages/app/src/__tests__/utils.test.ts
 packages/app/src/components/AppNav/AppNav.tsx
 packages/app/src/components/DBRowDataPanel.tsx
-packages/app/src/components/DBRowJsonViewer.test.tsx
 packages/app/src/components/DBRowJsonViewer.tsx
 packages/app/src/components/DBRowTable.tsx
 packages/app/src/components/OnboardingModal.tsx

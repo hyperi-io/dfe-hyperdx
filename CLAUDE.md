@@ -15,6 +15,40 @@ upstream file becomes permanent merge-conflict surface. Getting this wrong does
 NOT fail loudly - it silently makes every future upstream sync more expensive,
 and the damage is only felt months later by whoever runs the sync.
 
+## If you change ONE thing about how you work here
+
+**You are about to make the edit bigger than it needs to be.** Every model that
+touches this repo does the same thing: it opens the upstream file, rewrites the
+function body to do the new thing, and moves on. That edit works, passes tests,
+and quietly costs a hand-resolve on every upstream sync forever.
+
+The cheap edit is almost always available. Before you change an upstream file,
+in this order:
+
+1. **Can it go under `dfe/` entirely?** Then it costs NOTHING. Do that.
+2. **Can the upstream file change by ONE TOKEN?** Write the logic in `dfe/`,
+   give your function the SAME SIGNATURE as upstream's, and swap the identifier
+   at the call site. `foo(a, b, c)` becomes `dfeFoo(a, b, c)` - the argument
+   list stays byte-identical, so if upstream changes the arguments the conflict
+   is trivial instead of structural.
+3. **Can it be an ADDITION next to a brace?** An `else if` appended to an
+   existing block merges cleanly far more often than a modified line does.
+4. **Only then**, edit in place - and catalogue it.
+
+Worked example, from a real fix in this repo. We needed native ClickHouse JSON
+columns coerced with `toString()`. The first attempt rewrote
+`buildJSONExtractQuery`'s body in `DBRowJsonViewer.tsx` and edited upstream's
+test expectations: 53 insertions across the two files upstream churns hardest.
+The same behaviour, done as rule 2 plus rule 3, is 15 insertions, leaves the
+function and the whole test file pristine, and took one upstream test file OFF
+the surface list. Same feature. A quarter of the cost, forever.
+
+**Never put our assertions in an upstream test file.** Upstream test files gain
+cases constantly, so a delta there is the most expensive kind and buys us
+nothing - upstream has no stake in our tests. They go in a `dfe/__tests__/`
+directory. `.githooks/fork-surface-check.py --audit` lists the ones that still
+need migrating.
+
 ## The rules
 
 1. **New code goes under a `dfe/` directory.** Zero conflict risk, because those
@@ -46,18 +80,33 @@ and the damage is only felt months later by whoever runs the sync.
    rerere replay, runs build + test, then opens a PR. `main` is never touched
    directly.
 
-## Mechanical guard
+## Mechanical guard + the tools
 
-`scripts/fork-surface-check.py` fails on edits to upstream files that are not in
-`.fork-surface`. Enable the local hook once:
+Run this ONCE per clone (rerere and the hook are per-clone git config, so a
+fresh clone, a container and an agent sandbox all start unprotected):
 
 ```
-git config core.hooksPath .githooks
+./scripts/fork-setup.sh
 ```
 
-It blocks by default. `FORK_SURFACE_WARN=1` downgrades it to a warning when you
-genuinely need to land an exception - add the path to `.fork-surface` and
-FORK.md in the same commit.
+Then:
+
+```
+.githooks/fork-surface-check.py            # staged changes (runs as pre-commit)
+.githooks/fork-surface-check.py --base origin/main   # a range, as CI does
+.githooks/fork-surface-check.py --drift    # what has upstream moved under us?
+.githooks/fork-surface-check.py --audit    # what is catalogued that should not be?
+```
+
+`--drift` is the one to run before starting work. It answers "has upstream
+touched anything I hold a delta in", which is the cheap moment to shrink that
+delta - long before a sync turns it into a conflict. CI runs it daily
+(`upstream-drift.yml`) and posts the result to the run summary.
+
+The guard blocks by default and runs in CI (`fork-surface.yml`), so the local
+hook is a convenience rather than the control. `FORK_SURFACE_WARN=1` downgrades
+it to a warning when you genuinely need to land an exception - add the path to
+`.fork-surface` and FORK.md in the same commit.
 
 Full model, change catalogue and recovery plan: [FORK.md](FORK.md).
 

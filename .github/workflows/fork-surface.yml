@@ -1,0 +1,61 @@
+# Project:   dfe-hyperdx
+# File:      .github/workflows/fork-surface.yml
+# Purpose:   Enforce the conflict-surface catalogue in CI, not just locally.
+#
+# License:   MIT - HYPERI PTY LIMITED
+# Copyright: (c) 2026 HYPERI PTY LIMITED
+#
+# The pre-commit hook only fires for people who ran
+# `git config core.hooksPath .githooks`. A fresh clone has not, and neither has
+# any agent working in a container - so the local hook is a convenience, not a
+# control. This is the control.
+#
+# It is a separate workflow rather than a step inside ci.yml because ci.yml
+# delegates wholesale to hyperi-ci's reusable ts-ci.yml, and this check is
+# fork-specific: no other HyperI repo has an upstream to diverge from.
+
+name: fork-surface
+
+'on':
+  pull_request:
+    branches: [main]
+  push:
+    branches: ['**']
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-surface-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UPSTREAM_URL: https://github.com/hyperdxio/hyperdx.git
+
+jobs:
+  surface:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+
+      # The guard classifies a path by asking whether it exists in the upstream
+      # baseline, so it needs the upstream ref. Without it the script assumes
+      # every path IS upstream and errs towards flagging - loud, but noisy.
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "$UPSTREAM_URL" 2>/dev/null || true
+          git fetch --no-tags upstream
+
+      - name: Check conflict surface
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base='origin/${{ github.base_ref }}'
+          else
+            base='origin/main'
+          fi
+          echo "Checking $base...HEAD"
+          .githooks/fork-surface-check.py --base "$base"

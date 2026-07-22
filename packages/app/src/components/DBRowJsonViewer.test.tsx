@@ -171,42 +171,6 @@ describe('DBRowJsonViewer', () => {
     expect(mockToggleColumn).toHaveBeenCalledWith("LogAttributes['field1']");
   });
 
-  describe('native ClickHouse JSON columns (jsonColumns)', () => {
-    const nativeJsonData = {
-      _json: { _source: 'simple_fetcher_to_loader_kafka' },
-    };
-
-    it('uses JSONExtractString for nested fields (not bracket / arrayElement)', () => {
-      renderWithMantine(
-        <RowSidePanelContext.Provider value={defaultContext}>
-          <DBRowJsonViewer data={nativeJsonData} jsonColumns={['_json']} />
-        </RowSidePanelContext.Provider>,
-      );
-      // Tree starts expanded (viewer defaults); do not click parent — that toggles collapse.
-      clickLineButton('_source', 'Search');
-
-      expect(mockGenerateSearchUrl).toHaveBeenCalledWith({
-        where:
-          "JSONExtractString(toString(_json), '_source') = 'simple_fetcher_to_loader_kafka'",
-        whereLanguage: 'sql',
-      });
-    });
-
-    it('adds filters with JSONExtractString for nested native JSON fields', () => {
-      renderWithMantine(
-        <RowSidePanelContext.Provider value={defaultContext}>
-          <DBRowJsonViewer data={nativeJsonData} jsonColumns={['_json']} />
-        </RowSidePanelContext.Provider>,
-      );
-      clickLineButton('_source', 'Add to Filters');
-
-      expect(mockOnPropertyAddClick).toHaveBeenCalledWith(
-        "JSONExtractString(toString(_json), '_source')",
-        'simple_fetcher_to_loader_kafka',
-      );
-    });
-  });
-
   describe('timestamp fields', () => {
     it('displays Timestamp using the same formatter as the results table', () => {
       renderComponent({
@@ -362,9 +326,6 @@ describe('DBRowJsonViewer', () => {
       ).toBe("JSONExtractString(LogAttributes['config'], 'database', 'host')");
     });
 
-    // DFE delta: the root here IS a native ClickHouse JSON column, so the
-    // sub-path yields Dynamic and JSONExtract* rejects it - hence the
-    // toString(). Every other case in this block stays upstream-identical.
     it('uses JSON dot notation for JSON column with parsed JSON value', () => {
       expect(
         buildJSONExtractQuery(
@@ -372,7 +333,7 @@ describe('DBRowJsonViewer', () => {
           ['LogAttributes', 'config'],
           ['LogAttributes'],
         ),
-      ).toBe("JSONExtractString(toString(LogAttributes.`config`), 'host')");
+      ).toBe("JSONExtractString(LogAttributes.`config`, 'host')");
     });
 
     // HDX-4369. HyperJson promotes a Map sub-value that is itself a

@@ -1,0 +1,81 @@
+# Project:   dfe-hyperdx
+# File:      .github/workflows/upstream-drift.yml
+# Purpose:   EARLY WARNING. Report which files we hold a delta in have moved
+#            upstream, before anyone attempts a merge.
+#
+# License:   MIT - HYPERI PTY LIMITED
+# Copyright: (c) 2026 HYPERI PTY LIMITED
+#
+# WHY THIS EXISTS SEPARATELY FROM upstream-sync.yml:
+#
+# upstream-sync.yml answers "does the merge still apply?" - which is late and
+# expensive. By the time it fails, someone is resolving conflicts under time
+# pressure on a branch with 30+ commits of unfamiliar upstream change.
+#
+# This answers a cheaper question, daily: "has upstream touched anything we
+# hold a delta in?" That is the moment to act, and the action is nearly always
+# to SHRINK the delta first - move the logic into a dfe/ module and leave a
+# one-token call-site swap behind - so the eventual merge is trivial.
+#
+# It never fails the build. Drift is information; the merge is where something
+# is allowed to go red.
+
+name: upstream-drift
+
+'on':
+  schedule:
+    - cron: '17 5 * * *' # daily, an hour before the weekly sync window
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-drift
+  cancel-in-progress: true
+
+env:
+  UPSTREAM_URL: https://github.com/hyperdxio/hyperdx.git
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "$UPSTREAM_URL" 2>/dev/null || true
+          git fetch --no-tags upstream
+
+      # The report is the artefact. It goes to the step summary so it is
+      # readable without opening logs, and to stdout for the run record.
+      - name: Report conflict-surface drift
+        run: |
+          .githooks/fork-surface-check.py --drift | tee drift.txt
+          {
+            echo '## Upstream conflict-surface drift'
+            echo
+            echo '```'
+            cat drift.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Separate from the drift report: catalogue hygiene. Upstream test files
+      # should never carry our assertions, so flag any that still do.
+      - name: Audit the catalogue
+        run: |
+          .githooks/fork-surface-check.py --audit 2>&1 | tee audit.txt
+          if [ -s audit.txt ]; then
+            {
+              echo
+              echo '## Catalogue hygiene'
+              echo
+              echo '```'
+              cat audit.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

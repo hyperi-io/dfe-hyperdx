@@ -30,6 +30,12 @@ Usage::
     # CI (a range)
     .githooks/fork-surface-check.py --base origin/main
 
+    # EARLY WARNING - what has upstream changed under our deltas?
+    git fetch upstream && .githooks/fork-surface-check.py --drift
+
+    # what is catalogued that should not be?
+    .githooks/fork-surface-check.py --audit
+
     # land a new exception: add it to .fork-surface + FORK.md, or
     FORK_SURFACE_WARN=1 git commit ...
 """
@@ -91,6 +97,39 @@ def upstream_baseline() -> str:
     return _git("merge-base", "HEAD", UPSTREAM_REF)
 
 
+def ensure_rerere() -> None:
+    """Turn rerere on if it is off. Self-healing, because it is per-clone config.
+
+    `rerere.enabled` is local git config: not committed, so not inherited by a
+    fresh clone, a container, or an agent sandbox. The fork's entire sync model
+    depends on it, and its absence is silent - resolutions simply never get
+    recorded and every sync re-resolves from scratch.
+
+    Anyone running this guard has the hook wired up, so this is the earliest
+    reliable moment to fix it. Cheap, idempotent, and announced rather than
+    done behind the operator's back.
+    """
+    if _git("config", "--get", "rerere.enabled") == "true":
+        return
+    subprocess.run(
+        ["git", "config", "rerere.enabled", "true"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=False,
+    )
+    subprocess.run(
+        ["git", "config", "rerere.autoupdate", "true"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=False,
+    )
+    print(
+        "NOTE: git rerere was OFF in this clone and has been enabled.\n"
+        "      Without it every upstream sync re-resolves the same conflicts.\n",
+        file=sys.stderr,
+    )
+
+
 def is_additive(path: str) -> bool:
     """True for paths under a `dfe/` directory - they do not exist upstream."""
     parts = Path(path).parts
@@ -136,19 +175,127 @@ def exists_upstream(baseline: str, path: str) -> bool:
     return result.returncode == 0
 
 
+def is_test_path(path: str) -> bool:
+    """True for a test file - our assertions must never live in an upstream one.
+
+    Upstream test files churn harder than almost anything else (they gain cases
+    constantly), so a delta there costs a hand-resolve every sync for tests
+    upstream has no stake in. Ours belong in a ``dfe/__tests__/`` directory.
+    """
+    name = Path(path).name
+    return (
+        "__tests__" in Path(path).parts
+        or ".test." in name
+        or ".spec." in name
+        or name.endswith(("_test.py", "_test.go"))
+    )
+
+
+def report_drift(catalogue: list[str]) -> int:
+    """Print which catalogued files upstream has touched since our merge base.
+
+    THE EARLY-WARNING CHANNEL. Without it the first sign of trouble is a sync
+    that will not merge, which is both late and expensive. This answers the only
+    question that matters between syncs: has upstream moved under any file we
+    hold a delta in?
+
+    Exit 0 always - drift is information, not a failure. Something has to fail
+    LOUDLY only when it reaches the merge.
+    """
+    baseline = upstream_baseline()
+    if not baseline:
+        print(
+            "upstream ref unavailable - run: git fetch upstream", file=sys.stderr
+        )
+        return 0
+
+    ahead = _git("rev-list", "--count", f"{baseline}..{UPSTREAM_REF}") or "0"
+    touched = _git(
+        "diff", "--name-only", f"{baseline}..{UPSTREAM_REF}"
+    ).splitlines()
+    touched_set = {line for line in touched if line}
+
+    at_risk = sorted(
+        path
+        for path in touched_set
+        if any(fnmatch.fnmatch(path, pattern) for pattern in catalogue)
+    )
+
+    print(f"upstream is {ahead} commit(s) ahead of our merge base ({baseline[:8]})")
+    print(f"upstream touched {len(touched_set)} file(s) in that range")
+    print(f"catalogued surface: {len(catalogue)} pattern(s)")
+
+    if not at_risk:
+        print("\nNo catalogued file has moved upstream - the next sync is cheap.")
+        return 0
+
+    print(f"\nAT RISK - upstream changed {len(at_risk)} file(s) we hold a delta in:")
+    for path in at_risk:
+        commits = _git(
+            "log", "--oneline", f"{baseline}..{UPSTREAM_REF}", "--", path
+        ).splitlines()
+        flag = "  [TEST FILE]" if is_test_path(path) else ""
+        print(f"\n  {path}{flag}")
+        for line in commits[:5]:
+            print(f"      {line}")
+        if len(commits) > 5:
+            print(f"      ... and {len(commits) - 5} more")
+
+    print(
+        "\nEach of these is a probable conflict on the next sync. Cheapest fix is\n"
+        "to shrink the delta BEFORE merging - move logic into a dfe/ module and\n"
+        "leave a one-token call-site swap behind. See FORK.md.\n"
+    )
+    return 0
+
+
+def warn_test_paths(catalogue: list[str]) -> None:
+    """Nag about catalogued test files - they should be migrated to dfe/."""
+    tests = [p for p in catalogue if is_test_path(p)]
+    if not tests:
+        return
+    print(
+        f"\nNOTE: {len(tests)} catalogued path(s) are upstream TEST files. Our\n"
+        "assertions belong in a dfe/__tests__/ directory - upstream test files\n"
+        "churn hard and a delta there is paid on every sync:",
+        file=sys.stderr,
+    )
+    for path in tests:
+        print(f"  {path}", file=sys.stderr)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--base",
         help="Check the range <base>...HEAD instead of the staged changes.",
     )
+    parser.add_argument(
+        "--drift",
+        action="store_true",
+        help="Report which catalogued files upstream has changed since our base.",
+    )
+    parser.add_argument(
+        "--audit",
+        action="store_true",
+        help="List catalogued paths that should not be catalogued (test files).",
+    )
     args = parser.parse_args()
+
+    catalogue = load_catalogue()
+    ensure_rerere()
+
+    if args.drift:
+        return report_drift(catalogue)
+
+    if args.audit:
+        warn_test_paths(catalogue)
+        return 0
 
     files = changed_files(args.base)
     if not files:
         return 0
 
-    catalogue = load_catalogue()
     baseline = upstream_baseline()
     violations: list[str] = []
 
