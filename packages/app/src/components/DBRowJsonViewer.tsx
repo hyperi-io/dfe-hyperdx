@@ -66,8 +66,14 @@ export function buildJSONExtractQuery(
   // `Map[2]`. See HDX-4369.
   const baseColumn = mergePath(parsedJsonRootPath, jsonColumns, mapColumns);
   const jsonPathArgs = nestedPath.map(p => `'${p}'`).join(', ');
-  // JSONExtract* expects String; native JSON columns need toString first.
-  return `${jsonExtractFn}(toString(${baseColumn}), ${jsonPathArgs})`;
+  // JSONExtract* takes a String. A String column and a Map sub-value already
+  // ARE one, but a native ClickHouse JSON column yields Dynamic, which
+  // JSONExtract* rejects - so wrap only that case and leave every other
+  // emitted expression byte-identical to upstream.
+  const expr = jsonColumns.includes(parsedJsonRootPath[0])
+    ? `toString(${baseColumn})`
+    : baseColumn;
+  return `${jsonExtractFn}(${expr}, ${jsonPathArgs})`;
 }
 
 /** ClickHouse JSON type does not support col['k'] (that is arrayElement); use JSONExtractString. */

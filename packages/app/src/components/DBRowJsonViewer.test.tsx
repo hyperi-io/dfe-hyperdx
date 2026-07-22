@@ -362,6 +362,9 @@ describe('DBRowJsonViewer', () => {
       ).toBe("JSONExtractString(LogAttributes['config'], 'database', 'host')");
     });
 
+    // DFE delta: the root here IS a native ClickHouse JSON column, so the
+    // sub-path yields Dynamic and JSONExtract* rejects it - hence the
+    // toString(). Every other case in this block stays upstream-identical.
     it('uses JSON dot notation for JSON column with parsed JSON value', () => {
       expect(
         buildJSONExtractQuery(
@@ -369,7 +372,7 @@ describe('DBRowJsonViewer', () => {
           ['LogAttributes', 'config'],
           ['LogAttributes'],
         ),
-      ).toBe("JSONExtractString(LogAttributes.`config`, 'host')");
+      ).toBe("JSONExtractString(toString(LogAttributes.`config`), 'host')");
     });
 
     // HDX-4369. HyperJson promotes a Map sub-value that is itself a

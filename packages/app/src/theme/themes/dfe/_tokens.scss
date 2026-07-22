@@ -249,12 +249,12 @@
   --color-chart-warning-highlight: #f5c94d;
 }
 
-/* Dark Mode - scoped to .theme-hyperdx */
-.theme-hyperdx[data-mantine-color-scheme='dark'] {
+/* Dark Mode - scoped to .theme-dfe */
+.theme-dfe[data-mantine-color-scheme='dark'] {
   @include dark-mode-tokens;
 }
 
-/* Light Mode - scoped to .theme-hyperdx */
-.theme-hyperdx[data-mantine-color-scheme='light'] {
+/* Light Mode - scoped to .theme-dfe */
+.theme-dfe[data-mantine-color-scheme='light'] {
   @include light-mode-tokens;
 }

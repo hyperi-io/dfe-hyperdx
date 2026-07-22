@@ -140,8 +140,23 @@ GRANTs; HyperDX trusts the identity injected at the edge. Removed:
 - `packages/api/src/dfe/routers/query-export.ts` -- export a HyperDX saved
   search / SQL to a DFE rule (the "generate hunt from saved search" path, PR
   #10)
+- `packages/app/src/dfe/components/CreateRuleFromSearch/` -- the button that
+  posts to the above and hands the result to the DFE UI's rule builder.
+  Deliberately uses plain `useState`, NOT react-query's `useMutation`: this
+  component is injected into upstream's `DBSearchPage`, and upstream tests
+  render that page behind a PARTIAL `@tanstack/react-query` mock, so pulling a
+  second hook out of that module makes their pristine tests explode. Keep our
+  delta invisible to them.
 - Source-create + JSON-parse improvements (PR #11) -- see
   `packages/common-utils/**` delta
+- `packages/app/src/components/DBRowJsonViewer.tsx` -- native ClickHouse JSON
+  columns. `col['k']` on a JSON column is `arrayElement` and ClickHouse rejects
+  it, so we emit `JSONExtractString` instead, and a JSON sub-path yields
+  `Dynamic` which `JSONExtract*` also rejects, so that ONE case is wrapped in
+  `toString()`. Narrow by design: wrapping unconditionally changed the emitted
+  SQL for String and Map columns too and broke eight pristine upstream test
+  expectations for no functional gain. Exactly one upstream expectation now
+  carries our delta.
 - Alerting: HyperDX's built-in alert checker is **not started**; alert routes
   are hidden by the DFE embed nav gating. Detection/alerting is owned by the DFE
   rules engine. (Disabled, not removed -- additive.)
@@ -168,6 +183,12 @@ GRANTs; HyperDX trusts the identity injected at the edge. Removed:
 - `.releaserc.json` -- semantic-release
 - `.gitleaks.toml` -- secret-scan false-positive rules
 - `scripts/audit.sh` -- `yarn npm audit` wrapper (Yarn 4 removed built-in audit)
+- `packages/api/jest.dfe.config.js` -- fork-local UNIT config for the api
+  package (upstream has no `ci:unit` there; every api test is `ci:int` and wants
+  Mongo + ClickHouse). Scoped to `src/dfe/**` and transforms `jose`, which is
+  ESM-only. A separate file rather than an edit to upstream's `jest.config.js`.
+  The matching `"ci:unit"` script IS an in-place edit to
+  `packages/api/package.json`, which is already catalogued surface.
 - `.dfe[CHG]` copies: `nx`, root + per-package `package.json`, `.prettierrc`,
   `.prettierignore`, `.gitignore`, `tsconfig.build.json`
 
@@ -291,14 +312,40 @@ second is the load-bearing one.
    fail. Remaining unresolved conflicts file a drift issue instead. `main` is
    never touched directly.
 
-   Coverage today + the gap: `yarn test` (unit) catches breakage of code that
-   has tests; the embed integration net is `dfe-infra/scripts/verify_embed.py`
-   (playwright: nav gating, route-block, fonts, theme sync -- 8 checks). GAP:
-   our in-place DFE deltas above need dedicated fork-local unit tests
-   (embedFeatures gating, EmbedThemeSync, the brand mantine theme, the CSP
-   header) so an upstream break is caught in this repo's own CI, not only
-   downstream. Those tests are the executable form of "what must keep working"
-   -- add them as the deltas stabilise.
+   Coverage today. The fork-local suites are the executable form of "what must
+   keep working", and they run in this repo's own CI on every PR:
+
+   - `packages/app/src/dfe/__tests__/embedFeatures.test.ts` -- the feature
+     allowlist and, more importantly, that a disabled feature is route-BLOCKED
+     rather than merely hidden, matching on a path segment so `/teams` is not
+     collateral damage. Plus embed-chrome detection and its sessionStorage
+     persistence.
+   - `packages/app/src/dfe/__tests__/EmbedThemeSync.test.tsx` -- the colour
+     scheme arrives from `?theme` then live `DFE_SET_THEME` messages, malformed
+     values are ignored, and the listener detaches.
+   - `packages/app/src/dfe/__tests__/dfeTheme.test.ts` -- brand identity: the
+     primary is the brand blue (not the inherited olive), the scale is anchored
+     on `_tokens.scss`, the token blocks are scoped to `.theme-dfe`, and Inter /
+     IBM Plex Mono stay resolvable.
+   - `packages/app/src/dfe/__tests__/forkDeltas.test.ts` -- source-text guards
+     for the deltas that live INSIDE upstream files and are too heavy to import
+     (`next.config.mjs` CSP, `_app.tsx` route guard + font pin, `layout.tsx`,
+     `AppNav.tsx`). Blunt, but it fails the moment the wiring disappears.
+   - `packages/api/src/dfe/__tests__/jwt-verify.test.ts` -- REAL ES384 signing
+     and verification (only the JWKS fetch is stubbed): accepted tokens, the
+     cookie fallback, group->team resolution, the ES384 + issuer pin, and that
+     every rejection path falls THROUGH rather than 401ing.
+
+   Upstream's api package has no unit target at all (every api test is `ci:int`
+   and wants Mongo + ClickHouse), so ours runs under `packages/api/ci:unit` via
+   a separate `jest.dfe.config.js` scoped to `src/dfe/**`. That config also
+   transforms `jose`, which ships ESM-only.
+
+   Still downstream-only: the browser-level embed proof (chromeless iframe,
+   dfe-ui owning the nav, live theme sync) in
+   `dfe-infra/scripts/verify_embed.py`, now invoked by
+   `dfe-infra/bootstrap/smoke-test-hyperdx.sh` alongside the
+   auth/data/embed-header seam checks.
 
 **Priming rerere:** rerere has nothing to replay until a resolution is recorded.
 Prime it by doing the first post-2.29 upstream merge by hand on a `sync/<tag>`
