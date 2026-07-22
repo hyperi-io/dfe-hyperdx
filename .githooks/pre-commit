@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#  Project:      dfe-hyperdx
+#  File:         .githooks/pre-commit
+#  Purpose:      Run the fork conflict-surface guard before every commit
+#  Language:     Bash
+#
+#  License:      MIT (inherits upstream hyperdxio/hyperdx)
+#
+#  Enable once per clone:
+#      git config core.hooksPath .githooks
+#
+#  Override for a single commit (when landing a documented exception):
+#      FORK_SURFACE_WARN=1 git commit ...
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+checker="${hook_dir}/fork-surface-check.py"
+
+if [[ ! -x "${checker}" ]]; then
+  echo "fork-surface-check.py missing or not executable - skipping guard." >&2
+  exit 0
+fi
+
+exec "${checker}"

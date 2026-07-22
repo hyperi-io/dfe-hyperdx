@@ -244,6 +244,29 @@ second is the load-bearing one.
    toil of identical recurring conflicts; it does NOT understand our intent and
    does NOT prove the replayed result still behaves correctly.
 
+   AGENT ENTRYPOINT DELTA: `CLAUDE.md` is an upstream file (theirs is the single
+   line `@AGENTS.md`). We prepend the governing rerere rule above it and keep
+   their line at the bottom, so the rule is unmissable at the top of every agent
+   session. Upstream rarely touches that one line, so the conflict is small and
+   rerere-replayable. AGENTS.md itself is left pristine.
+
+   MACHINE CATALOGUE + GUARD: the surface is no longer prose-only. `.fork-surface`
+   lists every sanctioned in-place upstream edit, and
+   `.githooks/fork-surface-check.py` fails a commit that touches an upstream file
+   absent from it (`git config core.hooksPath .githooks` to enable; it also takes
+   `--base <ref>` for CI). Landing a new exception means adding the path there AND
+   describing the delta here, in the same commit. `FORK_SURFACE_WARN=1` downgrades
+   the block to a warning for that one commit.
+
+   KNOWN DEBT - formatting-only surface: the 2026-07-22 gate-green work ran the
+   repo-wide `yarn format`, which reformatted ~45 upstream files we hold NO
+   functional delta in (CHANGELOGs, READMEs, `agent_docs/**`, `docker/**` configs,
+   `hdx-eval` viewer assets, `scripts/dev-portal`). That is pure added conflict
+   surface and the worst shape for rerere. The remedy is to revert those files to
+   pristine and add their paths to `.prettierignore` instead, so the gate passes
+   without us owning their formatting. Files where we DO hold a delta (the embed
+   set above) legitimately stay on the list.
+
 2. **The test gate (the real guarantee).** Because rerere is textual, a merge
    can apply cleanly yet silently break a DFE delta (e.g. upstream renames a
    prop our sidebar-hide relied on). The merge result is trusted only once our
