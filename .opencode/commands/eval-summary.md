@@ -35,8 +35,8 @@ aggregated metrics across all runs.
 ### 2. Analyze Run Transcripts
 
 Use **parallel Task subagents** — one per MCP (hyperdx, clickhouse). Each
-subagent reads all run JSON files for its MCP (`<scenario>/<mcp>/0.json`,
-`1.json`, `2.json`, etc.) and extracts:
+subagent reads all run JSON files for its MCP
+(`<scenario>/<mcp>/0.json`, `1.json`, `2.json`, etc.) and extracts:
 
 - **Tool call sequence** — ordered list of tool names called with index numbers
 - **Tool errors** — any failed tool calls, including error messages and index
@@ -85,15 +85,14 @@ interesting or surprising things you found in the transcripts. These should be
 specific, concrete observations — not generic patterns. Examples:
 
 - "HyperDX Run 1 scored 79.8% despite 2 SQL errors — it recovered in 2 calls"
-- "ClickHouse Run 2 was the single best run (89.8%) but the other 2 CH runs both
-  hit max_turns"
+- "ClickHouse Run 2 was the single best run (89.8%) but the other 2 CH runs
+  both hit max_turns"
 - "The feature_flag distractor tripped HyperDX Run 1 because event_deltas
   surfaced it as a top-changing attribute"
 
 Finally, end with:
 
 > Want to dig deeper? I can show:
->
 > - **Detailed stats** — full per-run breakdown, per-check wins, and failure
 >   analysis
 > - **Recommendations** — specific tool/prompt changes to improve HyperDX scores

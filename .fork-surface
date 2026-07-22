@@ -1,23 +1,26 @@
 # dfe-hyperdx conflict surface - the catalogue of SANCTIONED exceptions.
 #
-# Governing rule (see CLAUDE.md): everything we do to this fork must work with
-# git rerere. Editing a pristine upstream file in place is an EXCEPTION, and an
-# exception is only legitimate when it is identified, documented (FORK.md) and
-# tooled (listed here).
+# GOVERNING PRINCIPLE (see CLAUDE.md): MINIMISE what we change in ANYTHING that
+# comes from upstream. Upstream HyperDX moves fast enough on its own - we do not
+# want to be managing small fry on top of it. Everything we do must work with
+# git rerere, and editing a pristine upstream file is an EXCEPTION that must be
+# identified, documented (FORK.md) and tooled (listed here).
 #
 # Every path below is an upstream file we modify in place, so it is permanent
 # merge-conflict surface on every upstream sync. Adding a line here is a
 # deliberate act - do it in the same commit that documents the delta in FORK.md.
 #
+# Formatting is NOT a reason to be on this list. If a gate wants an upstream
+# file reformatted, exclude the path from the tool (.prettierignore) instead.
+# The one unavoidable case: packages/{api,app} run prettier THROUGH eslint
+# (eslint-plugin-prettier), and nx runs eslint per package so the repo-root
+# .prettierignore is not seen - files there that we already modify stay
+# formatted, which costs no new surface.
+#
 # Format: one path or glob per line, '#' comments, blank lines ignored.
 # Checked by .githooks/fork-surface-check.py (pre-commit + CI).
-#
 # Derived from: git diff --name-only --diff-filter=M <upstream-merge-base> HEAD
 # Baseline merge-base at capture: e2103f78.
-#
-# NOTE: entries that are FORMATTING-ONLY (no functional DFE delta) are pure
-# added conflict surface and should be retired by excluding those paths from the
-# formatter instead - see the open question in FORK.md.
 
 # Agent entrypoint. Upstream ships a one-line CLAUDE.md ("@AGENTS.md"); we
 # prepend the fork's governing rerere rule above it so it is unmissable at the
@@ -25,29 +28,13 @@
 # upstream rarely touches that single line - so rerere replays it cleanly.
 CLAUDE.md
 
-.github/scripts/__tests__/pr-triage-classify.test.js
-.github/scripts/pr-triage-classify.js
-.github/scripts/pr-triage.js
 .gitignore
-.opencode/commands/eval-summary.md
 .prettierignore
 .prettierrc
-AGENTS.md
-CONTRIBUTING.md
 LOCAL.md
-MCP.md
 README.md
-agent_docs/README.md
-agent_docs/architecture.md
-agent_docs/code_style.md
-agent_docs/data_viz_colors.md
-agent_docs/development.md
-agent_docs/observability.md
-agent_docs/page_layout.md
 agent_docs/tech_stack.md
-agent_docs/themes.md
 docker/hyperdx/entry.prod.sh
-docker/hyperdx/refresh-env.js
 docker/nginx/README.md
 docker/otel-collector/config.standalone.auth.yaml
 docker/otel-collector/config.standalone.yaml
@@ -56,7 +43,6 @@ docker/otel-collector/schema/README.md
 nx.json
 package.json
 packages/api/CHANGELOG.md
-packages/api/docs/auto_provision/AUTO_PROVISION.md
 packages/api/package.json
 packages/api/src/api-app.ts
 packages/api/src/routers/api/root.ts
@@ -65,7 +51,6 @@ packages/api/tsconfig.build.json
 packages/app/.env.development
 packages/app/.storybook/public/mockServiceWorker.js
 packages/app/CHANGELOG.md
-packages/app/eslint.config.mjs
 packages/app/next.config.mjs
 packages/app/package.json
 packages/app/pages/_app.tsx
@@ -100,21 +85,10 @@ packages/app/styles/LogTable.module.scss
 packages/app/styles/globals.css
 packages/app/tests/e2e/README.md
 packages/app/tsconfig.build.json
-packages/cli/CHANGELOG.md
-packages/cli/README.md
 packages/common-utils/CHANGELOG.md
 packages/common-utils/README.md
 packages/common-utils/package.json
 packages/common-utils/src/__tests__/clickhouse.test.ts
 packages/common-utils/src/core/metadata.ts
-packages/hdx-eval/CHANGELOG.md
-packages/hdx-eval/README.md
-packages/hdx-eval/scripts/viewer/public/app.js
-packages/hdx-eval/scripts/viewer/public/index.html
-packages/hdx-eval/scripts/viewer/public/style.css
-packages/hdx-eval/scripts/viewer/server.js
 packages/otel-collector/CHANGELOG.md
-packages/otel-collector/README.md
-scripts/dev-portal/index.html
-smoke-tests/otel-collector/README.md
 yarn.lock

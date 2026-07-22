@@ -2,6 +2,10 @@
 
 ## STOP - the governing rule
 
+**MINIMISE what we change in ANYTHING that comes from upstream.** Upstream
+HyperDX moves fast enough on its own - we do not want to be managing small fry
+on top of it. Fewer touched upstream files means cheaper syncs, full stop.
+
 **EVERYTHING we do to this fork must work with `git rerere`. Any exception must
 be identified, documented AND tooled - otherwise the whole sync process breaks
 down.**

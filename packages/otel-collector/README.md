@@ -56,17 +56,17 @@ custom OTel configurations without rebuilding the collector.
 
 ### Receivers
 
-| Component       | Module  | Used in                                           |
-| --------------- | ------- | ------------------------------------------------- |
-| `nop`           | core    | OpAMP controller                                  |
-| `otlp`          | core    | standalone configs, OpAMP controller, smoke tests |
-| `dockerstats`   | contrib | user configs                                      |
-| `filelog`       | contrib | user configs                                      |
-| `fluentforward` | contrib | standalone configs, OpAMP controller, smoke tests |
-| `hostmetrics`   | contrib | custom.config.yaml                                |
-| `k8scluster`    | contrib | user configs                                      |
-| `kubeletstats`  | contrib | user configs                                      |
-| `prometheus`    | contrib | OpAMP controller, smoke tests                     |
+| Component        | Module  | Used in                                           |
+| ---------------- | ------- | ------------------------------------------------- |
+| `nop`            | core    | OpAMP controller                                  |
+| `otlp`           | core    | standalone configs, OpAMP controller, smoke tests |
+| `dockerstats`    | contrib | user configs                                      |
+| `filelog`        | contrib | user configs                                      |
+| `fluentforward`  | contrib | standalone configs, OpAMP controller, smoke tests |
+| `hostmetrics`    | contrib | custom.config.yaml                                |
+| `k8scluster`     | contrib | user configs                                      |
+| `kubeletstats`   | contrib | user configs                                      |
+| `prometheus`     | contrib | OpAMP controller, smoke tests                     |
 
 ### Processors
 
@@ -130,21 +130,22 @@ custom OTel configurations without rebuilding the collector.
 
 ## Overriding base components via `CUSTOM_OTELCOL_CONFIG_FILE`
 
-The collector ships with a default `memory_limiter` processor sized for a small
-(~2 GiB) container. On larger pods you typically want to switch to
-`limit_percentage`/`spike_limit_percentage` mode so the limit scales with the
-pod's memory allocation.
+The collector ships with a default `memory_limiter` processor sized for a
+small (~2 GiB) container. On larger pods you typically want to switch to
+`limit_percentage`/`spike_limit_percentage` mode so the limit scales with
+the pod's memory allocation.
 
 The OTel `confmap` package merges YAML maps **leaf-by-leaf** rather than
-replacing a block wholesale, and the `memorylimiterprocessor` silently prefers
-`limit_mib` over `limit_percentage` when both are set. The combination means you
-cannot switch the default `memory_limiter` to percentage mode by leaf-merging
-into the existing block — your percentage values land in `effective.yaml` but
-the inherited mib values still win at runtime.
+replacing a block wholesale, and the `memorylimiterprocessor` silently
+prefers `limit_mib` over `limit_percentage` when both are set. The
+combination means you cannot switch the default `memory_limiter` to
+percentage mode by leaf-merging into the existing block — your percentage
+values land in `effective.yaml` but the inherited mib values still win at
+runtime.
 
-The supported pattern is to **define a new processor with a different name** and
-swap the pipeline `processors:` lists in `CUSTOM_OTELCOL_CONFIG_FILE` to
-reference it:
+The supported pattern is to **define a new processor with a different
+name** and swap the pipeline `processors:` lists in
+`CUSTOM_OTELCOL_CONFIG_FILE` to reference it:
 
 ```yaml
 # custom.config.yaml
@@ -166,18 +167,18 @@ service:
       processors: [memory_limiter/custom, batch]
 ```
 
-After restart, the collector instantiates `memory_limiter/custom` (and not the
-unused default `memory_limiter`). You can confirm by checking
-`/etc/otel/supervisor-data/effective.yaml` and the `"Memory limiter configured"`
-log line emitted at collector start.
+After restart, the collector instantiates `memory_limiter/custom` (and not
+the unused default `memory_limiter`). You can confirm by checking
+`/etc/otel/supervisor-data/effective.yaml` and the `"Memory limiter
+configured"` log line emitted at collector start.
 
 ### Example: tuning the `batch` processor
 
-The default `batch` processor is sized for ClickHouse (`send_batch_size: 10000`,
-`timeout: 5s`). If your workload needs lower-latency exports — for example,
-latency-sensitive traces or a short-window smoke test that asserts shortly after
-emitting — define a new `batch` with the tuning you want and swap the pipelines
-to use it:
+The default `batch` processor is sized for ClickHouse
+(`send_batch_size: 10000`, `timeout: 5s`). If your workload needs
+lower-latency exports — for example, latency-sensitive traces or a
+short-window smoke test that asserts shortly after emitting — define a
+new `batch` with the tuning you want and swap the pipelines to use it:
 
 ```yaml
 # custom.config.yaml
@@ -197,21 +198,23 @@ service:
 
 Notes:
 
-- You only need to re-declare the pipelines you want to retune; pipelines you
-  don't mention keep the default `batch` from the base config. In the example
-  above, `metrics` and `logs/out-rrweb` continue using the default `batch`.
+- You only need to re-declare the pipelines you want to retune; pipelines
+  you don't mention keep the default `batch` from the base config. In the
+  example above, `metrics` and `logs/out-rrweb` continue using the default
+  `batch`.
 - Processor list order matters. Keep `memory_limiter` ahead of the batch
   processor so back-pressure applies before batching.
-- Larger batches are friendlier to ClickHouse (fewer inserts, fewer MergeTree
-  parts). The defaults — `send_batch_size: 10000`, `timeout: 5s` — are the
-  recommended starting point; only tune them when you have a specific reason.
+- Larger batches are friendlier to ClickHouse (fewer inserts, fewer
+  MergeTree parts). The defaults — `send_batch_size: 10000`, `timeout: 5s`
+  — are the recommended starting point; only tune them when you have a
+  specific reason.
 - You can combine swap blocks. Define both `memory_limiter/custom` and
-  `batch/lowlatency`, and reference both in the same pipeline (e.g.
-  `processors: [memory_limiter/custom, batch/lowlatency]`).
+  `batch/lowlatency`, and reference both in the same pipeline
+  (e.g. `processors: [memory_limiter/custom, batch/lowlatency]`).
 
 You can verify the new processor is actually running (not just present in
-`effective.yaml`) by querying the collector's Prometheus metrics endpoint on
-port `8888` and looking for the new `processor` label:
+`effective.yaml`) by querying the collector's Prometheus metrics endpoint
+on port `8888` and looking for the new `processor` label:
 
 ```sh
 curl -s http://localhost:8888/metrics | grep 'processor="batch/lowlatency"'
@@ -221,30 +224,32 @@ curl -s http://localhost:8888/metrics | grep 'processor="batch/lowlatency"'
 
 ### Lighter-weight option: env vars for the default `batch`
 
-If you only need to tune `send_batch_size`, `send_batch_max_size`, or `timeout`
-on the default `batch` processor and don't need to define a second processor,
-the existing env vars also work without a custom config file:
+If you only need to tune `send_batch_size`, `send_batch_max_size`, or
+`timeout` on the default `batch` processor and don't need to define a
+second processor, the existing env vars also work without a custom config
+file:
 
 - `HYPERDX_OTEL_BATCH_SEND_BATCH_SIZE` (default `10000`)
-- `HYPERDX_OTEL_BATCH_SEND_BATCH_MAX_SIZE` (default `0`, meaning no upper bound)
+- `HYPERDX_OTEL_BATCH_SEND_BATCH_MAX_SIZE` (default `0`, meaning no upper
+  bound)
 - `HYPERDX_OTEL_BATCH_TIMEOUT` (default `5s`)
 
-These are read directly from the base `config.yaml`, so they apply everywhere
-the default `batch` is referenced. Use the swap pattern when you need different
-settings for different pipelines, when you want to combine batch +
-memory_limiter changes, or when you want to override `memory_limiter` (which has
-no equivalent env-var path).
+These are read directly from the base `config.yaml`, so they apply
+everywhere the default `batch` is referenced. Use the swap pattern when
+you need different settings for different pipelines, when you want to
+combine batch + memory_limiter changes, or when you want to override
+`memory_limiter` (which has no equivalent env-var path).
 
 The same swap pattern works for any other base processor (`transform`,
-`resourcedetection`, …) — define a new component with a different name and
-re-declare the pipelines that should use it.
+`resourcedetection`, …) — define a new component with a different name
+and re-declare the pipelines that should use it.
 
-> Pipeline `processors:` lists live in `docker/otel-collector/config.yaml` (for
-> OpAMP supervisor mode) and `docker/otel-collector/config.standalone.yaml` (for
-> standalone mode). The OpAMP remote config from
-> `packages/api/src/opamp/controllers/opampController.ts` intentionally does
-> **not** set `processors:` on pipelines, so your bootstrap+custom merge is not
-> overwritten.
+> Pipeline `processors:` lists live in `docker/otel-collector/config.yaml`
+> (for OpAMP supervisor mode) and `docker/otel-collector/config.standalone.yaml`
+> (for standalone mode). The OpAMP remote config from
+> `packages/api/src/opamp/controllers/opampController.ts` intentionally
+> does **not** set `processors:` on pipelines, so your bootstrap+custom
+> merge is not overwritten.
 
 ## Upgrading the OTel Collector version
 

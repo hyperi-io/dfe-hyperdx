@@ -45,10 +45,20 @@ is the _design_. Downstream repos (dfe-engine, dfe-infra, dfe-docs) should
 
 ---
 
-## Fork strategy: additive-only, two conventions
+## Fork strategy: additive-first, minimise upstream churn
 
-We keep upstream files pristine so upstream merges stay clean. Every DFE change
-follows one of two conventions:
+**MINIMISE what we change in ANYTHING from upstream.** HyperDX moves fast enough
+on its own - we do not want to manage small fry on top of it. Fewer touched
+upstream files means cheaper syncs, full stop.
+
+> NOTE: convention 2 below (`.dfe[CHG]` shadow copies) is **RETIRED** - see
+> "Upstream base". We modify upstream files IN PLACE now, so each one is
+> permanent conflict surface and must be a documented exception: listed in
+> `.fork-surface`, described here, and enforced by
+> `.githooks/fork-surface-check.py`. Convention 1 remains the default. The text
+> is kept for historical context on the 32 removed shadow files.
+
+Every DFE change follows one of two conventions:
 
 1. **New code lives under a `dfe/` directory.** Zero conflict risk -- these
    paths do not exist upstream.
@@ -250,22 +260,27 @@ second is the load-bearing one.
    session. Upstream rarely touches that one line, so the conflict is small and
    rerere-replayable. AGENTS.md itself is left pristine.
 
-   MACHINE CATALOGUE + GUARD: the surface is no longer prose-only. `.fork-surface`
-   lists every sanctioned in-place upstream edit, and
-   `.githooks/fork-surface-check.py` fails a commit that touches an upstream file
-   absent from it (`git config core.hooksPath .githooks` to enable; it also takes
-   `--base <ref>` for CI). Landing a new exception means adding the path there AND
-   describing the delta here, in the same commit. `FORK_SURFACE_WARN=1` downgrades
-   the block to a warning for that one commit.
+   MACHINE CATALOGUE + GUARD: the surface is no longer prose-only.
+   `.fork-surface` lists every sanctioned in-place upstream edit, and
+   `.githooks/fork-surface-check.py` fails a commit that touches an upstream
+   file absent from it (`git config core.hooksPath .githooks` to enable; it also
+   takes `--base <ref>` for CI). Landing a new exception means adding the path
+   there AND describing the delta here, in the same commit.
+   `FORK_SURFACE_WARN=1` downgrades the block to a warning for that one commit.
 
-   KNOWN DEBT - formatting-only surface: the 2026-07-22 gate-green work ran the
-   repo-wide `yarn format`, which reformatted ~45 upstream files we hold NO
-   functional delta in (CHANGELOGs, READMEs, `agent_docs/**`, `docker/**` configs,
-   `hdx-eval` viewer assets, `scripts/dev-portal`). That is pure added conflict
-   surface and the worst shape for rerere. The remedy is to revert those files to
-   pristine and add their paths to `.prettierignore` instead, so the gate passes
-   without us owning their formatting. Files where we DO hold a delta (the embed
-   set above) legitimately stay on the list.
+   FORMATTING IS NEVER A REASON TO TOUCH UPSTREAM. Greening a gate by running a
+   formatter over upstream files is pure added conflict surface and the worst
+   shape for rerere. Exclude the paths from the tool instead. Learned the hard
+   way: the 2026-07-22 gate work ran a repo-wide `yarn format` over ~45 upstream
+   files we hold no functional delta in, then reverted 35 of them to pristine
+   and listed those paths in `.prettierignore` - which greens the gate without
+   us owning their formatting.
+
+   The one unavoidable exception: `packages/{api,app}` run prettier THROUGH
+   eslint (`eslint-plugin-prettier`), and nx runs eslint per package, so the
+   repo-root `.prettierignore` is not consulted there. Files in those packages
+   that we ALREADY modify stay formatted, which costs no new surface. That is
+   not licence to format upstream files we do not otherwise touch.
 
 2. **The test gate (the real guarantee).** Because rerere is textual, a merge
    can apply cleanly yet silently break a DFE delta (e.g. upstream renames a

@@ -97,6 +97,23 @@ def is_additive(path: str) -> bool:
     return "dfe" in parts or any(p.startswith("dfe.") for p in parts)
 
 
+def matches_upstream(baseline: str, path: str, base: str | None) -> bool:
+    """True when the post-change content is IDENTICAL to the upstream baseline.
+
+    Reverting an upstream file to pristine REMOVES conflict surface, so it must
+    always be allowed even when the path is not catalogued. Compares blob hashes
+    rather than content, which is cheap and exact.
+    """
+    if not baseline:
+        return False
+    upstream_blob = _git("rev-parse", f"{baseline}:{path}")
+    if not upstream_blob:
+        return False
+    # ':path' is the staged blob; for a range check use the tip of the range.
+    ours = _git("rev-parse", f"HEAD:{path}" if base else f":{path}")
+    return bool(ours) and ours == upstream_blob
+
+
 def exists_upstream(baseline: str, path: str) -> bool:
     """True when *path* exists in the upstream baseline tree.
 
@@ -141,6 +158,9 @@ def main() -> int:
         if any(fnmatch.fnmatch(path, pattern) for pattern in catalogue):
             continue
         if not exists_upstream(baseline, path):
+            continue
+        if matches_upstream(baseline, path, args.base):
+            # Reverted to pristine - this REMOVES surface, always allowed.
             continue
         violations.append(path)
 

@@ -3,8 +3,7 @@
 ## Core Services
 
 - **HyperDX UI (`packages/app`)**: Next.js frontend serving the user interface
-- **HyperDX API (`packages/api`)**: Node.js/Express backend handling queries and
-  business logic
+- **HyperDX API (`packages/api`)**: Node.js/Express backend handling queries and business logic
 - **OpenTelemetry Collector**: Receives and processes telemetry data
 - **ClickHouse**: Primary data store for all telemetry (logs, metrics, traces)
 - **MongoDB**: Metadata storage (users, dashboards, alerts, saved searches)
@@ -19,14 +18,12 @@
 ## Key MongoDB Models
 
 All models follow consistent patterns with:
-
 - Team-based multi-tenancy (most entities belong to a `team`)
 - ObjectId references between related entities
 - Timestamps for audit trails
 - Zod schema validation
 
 **Key Models** (see `packages/api/src/models/`):
-
 - `Team`: Multi-tenant organization unit
 - `User`: Team members with authentication
 - `Source`: ClickHouse data source configuration
@@ -49,9 +46,8 @@ its own routing, authentication, and rate limiting:
 
 ### Internal API (`src/routers/api/`)
 
-The primary API consumed by the web frontend (`packages/app`). Uses
-session-based authentication (Passport.js). Follows a standard layered
-structure:
+The primary API consumed by the web frontend (`packages/app`). Uses session-based
+authentication (Passport.js). Follows a standard layered structure:
 
 - **Routers**: `src/routers/api/` - Domain-specific API routes
 - **Controllers**: `src/controllers/` - Business logic separated from routes
@@ -75,9 +71,9 @@ the OpenAPI spec and `yarn lint:openapi` to validate it.
 ### MCP Server (`src/mcp/`)
 
 [Model Context Protocol](https://modelcontextprotocol.io/) server that lets AI
-assistants query observability data and manage dashboards. Exposed as a
-stateless Streamable HTTP endpoint at `/api/mcp`, authenticated via Personal API
-Access Key, rate-limited to 600 req/min.
+assistants query observability data and manage dashboards. Exposed as a stateless
+Streamable HTTP endpoint at `/api/mcp`, authenticated via Personal API Access
+Key, rate-limited to 600 req/min.
 
 - **Entry**: `app.ts` (Express middleware), `mcpServer.ts` (server factory)
 - **Tools**: `tools/alerts/`, `tools/dashboards/`, `tools/query/`,
@@ -94,8 +90,7 @@ See `MCP.md` in the repo root for user-facing setup instructions.
 
 HTTP-based [OpAMP](https://github.com/open-telemetry/opamp-spec) server that
 serves configurations to supervised OpenTelemetry Collectors. The supervisor
-pings `/v1/opamp` with status, and the server returns updated config when
-needed.
+pings `/v1/opamp` with status, and the server returns updated config when needed.
 
 - **Entry**: `app.ts` (Express sub-app)
 - **Controller**: `controllers/opampController.ts` - config derivation logic
@@ -122,18 +117,14 @@ Note: Background tasks do **not** run in Vercel preview deployments (see
 ## Data & Query Patterns
 
 ### ClickHouse Integration
-
 - **Query building**: Use `common-utils` for safe query construction
-- **Schema flexibility**: Support for various telemetry schemas via `Source`
-  configuration
+- **Schema flexibility**: Support for various telemetry schemas via `Source` configuration
 
 ### MongoDB Patterns
-
 - **Multi-tenancy**: All queries filtered by team context
 - **Relationships**: Use ObjectId references with proper population
 - **Indexing**: Strategic indexes for query performance
-- **Migrations**: Versioned migrations for schema changes (see
-  `packages/api/migrations/`)
+- **Migrations**: Versioned migrations for schema changes (see `packages/api/migrations/`)
 
 ## Security Requirements
 
@@ -141,3 +132,4 @@ Note: Background tasks do **not** run in Vercel preview deployments (see
 - **Team isolation**: All data access must filter by team context
 - **API authentication**: Use authentication middleware on protected routes
 - **Secrets**: Never commit secrets; use `.env` files
+

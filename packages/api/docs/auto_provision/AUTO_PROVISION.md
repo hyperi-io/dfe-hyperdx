@@ -166,22 +166,22 @@ to manage these values.
 ## Dashboard Provisioning
 
 HyperDX supports file-based dashboard provisioning, similar to Grafana's
-provisioning system. A scheduled task reads `.json` files from a directory and
-upserts dashboards into MongoDB, matched by name for idempotency. The task runs
-on the same schedule as other HyperDX tasks (every minute when using the
-built-in scheduler, or on your own schedule when running tasks externally).
+provisioning system. A scheduled task reads `.json` files from a directory
+and upserts dashboards into MongoDB, matched by name for idempotency.
+The task runs on the same schedule as other HyperDX tasks (every minute
+when using the built-in scheduler, or on your own schedule when running
+tasks externally).
 
 ### Environment Variables
 
-| Variable                          | Required | Default | Description                                        |
-| --------------------------------- | -------- | ------- | -------------------------------------------------- |
-| `DASHBOARD_PROVISIONER_DIR`       | Yes      |         | Directory to watch for `.json` dashboard files     |
-| `DASHBOARD_PROVISIONER_TEAM_ID`   | No\*     |         | Scope provisioning to a specific team ID           |
-| `DASHBOARD_PROVISIONER_ALL_TEAMS` | No\*     | `false` | Set to `true` to provision dashboards to all teams |
+| Variable                            | Required | Default | Description                                                     |
+| ----------------------------------- | -------- | ------- | --------------------------------------------------------------- |
+| `DASHBOARD_PROVISIONER_DIR`         | Yes      |         | Directory to watch for `.json` dashboard files                  |
+| `DASHBOARD_PROVISIONER_TEAM_ID`     | No\*     |         | Scope provisioning to a specific team ID                        |
+| `DASHBOARD_PROVISIONER_ALL_TEAMS`   | No\*     | `false` | Set to `true` to provision dashboards to all teams              |
 
-\*One of `DASHBOARD_PROVISIONER_TEAM_ID` or
-`DASHBOARD_PROVISIONER_ALL_TEAMS=true` is required when
-`DASHBOARD_PROVISIONER_DIR` is set.
+\*One of `DASHBOARD_PROVISIONER_TEAM_ID` or `DASHBOARD_PROVISIONER_ALL_TEAMS=true`
+is required when `DASHBOARD_PROVISIONER_DIR` is set.
 
 ### Dashboard JSON Format
 
@@ -219,6 +219,7 @@ with at minimum a `name` and `tiles` array:
   MongoDB (safe by default)
 - Files are validated against the `DashboardWithoutIdSchema` Zod schema; invalid
   files are skipped with a warning
+
 
 ## Note on Security
 

@@ -1,5 +1,5 @@
 (() => {
-  const $ = sel => document.querySelector(sel);
+  const $ = (sel) => document.querySelector(sel);
   const el = (tag, attrs = {}, ...children) => {
     const n = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs)) {
@@ -28,14 +28,14 @@
 
   // ----- formatting helpers -----
 
-  const fmtMs = ms => {
+  const fmtMs = (ms) => {
     if (ms == null) return '—';
     if (ms < 1000) return `${ms}ms`;
     if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
     return `${(ms / 60_000).toFixed(1)}m`;
   };
 
-  const fmtScore = s => (s == null ? '—' : s.toFixed(2));
+  const fmtScore = (s) => (s == null ? '—' : s.toFixed(2));
 
   const scoreClass = (s, max = 1) => {
     if (s == null) return '';
@@ -45,7 +45,7 @@
     return 'good';
   };
 
-  const criterionClass = s => {
+  const criterionClass = (s) => {
     if (s == null) return '';
     if (s === 0) return 'score-0';
     if (s <= 1) return 'score-low';
@@ -53,7 +53,7 @@
     return 'score-high';
   };
 
-  const stringifyMaybe = v => {
+  const stringifyMaybe = (v) => {
     if (v == null) return '';
     if (typeof v === 'string') return v;
     try {
@@ -69,7 +69,7 @@
   //  - newline-delimited JSON (ToolSearch output)
   //  - an array of {type:"text", text:"..."} content blocks (raw tool_result)
   // Render them as pretty-printed JSON where possible, with text blocks unwrapped.
-  const tryParseJson = s => {
+  const tryParseJson = (s) => {
     if (typeof s !== 'string') return undefined;
     const t = s.trim();
     if (!t || (t[0] !== '{' && t[0] !== '[' && t[0] !== '"')) return undefined;
@@ -80,7 +80,7 @@
     }
   };
 
-  const prettyJson = v => {
+  const prettyJson = (v) => {
     try {
       return JSON.stringify(v, null, 2);
     } catch {
@@ -88,7 +88,7 @@
     }
   };
 
-  const formatToolPayload = v => {
+  const formatToolPayload = (v) => {
     if (v == null) return '';
 
     // Object / array: pretty-print directly, but unwrap content-block arrays.
@@ -97,11 +97,11 @@
         Array.isArray(v) &&
         v.length > 0 &&
         v.every(
-          b => b && typeof b === 'object' && b.type === 'text' && 'text' in b,
+          (b) => b && typeof b === 'object' && b.type === 'text' && 'text' in b,
         )
       ) {
         return v
-          .map(b => {
+          .map((b) => {
             const inner = tryParseJson(b.text);
             return inner !== undefined ? prettyJson(inner) : b.text;
           })
@@ -166,9 +166,7 @@
   }
 
   async function loadBatch(batchName) {
-    const data = await fetchJson(
-      `/api/batches/${encodeURIComponent(batchName)}`,
-    );
+    const data = await fetchJson(`/api/batches/${encodeURIComponent(batchName)}`);
     state.batch = data.batch;
     state.cells = data.cells || [];
     state.summary = data.summary;
@@ -207,23 +205,17 @@
     const cells = state.cells.length;
     const meta = $('#batch-meta');
     meta.innerHTML = '';
-    meta.appendChild(
-      document.createTextNode(`${sc} scenario(s) \u00B7 ${cells} cell(s)  `),
-    );
-    const link = el(
-      'a',
-      {
-        href: '#',
-        class: 'back-link',
-        onclick: e => {
-          e.preventDefault();
-          state.selectedRun = null;
-          renderNav();
-          showView('summary');
-        },
+    meta.appendChild(document.createTextNode(`${sc} scenario(s) \u00B7 ${cells} cell(s)  `));
+    const link = el('a', {
+      href: '#',
+      class: 'back-link',
+      onclick: (e) => {
+        e.preventDefault();
+        state.selectedRun = null;
+        renderNav();
+        showView('summary');
       },
-      '\u2190 Summary',
-    );
+    }, '\u2190 Summary');
     meta.appendChild(link);
   }
 
@@ -295,11 +287,7 @@
               {},
               `#${r.idx}`,
               ' ',
-              el(
-                'span',
-                { class: 'muted small' },
-                `${r.toolCalls ?? '?'} calls`,
-              ),
+              el('span', { class: 'muted small' }, `${r.toolCalls ?? '?'} calls`),
             ),
             el('span', {}, termBadge, ' ', errBadge, ' ', chip),
           );
@@ -421,7 +409,7 @@
     }
 
     // Fallback: messages didn't give us tool calls — use toolCalls array.
-    const toolEventCount = events.filter(e => e.kind === 'tool').length;
+    const toolEventCount = events.filter((e) => e.kind === 'tool').length;
     if (toolEventCount === 0 && Array.isArray(t.toolCalls)) {
       for (const c of t.toolCalls) {
         events.push({
@@ -509,7 +497,7 @@
         'div',
         {
           class: 'head',
-          onclick: ev => {
+          onclick: (ev) => {
             ev.currentTarget.parentElement.classList.toggle('open');
           },
         },
@@ -592,7 +580,11 @@
           'h3',
           {},
           'Programmatic checks',
-          el('span', { class: 'score' }, fmtScore(g.programmatic.score)),
+          el(
+            'span',
+            { class: 'score' },
+            fmtScore(g.programmatic.score),
+          ),
         ),
       );
       for (const h of g.programmatic.hits) {
@@ -675,7 +667,11 @@
       );
       if (g.toolErrors.samples?.length) {
         te.appendChild(
-          el('pre', { class: 'code' }, stringifyMaybe(g.toolErrors.samples)),
+          el(
+            'pre',
+            { class: 'code' },
+            stringifyMaybe(g.toolErrors.samples),
+          ),
         );
       } else {
         te.appendChild(el('div', { class: 'muted' }, 'No error samples.'));
@@ -726,8 +722,8 @@
 
   // ----- rendering: summary comparison dashboard -----
 
-  const pct = x => (x == null ? '—' : `${(x * 100).toFixed(0)}%`);
-  const signedPct = x => {
+  const pct = (x) => (x == null ? '—' : `${(x * 100).toFixed(0)}%`);
+  const signedPct = (x) => {
     if (x == null) return '—';
     const sign = x >= 0 ? '+' : '';
     return `${sign}${(x * 100).toFixed(0)}%`;
@@ -756,12 +752,9 @@
     }
     root.className = 'summary-dashboard';
 
-    const mcpOrder =
-      s.columnOrder ||
-      s.mcpOrder ||
-      Object.keys(s.scenarios[0]?.cells || {}).sort();
+    const mcpOrder = s.columnOrder || s.mcpOrder || Object.keys(s.scenarios[0]?.cells || {}).sort();
     const baseline = s.baseline || mcpOrder[0];
-    const challengers = mcpOrder.filter(m => m !== baseline);
+    const challengers = mcpOrder.filter((m) => m !== baseline);
 
     // Header info
     root.appendChild(
@@ -804,13 +797,17 @@
       headerCells.push(el('th', { class: 'delta-col' }, `\u0394 ${m}`));
     }
 
-    const rows = s.scenarios.map(sc => {
+    const rows = s.scenarios.map((sc) => {
       const cells = [el('td', { class: 'scenario-name' }, sc.scenario)];
       for (const m of mcpOrder) {
         const c = sc.cells?.[m];
         const score = c?.combinedScore?.mean;
         cells.push(
-          el('td', { class: `score-cell ${scoreClass(score)}` }, pct(score)),
+          el(
+            'td',
+            { class: `score-cell ${scoreClass(score)}` },
+            pct(score),
+          ),
         );
       }
       for (const m of challengers) {
@@ -843,63 +840,63 @@
     const metrics = [
       {
         label: 'Combined score',
-        get: c => c?.combinedScore?.mean,
+        get: (c) => c?.combinedScore?.mean,
         fmt: pct,
         dKey: 'combinedScore',
         dFmt: signedPct,
       },
       {
         label: 'Programmatic',
-        get: c => c?.programmatic?.mean,
+        get: (c) => c?.programmatic?.mean,
         fmt: pct,
         dKey: 'programmaticScore',
         dFmt: signedPct,
       },
       {
         label: 'Judge (weighted)',
-        get: c => c?.judge?.weightedMean,
+        get: (c) => c?.judge?.weightedMean,
         fmt: pct,
         dKey: 'judgeWeightedMean',
         dFmt: signedPct,
       },
       {
         label: 'Tool calls',
-        get: c => c?.toolCalls?.mean,
-        fmt: x => (x == null ? '—' : x.toFixed(1)),
+        get: (c) => c?.toolCalls?.mean,
+        fmt: (x) => (x == null ? '—' : x.toFixed(1)),
         dKey: 'toolCalls',
-        dFmt: x => signedNum(x, 1),
+        dFmt: (x) => signedNum(x, 1),
         invert: true,
       },
       {
         label: 'Tool errors',
-        get: c => c?.toolErrors?.mean,
-        fmt: x => (x == null ? '—' : x.toFixed(1)),
+        get: (c) => c?.toolErrors?.mean,
+        fmt: (x) => (x == null ? '—' : x.toFixed(1)),
       },
       {
         label: 'Error penalty',
-        get: c => c?.toolErrors?.penaltyMean,
-        fmt: x => (x == null ? '—' : `${(x * 100).toFixed(0)}pp`),
+        get: (c) => c?.toolErrors?.penaltyMean,
+        fmt: (x) => (x == null ? '—' : `${(x * 100).toFixed(0)}pp`),
       },
       {
         label: 'Output tokens',
-        get: c => c?.tokens?.output,
-        fmt: x => (x == null ? '—' : Math.round(x).toLocaleString()),
+        get: (c) => c?.tokens?.output,
+        fmt: (x) => (x == null ? '—' : Math.round(x).toLocaleString()),
         dKey: 'outputTokens',
-        dFmt: x => signedNum(x, 0),
+        dFmt: (x) => signedNum(x, 0),
         invert: true,
       },
       {
         label: 'Duration (s)',
-        get: c => c?.durationMs?.mean,
-        fmt: x => (x == null ? '—' : (x / 1000).toFixed(1)),
+        get: (c) => c?.durationMs?.mean,
+        fmt: (x) => (x == null ? '—' : (x / 1000).toFixed(1)),
         dKey: 'durationMs',
-        dFmt: x => (x == null ? '—' : signedNum(x / 1000, 1)),
+        dFmt: (x) => (x == null ? '—' : signedNum(x / 1000, 1)),
         invert: true,
       },
       {
         label: 'Termination',
-        get: c => c?.termination,
-        fmt: x => {
+        get: (c) => c?.termination,
+        fmt: (x) => {
           if (!x) return '—';
           return Object.entries(x)
             .sort((a, b) => b[1] - a[1])
@@ -909,8 +906,8 @@
       },
       {
         label: 'N',
-        get: c => c?.n,
-        fmt: x => (x == null ? '—' : String(x)),
+        get: (c) => c?.n,
+        fmt: (x) => (x == null ? '—' : String(x)),
       },
     ];
 
@@ -924,7 +921,7 @@
       headerCells.push(el('th', { class: 'delta-col' }, `\u0394 ${m}`));
     }
 
-    const metricRows = metrics.map(metric => {
+    const metricRows = metrics.map((metric) => {
       const cells = [el('td', { class: 'metric-label' }, metric.label)];
       for (const m of mcpOrder) {
         const c = scenario.cells?.[m];
@@ -961,24 +958,19 @@
     const allCriteria = new Set();
     for (const cell of Object.values(scenario.cells || {})) {
       if (cell?.judge?.perCriterion) {
-        for (const id of Object.keys(cell.judge.perCriterion))
-          allCriteria.add(id);
+        for (const id of Object.keys(cell.judge.perCriterion)) allCriteria.add(id);
       }
     }
     if (allCriteria.size > 0) {
       const jHeader = [el('th', {}, 'Criterion')];
       for (const m of mcpOrder) jHeader.push(el('th', {}, m));
-      const jRows = [...allCriteria].sort().map(id => {
+      const jRows = [...allCriteria].sort().map((id) => {
         const cells = [el('td', { class: 'metric-label' }, id)];
         for (const m of mcpOrder) {
           const v = scenario.cells?.[m]?.judge?.perCriterion?.[id];
           const cls = criterionHeatClass(v);
           cells.push(
-            el(
-              'td',
-              { class: `heatmap-cell ${cls}` },
-              v != null ? `${v.toFixed(1)}/5` : '—',
-            ),
+            el('td', { class: `heatmap-cell ${cls}` }, v != null ? `${v.toFixed(1)}/5` : '—'),
           );
         }
         return el('tr', {}, ...cells);
@@ -1002,33 +994,21 @@
     const allChecks = new Set();
     for (const cell of Object.values(scenario.cells || {})) {
       if (cell?.programmatic?.perCheck) {
-        for (const id of Object.keys(cell.programmatic.perCheck))
-          allChecks.add(id);
+        for (const id of Object.keys(cell.programmatic.perCheck)) allChecks.add(id);
       }
     }
     if (allChecks.size > 0) {
       const pHeader = [el('th', {}, 'Check')];
       for (const m of mcpOrder) pHeader.push(el('th', {}, m));
-      const pRows = [...allChecks].sort().map(id => {
+      const pRows = [...allChecks].sort().map((id) => {
         const isNeg = id.startsWith('false_');
         const label = isNeg ? `${id} (neg)` : id;
         const cells = [el('td', { class: 'metric-label' }, label)];
         for (const m of mcpOrder) {
           const v = scenario.cells?.[m]?.programmatic?.perCheck?.[id];
-          const cls =
-            v != null
-              ? v >= 0.99
-                ? 'check-pass'
-                : v >= 0.5
-                  ? 'check-partial'
-                  : 'check-fail'
-              : '';
+          const cls = v != null ? (v >= 0.99 ? 'check-pass' : v >= 0.5 ? 'check-partial' : 'check-fail') : '';
           cells.push(
-            el(
-              'td',
-              { class: `heatmap-cell ${cls}` },
-              v != null ? pct(v) : '—',
-            ),
+            el('td', { class: `heatmap-cell ${cls}` }, v != null ? pct(v) : '—'),
           );
         }
         return el('tr', {}, ...cells);
@@ -1049,11 +1029,9 @@
     }
 
     // Side-by-side run comparison
-    const scenarioCells = state.cells.filter(
-      c => c.scenario === scenario.scenario,
-    );
+    const scenarioCells = state.cells.filter((c) => c.scenario === scenario.scenario);
     if (scenarioCells.length > 0) {
-      const maxRuns = Math.max(...scenarioCells.map(c => c.runs.length));
+      const maxRuns = Math.max(...scenarioCells.map((c) => c.runs.length));
       const runHeader = [el('th', {}, 'Run')];
       for (const c of scenarioCells) {
         runHeader.push(el('th', {}, cellHeading(c)));
@@ -1085,16 +1063,11 @@
               'td',
               {
                 class: 'run-cell clickable',
-                onclick: () =>
-                  loadRun(scenario.scenario, c.mcp, c.model, r.idx),
+                onclick: () => loadRun(scenario.scenario, c.mcp, c.model, r.idx),
               },
               chip,
               ' ',
-              el(
-                'span',
-                { class: 'muted small' },
-                `${r.toolCalls ?? '?'}c ${fmtMs(r.durationMs)}`,
-              ),
+              el('span', { class: 'muted small' }, `${r.toolCalls ?? '?'}c ${fmtMs(r.durationMs)}`),
               termBit ? el('span', {}, ' ', termBit) : null,
               errBit ? el('span', {}, ' ', errBit) : null,
             ),
@@ -1142,7 +1115,7 @@
     if (state.runData) renderTrajectory();
   });
 
-  loadBatches().catch(e => {
+  loadBatches().catch((e) => {
     $('#summary-content').textContent = `Error loading batches: ${e.message}`;
   });
 })();

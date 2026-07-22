@@ -54,8 +54,8 @@ function listBatches() {
   if (!fs.existsSync(RUNS_DIR)) return [];
   return fs
     .readdirSync(RUNS_DIR, { withFileTypes: true })
-    .filter(d => d.isDirectory())
-    .map(d => d.name)
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
     .sort()
     .reverse();
 }
@@ -76,22 +76,20 @@ function collectRuns(cellDir) {
     const m = /^(\d+)\.json$/.exec(f);
     if (m) runIdxs.add(Number(m[1]));
   }
-  return [...runIdxs]
-    .sort((a, b) => a - b)
-    .map(i => {
-      const grade = readJsonSafe(path.join(cellDir, `${i}.grade.json`));
-      const traj = readJsonSafe(path.join(cellDir, `${i}.json`));
-      return {
-        idx: i,
-        combinedScore: grade?.combinedScore ?? null,
-        programmaticScore: grade?.programmatic?.score ?? null,
-        judgeScore: grade?.judge?.weightedScore ?? null,
-        termination: traj?.termination ?? null,
-        durationMs: traj?.durationMs ?? null,
-        toolCalls: traj?.toolCalls?.length ?? null,
-        toolErrors: grade?.toolErrors?.errors ?? null,
-      };
-    });
+  return [...runIdxs].sort((a, b) => a - b).map((i) => {
+    const grade = readJsonSafe(path.join(cellDir, `${i}.grade.json`));
+    const traj = readJsonSafe(path.join(cellDir, `${i}.json`));
+    return {
+      idx: i,
+      combinedScore: grade?.combinedScore ?? null,
+      programmaticScore: grade?.programmatic?.score ?? null,
+      judgeScore: grade?.judge?.weightedScore ?? null,
+      termination: traj?.termination ?? null,
+      durationMs: traj?.durationMs ?? null,
+      toolCalls: traj?.toolCalls?.length ?? null,
+      toolErrors: grade?.toolErrors?.errors ?? null,
+    };
+  });
 }
 
 function listCells(batch) {
@@ -99,23 +97,21 @@ function listCells(batch) {
   if (!fs.existsSync(batchDir)) return null;
   const scenarios = fs
     .readdirSync(batchDir, { withFileTypes: true })
-    .filter(d => d.isDirectory())
-    .map(d => d.name);
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name);
   const out = [];
   for (const scenario of scenarios) {
     const scenarioDir = path.join(batchDir, scenario);
     const mcps = fs
       .readdirSync(scenarioDir, { withFileTypes: true })
-      .filter(d => d.isDirectory())
-      .map(d => d.name);
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
     for (const mcp of mcps) {
       const mcpDir = path.join(scenarioDir, mcp);
       const entries = fs.readdirSync(mcpDir, { withFileTypes: true });
 
       // Legacy layout: <scenario>/<mcp>/<index>.json
-      const hasRunFiles = entries.some(
-        e => !e.isDirectory() && isRunJson(e.name),
-      );
+      const hasRunFiles = entries.some((e) => !e.isDirectory() && isRunJson(e.name));
       if (hasRunFiles) {
         const runs = collectRuns(mcpDir);
         if (runs.length > 0) out.push({ scenario, mcp, model: null, runs });
@@ -126,8 +122,7 @@ function listCells(batch) {
         if (!entry.isDirectory()) continue;
         const modelDir = path.join(mcpDir, entry.name);
         const runs = collectRuns(modelDir);
-        if (runs.length > 0)
-          out.push({ scenario, mcp, model: entry.name, runs });
+        if (runs.length > 0) out.push({ scenario, mcp, model: entry.name, runs });
       }
     }
   }
@@ -138,14 +133,12 @@ const ROUTES = [
   [
     /^\/api\/batches$/,
     (_m, _q, res) => {
-      const batches = listBatches().map(name => {
-        const summary = readJsonSafe(
-          path.join(RUNS_DIR, name, '_summary.json'),
-        );
+      const batches = listBatches().map((name) => {
+        const summary = readJsonSafe(path.join(RUNS_DIR, name, '_summary.json'));
         return {
           name,
           generatedAt: summary?.generatedAt ?? null,
-          scenarios: summary?.scenarios?.map(s => s.scenario) ?? null,
+          scenarios: summary?.scenarios?.map((s) => s.scenario) ?? null,
         };
       });
       sendJson(res, 200, { batches });

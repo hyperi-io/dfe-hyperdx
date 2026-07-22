@@ -41,8 +41,8 @@ bats hdx-1453-auto-parse-json.bats
 
 ### Signals covered
 
-The suite exercises all three OTLP signal types against the standalone collector
-config (`docker/otel-collector/config.standalone.yaml`):
+The suite exercises all three OTLP signal types against the standalone
+collector config (`docker/otel-collector/config.standalone.yaml`):
 
 - **logs** - severity inference/normalization, JSON auto-parse, JSON-schema
   exporter, compat-schema (old ClickHouse), custom-pipeline processor swap, and

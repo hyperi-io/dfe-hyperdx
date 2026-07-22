@@ -28,13 +28,13 @@ You can also add this as an npm script:
 
 ### Options
 
-| Flag                     | Description                                            | Default |
-| ------------------------ | ------------------------------------------------------ | ------- |
-| `-k, --serviceKey <key>` | HyperDX service account API key                        |         |
-| `-p, --path <dir>`       | Directory containing sourcemaps                        | `.`     |
-| `-u, --apiUrl <url>`     | HyperDX API URL (required for self-hosted deployments) |         |
-| `-rid, --releaseId <id>` | Release ID to associate with the sourcemaps            |         |
-| `-bp, --basePath <path>` | Base path for the uploaded sourcemaps                  |         |
+| Flag                      | Description                                            | Default |
+| ------------------------- | ------------------------------------------------------ | ------- |
+| `-k, --serviceKey <key>`  | HyperDX service account API key                        |         |
+| `-p, --path <dir>`        | Directory containing sourcemaps                        | `.`     |
+| `-u, --apiUrl <url>`      | HyperDX API URL (required for self-hosted deployments) |         |
+| `-rid, --releaseId <id>`  | Release ID to associate with the sourcemaps            |         |
+| `-bp, --basePath <path>`  | Base path for the uploaded sourcemaps                  |         |
 
 Optionally, set the `HYPERDX_SERVICE_KEY` environment variable to avoid passing
 the `--serviceKey` flag.

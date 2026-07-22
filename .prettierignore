@@ -10,3 +10,42 @@ coverage
 packages/api/openapi.json
 
 *.dfe\[CHG\]*
+# Upstream-owned files: we hold NO functional delta in these, so we do not own
+# their formatting either. Reformatting them is pure merge-conflict surface
+# against a fast-moving upstream, and the worst shape for git rerere. See
+# FORK.md / CLAUDE.md -- minimise changes to ANYTHING from upstream.
+.github/scripts/__tests__/pr-triage-classify.test.js
+.github/scripts/pr-triage-classify.js
+.github/scripts/pr-triage.js
+.opencode/commands/eval-summary.md
+AGENTS.md
+CONTRIBUTING.md
+MCP.md
+README.md
+agent_docs/README.md
+agent_docs/architecture.md
+agent_docs/code_style.md
+agent_docs/data_viz_colors.md
+agent_docs/development.md
+agent_docs/observability.md
+agent_docs/page_layout.md
+agent_docs/themes.md
+docker/hyperdx/refresh-env.js
+packages/api/CHANGELOG.md
+packages/api/docs/auto_provision/AUTO_PROVISION.md
+packages/app/CHANGELOG.md
+packages/app/eslint.config.mjs
+packages/app/tests/e2e/README.md
+packages/cli/CHANGELOG.md
+packages/cli/README.md
+packages/common-utils/CHANGELOG.md
+packages/hdx-eval/CHANGELOG.md
+packages/hdx-eval/README.md
+packages/hdx-eval/scripts/viewer/public/app.js
+packages/hdx-eval/scripts/viewer/public/index.html
+packages/hdx-eval/scripts/viewer/public/style.css
+packages/hdx-eval/scripts/viewer/server.js
+packages/otel-collector/CHANGELOG.md
+packages/otel-collector/README.md
+scripts/dev-portal/index.html
+smoke-tests/otel-collector/README.md

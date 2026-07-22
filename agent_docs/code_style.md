@@ -1,7 +1,6 @@
 # Code Style & Best Practices
 
-> **Note**: Pre-commit hooks handle formatting automatically. Focus on
-> implementation patterns.
+> **Note**: Pre-commit hooks handle formatting automatically. Focus on implementation patterns.
 
 ## TypeScript
 
@@ -29,24 +28,22 @@
 
 ## Mantine UI Components
 
-The project uses Mantine UI with **custom variants** defined in
-`packages/app/src/theme/mantineTheme.ts`.
+The project uses Mantine UI with **custom variants** defined in `packages/app/src/theme/mantineTheme.ts`.
 
 - Prefer Mantine components over custom-styled elements
-- Prefer individual Mantine style props (eg. `m='xs'`) over raw styles (eg.
-  `style={{ margin: '4px' }}`)
+- Prefer individual Mantine style props (eg. `m='xs'`) over raw styles (eg. `style={{ margin: '4px' }}`)
 
 ### Button & ActionIcon Variants (REQUIRED)
 
 **ONLY use these variants for Button and ActionIcon components:**
 
-| Variant               | Use Case                                                                                                                                                                   | Example                                        |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `variant="primary"`   | Primary actions (Submit, Save, Create, Run)                                                                                                                                | `<Button variant="primary">Save</Button>`      |
-| `variant="secondary"` | Secondary actions (Cancel, Clear, auxiliary actions)                                                                                                                       | `<Button variant="secondary">Cancel</Button>`  |
-| `variant="danger"`    | Destructive actions (Delete, Remove, Rotate API Key)                                                                                                                       | `<Button variant="danger">Delete</Button>`     |
-| `variant="link"`      | Link-style actions with no background or border (View Details, navigation-style CTAs)                                                                                      | `<Button variant="link">View Details</Button>` |
-| `variant="subtle"`    | Transparent background with hover highlight; for toolbar/utility controls that shouldn't draw attention until hovered (collapse toggles, close buttons, auxiliary actions) | `<Button variant="subtle">Filter</Button>`     |
+| Variant | Use Case | Example |
+|---------|----------|---------|
+| `variant="primary"` | Primary actions (Submit, Save, Create, Run) | `<Button variant="primary">Save</Button>` |
+| `variant="secondary"` | Secondary actions (Cancel, Clear, auxiliary actions) | `<Button variant="secondary">Cancel</Button>` |
+| `variant="danger"` | Destructive actions (Delete, Remove, Rotate API Key) | `<Button variant="danger">Delete</Button>` |
+| `variant="link"` | Link-style actions with no background or border (View Details, navigation-style CTAs) | `<Button variant="link">View Details</Button>` |
+| `variant="subtle"` | Transparent background with hover highlight; for toolbar/utility controls that shouldn't draw attention until hovered (collapse toggles, close buttons, auxiliary actions) | `<Button variant="subtle">Filter</Button>` |
 
 ### Correct Usage
 
@@ -78,19 +75,11 @@ The project uses Mantine UI with **custom variants** defined in
 <ActionIcon variant="filled" color="gray">...</ActionIcon>
 ```
 
-**Link variant details**: Renders with no background, no border, and muted text
-color. On hover, text brightens to full contrast. Use for link-style CTAs that
-should blend into surrounding content (e.g., "View Details", "View Full Trace").
+**Link variant details**: Renders with no background, no border, and muted text color. On hover, text brightens to full contrast. Use for link-style CTAs that should blend into surrounding content (e.g., "View Details", "View Full Trace").
 
-**Subtle variant details**: Transparent background with standard text color. On
-hover, a subtle background highlight appears (`--color-bg-hover`). This is the
-**default** ActionIcon variant. Use for toolbar icons, collapse toggles, close
-buttons, and utility controls that should stay unobtrusive but reveal
-interactivity on hover. Unlike `link`, `subtle` shows a hover background rather
-than changing text color.
+**Subtle variant details**: Transparent background with standard text color. On hover, a subtle background highlight appears (`--color-bg-hover`). This is the **default** ActionIcon variant. Use for toolbar icons, collapse toggles, close buttons, and utility controls that should stay unobtrusive but reveal interactivity on hover. Unlike `link`, `subtle` shows a hover background rather than changing text color.
 
-**Note**: `variant="filled"` is still valid for **form inputs** (Select,
-TextInput, etc.), just not for Button/ActionIcon.
+**Note**: `variant="filled"` is still valid for **form inputs** (Select, TextInput, etc.), just not for Button/ActionIcon.
 
 ### Icon-Only Buttons → ActionIcon
 
@@ -112,16 +101,15 @@ This pattern cannot be enforced by ESLint and requires manual code review.
 
 ### EmptyState Component (REQUIRED)
 
-**Use `EmptyState` (`@/components/EmptyState`) for all empty/no-data states.**
-Do not create ad-hoc inline empty states.
+**Use `EmptyState` (`@/components/EmptyState`) for all empty/no-data states.** Do not create ad-hoc inline empty states.
 
-| Prop          | Type                  | Default     | Description                                        |
-| ------------- | --------------------- | ----------- | -------------------------------------------------- |
-| `icon`        | `ReactNode`           | —           | Icon in the theme circle (hidden if not provided)  |
-| `title`       | `string`              | —           | Heading text (headline style — no trailing period) |
-| `description` | `ReactNode`           | —           | Subtext below the title                            |
-| `children`    | `ReactNode`           | —           | Actions (buttons, links) below description         |
-| `variant`     | `"default" \| "card"` | `"default"` | `"card"` wraps in a bordered Paper                 |
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `icon` | `ReactNode` | — | Icon in the theme circle (hidden if not provided) |
+| `title` | `string` | — | Heading text (headline style — no trailing period) |
+| `description` | `ReactNode` | — | Subtext below the title |
+| `children` | `ReactNode` | — | Actions (buttons, links) below description |
+| `variant` | `"default" \| "card"` | `"default"` | `"card"` wraps in a bordered Paper |
 
 ```tsx
 // ❌ BAD - ad-hoc inline empty states
@@ -137,41 +125,19 @@ Do not create ad-hoc inline empty states.
 />
 ```
 
-**Title copy**: Treat `title` as a short headline (like `Title` in the UI). Do
-**not** end it with a period. Use `description` for full sentences, which should
-use normal punctuation including a trailing period when appropriate. Match
-listing pages (e.g. dashboards and saved searches use parallel phrasing such as
-“No matching … yet” / “No … yet” without dots).
+**Title copy**: Treat `title` as a short headline (like `Title` in the UI). Do **not** end it with a period. Use `description` for full sentences, which should use normal punctuation including a trailing period when appropriate. Match listing pages (e.g. dashboards and saved searches use parallel phrasing such as “No matching … yet” / “No … yet” without dots).
 
 ## Semantic design tokens (prefer over raw Mantine colors)
 
-The UI is built with **Mantine components**, but **colors and surfaces** should
-follow the **semantic CSS custom properties** in our themes (`--color-*`, etc.),
-not ad-hoc Mantine palette values. Those tokens are defined in
-`packages/app/src/theme/themes/**/_tokens.scss`, align with a **Click UI**–style
-system, and keep HyperDX and ClickStack visually consistent. They are the path
-toward a shared design system even while Mantine remains the component layer.
+The UI is built with **Mantine components**, but **colors and surfaces** should follow the **semantic CSS custom properties** in our themes (`--color-*`, etc.), not ad-hoc Mantine palette values. Those tokens are defined in `packages/app/src/theme/themes/**/_tokens.scss`, align with a **Click UI**–style system, and keep HyperDX and ClickStack visually consistent. They are the path toward a shared design system even while Mantine remains the component layer.
 
-- **Do**: Use Mantine for layout, components, and spacing; use **semantic
-  tokens** for themed backgrounds, text colors, borders, and states (e.g.
-  `style={{ color: 'var(--color-text-muted)' }}` or
-  `style={{ border: '1px solid var(--color-border)' }}`).
-- **Do not**: Rely on raw Mantine color props for app chrome and content when a
-  semantic token exists — e.g. `c="gray.5"`, `bg="dark.7"`, or arbitrary
-  `color="blue.4"` for surfaces that should match the rest of the product.
-- **Reference**: `packages/app/src/theme/semanticColorsGrouped.ts` (token
-  names), theme SCSS under `packages/app/src/theme/themes/`, and Storybook
-  (`SemanticColors` and related theme stories) for a visual map.
+- **Do**: Use Mantine for layout, components, and spacing; use **semantic tokens** for themed backgrounds, text colors, borders, and states (e.g. `style={{ color: 'var(--color-text-muted)' }}` or `style={{ border: '1px solid var(--color-border)' }}`).
+- **Do not**: Rely on raw Mantine color props for app chrome and content when a semantic token exists — e.g. `c="gray.5"`, `bg="dark.7"`, or arbitrary `color="blue.4"` for surfaces that should match the rest of the product.
+- **Reference**: `packages/app/src/theme/semanticColorsGrouped.ts` (token names), theme SCSS under `packages/app/src/theme/themes/`, and Storybook (`SemanticColors` and related theme stories) for a visual map.
 
-Mantine theme overrides in `packages/app/src/theme/**` may map Mantine’s scale
-to our palette; that does not replace using **`var(--color-...)`** in new
-styling where you need explicit color control.
+Mantine theme overrides in `packages/app/src/theme/**` may map Mantine’s scale to our palette; that does not replace using **`var(--color-...)`** in new styling where you need explicit color control.
 
-**Chart and visualization colors are a separate, more specific contract** — they
-have their own categorical, semantic, and heatmap palettes wired through
-`packages/app/src/utils.ts` helpers. Don't hard-code series colors or reuse
-`--color-text-*` for charts. See [`data_viz_colors.md`](./data_viz_colors.md)
-before touching anything that renders data.
+**Chart and visualization colors are a separate, more specific contract** — they have their own categorical, semantic, and heatmap palettes wired through `packages/app/src/utils.ts` helpers. Don't hard-code series colors or reuse `--color-text-*` for charts. See [`data_viz_colors.md`](./data_viz_colors.md) before touching anything that renders data.
 
 ## Refactoring
 
