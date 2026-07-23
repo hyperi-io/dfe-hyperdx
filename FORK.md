@@ -117,6 +117,40 @@ image scan at publish is the control that still applies, and a critical finding
 there is an argument for **syncing upstream now** - not for hand-patching a
 dependency we do not own.
 
+#### The exception: a reachable HIGH/CRITICAL
+
+We DO patch, but only when BOTH hold:
+
+1. severity is **high or critical**, AND
+2. there is a **real vector** - the vulnerable path is actually reachable in how
+   DFE runs this fork.
+
+Point 2 is the one that gets skipped, and it is the one that matters. Most
+advisories against a transitive dep are unreachable here: the package is present
+but the vulnerable function is never imported, or it is only reachable from a
+path we do not ship. **"npm audit says high" is not a vector.** If you cannot
+write down how an attacker gets there, there is nothing to patch.
+
+The register is `security/overrides.yaml`. Every entry needs the advisory, the
+severity, the prose vector, and an upstream link - ours is always a stopgap,
+theirs is the fix. The matching pin goes in the root `package.json`
+`resolutions` block (catalogued surface, so document it here too).
+
+#### Unwinding is the hard part, so it is automated
+
+A pin is easy to add and easy to forget. Upstream ships the fix a few weeks
+later, our override quietly becomes a no-op, and the fork carries a divergence
+in the file upstream churns most that nobody remembers deciding on.
+
+So the nag is inverted. `scripts/security-override.py --check` compares every
+entry against what `yarn.lock` ACTUALLY resolves to and FAILS when a pin has
+become redundant - reporting `holding`, `REDUNDANT`, or `gone` per entry, with
+the unwind steps. It also refuses an entry below the severity bar or missing its
+vector, so the bar is enforced mechanically rather than by good intentions.
+
+`upstream-drift.yml` runs it daily. That is the only dependency nag this repo
+keeps, and it is about OUR pins, not upstream's tree.
+
 ### Never put our assertions in an upstream test file
 
 Upstream test files gain cases constantly and upstream has no stake in ours, so

@@ -79,3 +79,23 @@ jobs:
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # THE INVERSE NAG. We mute advisories we cannot action, so the one thing
+      # left to chase is our OWN pins going stale: upstream fixes the CVE, our
+      # override silently becomes a no-op, and the fork keeps a divergence in
+      # package.json that nobody remembers deciding on. This fails the run when
+      # a pin can be unwound, which is the only dependency nag worth having here.
+      - name: Security overrides - anything to unwind?
+        run: |
+          set +e
+          scripts/security-override.py --check | tee overrides.txt
+          status=${PIPESTATUS[0]}
+          {
+            echo
+            echo '## Fork security overrides'
+            echo
+            echo '```'
+            cat overrides.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"

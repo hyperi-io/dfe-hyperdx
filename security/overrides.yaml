@@ -1,0 +1,55 @@
+# Fork security overrides - the register of dependency pins WE carry.
+#
+# THE BAR. An entry here is a deliberate divergence from upstream's dependency
+# tree, and it is only justified when BOTH hold:
+#
+#   1. Severity is HIGH or CRITICAL, and
+#   2. there is a REAL VECTOR - the vulnerable code path is actually reachable
+#      in how DFE runs this fork.
+#
+# Point 2 is the one that gets skipped. Most advisories against a transitive
+# dependency are unreachable here: the package is present but the vulnerable
+# function is never imported, or it is only reachable from a code path we do
+# not ship (a dev server, a CLI we do not run, a cloud provider adapter we do
+# not configure). "npm audit says high" is NOT a vector. Write down how an
+# attacker actually gets there, or do not add the entry.
+#
+# WHY THE BAR IS HIGH. Every entry is permanent conflict surface in
+# package.json - the one file upstream churns most - and it will almost
+# certainly be fixed upstream, at which point our pin is dead weight that has
+# to be found and removed. The cost is not the pin, it is the unwinding.
+#
+# THE UNWIND. That is what `vector` and `upstream` are for, and what
+# `scripts/security-override.py --check` automates: it compares each entry
+# against what the tree ACTUALLY resolves to now and FAILS when upstream has
+# caught up, so a redundant pin nags us to delete it. That inverse nag is the
+# whole point - an override nobody removes is how a fork silently drifts.
+#
+# ADDING ONE
+#   1. Add the entry below with every field filled in. `vector` is prose, not a
+#      CVSS string - describe the path.
+#   2. Add the matching entry to `resolutions` in the root package.json, and
+#      note it in FORK.md's change catalogue (package.json is catalogued
+#      surface, so the edit is an exception that must be documented).
+#   3. Raise it upstream and put the link in `upstream`. Ours is a stopgap;
+#      theirs is the fix.
+#
+# REMOVING ONE
+#   `--check` tells you when. Delete the entry, delete the resolutions line,
+#   run `yarn install` to re-resolve, done.
+
+overrides: []
+# Example of the shape (keep commented - an empty register is the goal state):
+#
+#   - package: some-parser
+#     # Yarn resolutions range. Narrowest thing that clears the advisory.
+#     range: ">=1.2.3"
+#     advisory: GHSA-xxxx-yyyy-zzzz
+#     severity: critical          # high | critical only - see THE BAR above
+#     # HOW an attacker reaches it in OUR deployment. Be specific.
+#     vector: >-
+#       The receiver hands untrusted event bodies to some-parser.parse() on the
+#       ingest path, so a crafted payload reaches the vulnerable branch without
+#       authentication.
+#     upstream: https://github.com/hyperdxio/hyperdx/issues/0000
+#     added: 2026-07-23
