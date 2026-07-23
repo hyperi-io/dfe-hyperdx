@@ -14,10 +14,17 @@ const setSearch = (search: string) => {
   window.history.replaceState({}, '', `/search${search}`);
 };
 
-const postTheme = (theme: unknown) => {
+// The host that framed us. Same-origin is the standard deploy shape: dfe-ui
+// and this app sit behind one gateway origin.
+const TRUSTED = 'http://localhost';
+
+const postTheme = (theme: unknown, origin: string = TRUSTED) => {
   act(() => {
     window.dispatchEvent(
-      new MessageEvent('message', { data: { type: 'DFE_SET_THEME', theme } }),
+      new MessageEvent('message', {
+        data: { type: 'DFE_SET_THEME', theme },
+        origin,
+      }),
     );
   });
 };
@@ -70,6 +77,18 @@ describe('useEmbedColorScheme', () => {
     postTheme('purple');
     postTheme(null);
     postTheme(42);
+
+    expect(result.current).toBe('light');
+  });
+
+  it('ignores a theme message from an untrusted origin', () => {
+    // The CSP frame-ancestors allowlist already bounds who can frame us, so
+    // this is defence in depth - but an unchecked message listener is a habit
+    // that gets copied to a handler where the payload is not cosmetic.
+    setSearch('?embed=1&theme=light');
+    const { result } = renderHook(() => useEmbedColorScheme('dark'));
+
+    postTheme('dark', 'https://evil.example');
 
     expect(result.current).toBe('light');
   });

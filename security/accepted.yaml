@@ -1,0 +1,49 @@
+# Accepted scanner findings in OUR OWN code.
+#
+# An entry here is a finding that `scripts/attribute-findings.py` correctly
+# attributed to us and that we have looked at and decided not to act on. It
+# stops the gate going permanently red, which is the failure mode that makes a
+# gate worthless: a check nobody can ever make green is a check everybody
+# learns to skip.
+#
+# This is NOT for inherited upstream findings - those are filtered by
+# attribution and never gate. This file is only for things we wrote.
+#
+# EVERY ENTRY NEEDS A REASON. "false positive" is not a reason; say WHY the
+# reported condition cannot happen here. If you cannot, fix the code instead.
+#
+# Accepted findings are still PRINTED on every run, under their own heading.
+# They are suppressed from the gate, not from view - an acceptance that becomes
+# wrong should be visible when someone next reads the output.
+#
+# Matching is rule + path. Leave `line` out unless the same rule fires more than
+# once in a file for different reasons - line numbers move and a stale line just
+# silently stops matching.
+
+accepted:
+  - rule: yaml.github-actions.security.secrets-inherit.secrets-inherit
+    path: .github/workflows/ci.yml
+    reason: >-
+      The hyperi-ci reusable workflow is a first-party workflow in our own org
+      and needs the org secrets to publish. `secrets: inherit` is the documented
+      calling convention for it, not an oversight.
+
+  - rule: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+    path: packages/app/src/dfe/__tests__/dfeTheme.test.ts
+    reason: >-
+      Test-only. The RegExp is built from a hardcoded token name inside the test
+      itself; there is no runtime path and no external input.
+
+  - rule: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    path: packages/app/src/dfe/__tests__/forkDeltas.test.ts
+    reason: >-
+      Test-only. Joins __dirname with literal relative paths to read repo files
+      under test. No user input reaches it.
+
+  - rule: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
+    path: packages/app/src/theme/index.ts
+    reason: >-
+      The interpolated value is a theme NAME that has just failed validation
+      against our own closed enum, written to console.warn. It is not
+      attacker-controlled and the sink is a dev-console log, not a format string
+      passed to util.format.

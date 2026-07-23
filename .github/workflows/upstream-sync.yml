@@ -50,14 +50,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (full history)
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v4
         with:
           fetch-depth: 0
 
       # rerere resolutions live in .git/rr-cache (not committed) -- persist them
       # so a resolution recorded on one run replays on the next.
       - name: Restore rerere cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .git/rr-cache
           key: rr-cache-${{ github.run_id }}
@@ -71,12 +71,16 @@ jobs:
           git config rerere.enabled true
           git config rerere.autoupdate true
 
+      # The dispatch input goes through `env:`, never straight into the shell -
+      # it is free text and interpolating it into `run:` executes it.
       - name: Resolve upstream ref
         id: ref
+        env:
+          UPSTREAM_REF_INPUT: ${{ inputs.upstream_ref }}
         run: |
           git remote add upstream "$UPSTREAM_URL" 2>/dev/null || true
           git fetch --tags upstream
-          ref="${{ inputs.upstream_ref }}"
+          ref="${UPSTREAM_REF_INPUT}"
           if [ -z "$ref" ]; then ref="upstream/main"; fi
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "short=$(git rev-parse --short "$ref")" >> "$GITHUB_OUTPUT"
@@ -107,7 +111,7 @@ jobs:
 
       - name: Save rerere cache
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .git/rr-cache
           key: rr-cache-${{ github.run_id }}

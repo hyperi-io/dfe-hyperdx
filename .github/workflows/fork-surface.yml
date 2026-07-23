@@ -50,10 +50,16 @@ jobs:
           git remote add upstream "$UPSTREAM_URL" 2>/dev/null || true
           git fetch --no-tags upstream
 
+      # github context goes through `env:`, never straight into the shell. A
+      # branch name is attacker-controllable on a fork PR, and interpolating it
+      # into `run:` executes it. Caught by scripts/attribute-findings.py.
       - name: Check conflict surface
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base='origin/${{ github.base_ref }}'
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="origin/${BASE_REF}"
           else
             base='origin/main'
           fi

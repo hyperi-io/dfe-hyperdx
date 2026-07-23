@@ -136,6 +136,42 @@ severity, the prose vector, and an upstream link - ours is always a stopgap,
 theirs is the fix. The matching pin goes in the root `package.json`
 `resolutions` block (catalogued surface, so document it here too).
 
+#### Code scanning: keep it all, sort it by who wrote the line
+
+The muting above is the DEPENDENCY axis, where authorship is not a useful
+question - the whole tree is upstream's regardless of who pulled a package in.
+Code findings are different: they carry a file and a line, so they can be
+attributed, and `fork-security.yml` scans the whole tree and sorts the results:
+
+- **OURS** - a line we added or changed vs the merge base. **Gates the build.**
+- **ACCEPTED** - ours, reviewed, listed in `security/accepted.yaml` with a
+  reason. Suppressed from the gate but PRINTED every run, because a suppression
+  that has become wrong should be visible.
+- **INHERITED** - upstream's lines. Reported to the job summary, never gates.
+
+Measured on the first real run: 114 findings, 11 ours. Gating on 114 is
+unworkable; muting 114 loses the 11. Sorting is the only answer that keeps both.
+
+ATTRIBUTION - `scripts/attribute-findings.py`, SARIF in, so it serves semgrep
+and CodeQL alike. Two obvious methods do NOT work here:
+
+- **author/blame** is useless - every line blames to whoever ran the import.
+- **commit ancestry** is subtly wrong, because the fork was SQUASH-imported: any
+  line untouched since the import blames to a commit that is not in upstream's
+  history and gets misfiled as ours. Observed on `theme/ThemeProvider.tsx:163`.
+- **line content vs the merge base** is immune to both and needs no catalogue -
+  it works even on an upstream file nobody remembered to list.
+
+THE THING THAT BREAKS IT: reformatting an upstream file rewrites every line into
+the diff, so the whole file reads as ours and the signal is gone. That is a
+SECOND, independent reason for the no-bulk-reformat rule above - the cost is no
+longer just merge pain.
+
+It earned its keep immediately: the first run flagged two shell-injection sites
+and three mutable action pins in the workflows sitting beside it, plus a
+`message` listener with no origin check in `EmbedThemeSync`. All fixed rather
+than accepted.
+
 #### Unwinding is the hard part, so it is automated
 
 A pin is easy to add and easy to forget. Upstream ships the fix a few weeks

@@ -1,0 +1,94 @@
+# Project:   dfe-hyperdx
+# File:      .github/workflows/fork-security.yml
+# Purpose:   Scan the whole tree, gate only on the findings that are OURS.
+#
+# License:   MIT - HYPERI PTY LIMITED
+# Copyright: (c) 2026 HYPERI PTY LIMITED
+#
+# THE POSTURE THIS IMPLEMENTS. Scanning a fork reports on the whole tree, and
+# the whole tree is overwhelmingly upstream's. Measured here: 114 semgrep
+# findings, 11 of them ours. Gating on all 114 is unworkable and muting all 114
+# throws away the 11 that matter - so we sort instead of choosing.
+#
+#   OURS      -> fails this job. Lines we added or changed vs the merge base.
+#   INHERITED -> reported to the job summary, never gates. Fixing upstream code
+#                diverges the fork; it moves when we sync, or via an entry in
+#                security/overrides.yaml when one is severe AND reachable.
+#
+# This is the "retain the scanning, know what is whose" half of the posture in
+# FORK.md. The muting half (renovate scoping, org security config) covers the
+# DEPENDENCY axis, where authorship is not a useful question because the whole
+# tree is upstream's regardless of who pulled it in.
+#
+# It found real bugs in its own first run - two shell-injection sites and three
+# mutable action pins in the workflows alongside it - which is the argument for
+# gating on ours rather than reporting everything.
+
+name: fork-security
+
+'on':
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '41 5 * * 1' # Mondays, alongside the upstream sync window
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-security-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UPSTREAM_URL: https://github.com/hyperdxio/hyperdx.git
+
+jobs:
+  attribute:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v4
+        with:
+          fetch-depth: 0
+
+      # Attribution is computed against the upstream merge base, so without the
+      # upstream ref there is no baseline. The script says so and declines to
+      # gate rather than failing the build on 100+ inherited findings.
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "$UPSTREAM_URL" 2>/dev/null || true
+          git fetch --no-tags upstream
+
+      - name: Set up Python
+        uses: actions/setup-python@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v5
+        with:
+          python-version: '3.12'
+
+      - name: Install semgrep
+        run: pip install --disable-pip-version-check semgrep
+
+      # Whole tree, deliberately. The sorting happens after, so the inherited
+      # bucket stays visible instead of being excluded at scan time.
+      - name: Scan
+        run:
+          semgrep --config p/default --sarif --output semgrep.sarif
+          --metrics=off --quiet
+
+      - name: Attribute findings
+        run:
+          scripts/attribute-findings.py semgrep.sarif --summary attribution.md
+
+      - name: Publish the digest
+        if: always()
+        run: cat attribution.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the SARIF
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+          retention-days: 30
