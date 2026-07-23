@@ -51,6 +51,39 @@ is the _design_. Downstream repos (dfe-engine, dfe-infra, dfe-docs) should
 on its own - we do not want to manage small fry on top of it. Fewer touched
 upstream files means cheaper syncs, full stop.
 
+### The cheapest-edit ladder
+
+Before changing an upstream file, work down this list and stop at the first that
+fits. This is the single highest-leverage habit in the repo, and it is the one
+every LLM gets wrong by default - the instinct is to open the upstream file and
+rewrite the function body, which works, passes tests, and costs a hand-resolve
+on every sync forever.
+
+1. **Can it live under `dfe/` entirely?** Costs nothing. Do that.
+2. **Can the upstream file change by ONE TOKEN?** Put the logic in `dfe/`, give
+   your function the SAME SIGNATURE as upstream's, and swap the identifier at
+   the call site. The argument list stays byte-identical, so an upstream change
+   to those arguments is a trivial conflict rather than a structural one.
+3. **Can it be an ADDITION next to a brace?** An `else if` appended to an
+   existing block merges cleanly far more often than a modified line.
+4. **Only then** edit in place, and catalogue it in `.fork-surface` + here.
+
+WORKED EXAMPLE (2026-07-23, native ClickHouse JSON columns). First attempt
+rewrote `buildJSONExtractQuery`'s body in `DBRowJsonViewer.tsx` and edited
+upstream's test expectations: 53 insertions across the two files upstream churns
+hardest in that area. I had to redo this post LLM as rule 2 (four call sites
+differing by one identifier) plus rule 3 (three `else if (isJsonColumn)`
+additions reusing upstream's own predicate): **15 insertions**,
+`buildJSONExtractQuery` byte pristine, and `DBRowJsonViewer.test.tsx` back to
+pristine and off the catalogue. Same feature, a quarter of the standing cost.
+
+### Never put our assertions in an upstream test file
+
+Upstream test files gain cases constantly and upstream has no stake in ours, so
+a delta there is the most expensive kind for the least return. Ours go in a
+`dfe/__tests__/` directory. `.githooks/fork-surface-check.py --audit` lists the
+catalogued test files still to migrate (6 inherited, as of 2026-07-23).
+
 > NOTE: convention 2 below (`.dfe[CHG]` shadow copies) is **RETIRED** - see
 > "Upstream base". We modify upstream files IN PLACE now, so each one is
 > permanent conflict surface and must be a documented exception: listed in
@@ -346,6 +379,46 @@ second is the load-bearing one.
    `dfe-infra/scripts/verify_embed.py`, now invoked by
    `dfe-infra/bootstrap/smoke-test-hyperdx.sh` alongside the
    auth/data/embed-header seam checks.
+
+3. **Early warning, between syncs.** `upstream-sync.yml` answers "does the merge
+   still apply?", which is late - by then someone is resolving conflicts under
+   pressure against 30+ commits of unfamiliar change. `upstream-drift.yml` runs
+   daily and answers the cheaper question: has upstream touched anything we hold
+   a delta in? Run it yourself any time with
+
+   ```
+   git fetch upstream && .githooks/fork-surface-check.py --drift
+   ```
+
+   It names the at-risk files AND the upstream commits that touched them. The
+   right response is nearly always to shrink that delta down the ladder above,
+   BEFORE the merge turns it into a conflict.
+
+4. **Per-clone setup is not inherited.** `rerere.enabled` and `core.hooksPath`
+   are local git config, so a fresh clone, a CI container and an agent sandbox
+   all start with rerere off and the guard disconnected - and rerere being off
+   is SILENT, it just records nothing. `./scripts/fork-setup.sh` sets both plus
+   the upstream remote, and the guard self-heals rerere whenever it finds it
+   off. `fork-surface.yml` enforces the guard in CI so the local hook is a
+   convenience rather than the control.
+
+### Measured, 2026-07-23
+
+A dry-run merge of `upstream/main` (34 commits ahead, incl. #2561 touching
+`DBRowJsonViewer.test.tsx`) was run against the tree before and after the
+restructure above:
+
+- Both: conflicts in `README.md` and `package.json` only.
+- Before: `DBRowJsonViewer.test.tsx` auto-merged - git resolved it, no human
+  needed. The delta did NOT force a conflict on this particular sync.
+- After: the file is identical to the merge base, so there was nothing to merge
+  - upstream's new test arrived verbatim.
+- Our delta gate (`src/dfe` + the upstream viewer suite) passed **109 tests
+  against the merged tree**, up one, that one being upstream's new test.
+
+Read that honestly: the restructure removed the RISK, it did not avoid a
+conflict that was otherwise certain. The value is that a file identical to the
+base can never conflict, however upstream rewrites it.
 
 **Priming rerere:** rerere has nothing to replay until a resolution is recorded.
 Prime it by doing the first post-2.29 upstream merge by hand on a `sync/<tag>`
