@@ -77,6 +77,46 @@ additions reusing upstream's own predicate): **15 insertions**,
 `buildJSONExtractQuery` byte pristine, and `DBRowJsonViewer.test.tsx` back to
 pristine and off the catalogue. Same feature, a quarter of the standing cost.
 
+### Security + dependency posture is INVERTED here
+
+The house standard is scanners-on, dependencies-current. In this repo that is
+backwards, and deliberately so: **off by default, on only for what WE added.**
+
+- `renovate.json` disables every manager and re-enables exactly one thing - the
+  SHA-pinned actions in the four workflows we own. Upstream's workflows are
+  excluded BY NAME so a sync that adds one does not silently opt it in.
+- CodeQL / GitHub code security are OFF (`code_security: disabled`), as is
+  `dependabot_security_updates` (the automatic fix PRs).
+- Dependabot vulnerability ALERTS are a separate switch and are still **ON** as
+  of 2026-07-23 - they are what produces the "GitHub found 118 vulnerabilities"
+  banner on every push. Turning them off is a repo-admin action, deliberately
+  human-only:
+
+  ```
+  gh api -X DELETE repos/hyperi-io/dfe-hyperdx/vulnerability-alerts
+  ```
+
+  (`-X PUT` re-enables. Verify with `gh api .../vulnerability-alerts -i` - 204
+  means on, 404 means off.)
+
+- semgrep stays non-blocking in `.hyperi-ci.yaml` (`quality.semgrep` defaults to
+  `warn`); its findings are inherited upstream code.
+- gitleaks stays ON and blocking. That one scans OUR commits for OUR secrets and
+  has nothing to do with upstream's dependency tree.
+
+WHY. We do not own upstream's dependency tree. Patching a vendored dep diverges
+us from hyperdxio/hyperdx for a fix we did not write, converts a pristine file
+into permanent rerere conflict surface, and gets re-conflicted on the next sync
+regardless. Upstream patches upstream; we get it when we sync. And an alert
+queue full of items we must close unmerged trains everyone to ignore the queue -
+including the one that matters.
+
+WHAT THIS DOES NOT MEAN. Muting the per-PR noise does not make an inherited CVE
+unreal: the fork ships as a container image and those CVEs ship with it. The
+image scan at publish is the control that still applies, and a critical finding
+there is an argument for **syncing upstream now** - not for hand-patching a
+dependency we do not own.
+
 ### Never put our assertions in an upstream test file
 
 Upstream test files gain cases constantly and upstream has no stake in ours, so

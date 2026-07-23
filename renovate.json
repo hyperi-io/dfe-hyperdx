@@ -1,0 +1,53 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "_comment": [
+    "INVERTED POSTURE - this repo is a long-lived FORK, so the house default is",
+    "backwards here: dependency management is OFF for everything that came from",
+    "upstream, and ON only for what WE added.",
+    "",
+    "WHY. We do not own upstream's dependency tree. Bumping a transitive dep in",
+    "packages/*/package.json diverges us from hyperdxio/hyperdx for a fix we did",
+    "not write, turns a pristine file into permanent rerere conflict surface",
+    "(see FORK.md), and gets reverted or re-conflicted on the next sync anyway.",
+    "Upstream patches upstream; we get the fix when we sync. A PR queue full of",
+    "bumps we must close unmerged is worse than no queue - it trains everyone to",
+    "ignore the queue, including the one bump that matters.",
+    "",
+    "WHAT IS STILL ON. The GitHub Actions pinned by SHA in OUR OWN workflows.",
+    "Those are ours, the house standard requires them SHA-pinned, and a stale",
+    "pin is a real risk nobody upstream will ever fix for us.",
+    "",
+    "NOT A SUBSTITUTE FOR LOOKING. Muting the per-PR noise does not make an",
+    "inherited CVE unreal - the fork ships as a container image. The image scan",
+    "at publish is what catches those, and a critical one is an argument for",
+    "syncing upstream NOW, not for patching a vendored dep by hand."
+  ],
+  "extends": ["config:recommended"],
+  "enabledManagers": ["github-actions"],
+  "packageRules": [
+    {
+      "description": "Off by default - everything, everywhere.",
+      "matchFileNames": ["**"],
+      "enabled": false
+    },
+    {
+      "description": "ON: action pins in the workflows we own. Upstream's own workflows are excluded by name, so a sync that adds one does not silently opt it in.",
+      "matchManagers": ["github-actions"],
+      "matchFileNames": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/upstream-sync.yml",
+        ".github/workflows/upstream-drift.yml",
+        ".github/workflows/fork-surface.yml"
+      ],
+      "enabled": true,
+      "pinDigests": true
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "description": "Security PRs follow the same rule - our files only. An upstream CVE is fixed by syncing upstream, not by us editing their lockfile.",
+    "enabled": false
+  },
+  "osvVulnerabilityAlerts": false,
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "Renovate: fork-owned dependencies only (see renovate.json)"
+}
