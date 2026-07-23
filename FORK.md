@@ -153,14 +153,44 @@ Measured on the first real run: 114 findings, 11 ours. Gating on 114 is
 unworkable; muting 114 loses the 11. Sorting is the only answer that keeps both.
 
 ATTRIBUTION - `scripts/attribute-findings.py`, SARIF in, so it serves semgrep
-and CodeQL alike. Two obvious methods do NOT work here:
+and CodeQL alike. It uses **line content vs the merge base**: a line we added or
+changed is ours. That needs no catalogue and works even on an upstream file
+nobody remembered to list.
 
-- **author/blame** is useless - every line blames to whoever ran the import.
-- **commit ancestry** is subtly wrong, because the fork was SQUASH-imported: any
-  line untouched since the import blames to a commit that is not in upstream's
-  history and gets misfiled as ours. Observed on `theme/ThemeProvider.tsx:163`.
-- **line content vs the merge base** is immune to both and needs no catalogue -
-  it works even on an upstream file nobody remembered to list.
+The two other obvious methods were broken by the squashed import, and are now
+FIXED by the graft below rather than merely avoided:
+
+- **author/blame** used to attribute every upstream line to whoever ran the
+  import. It now resolves to the real upstream author.
+- **commit ancestry** used to misfile any line untouched since the import,
+  because the commit it blamed to was not in upstream's history. Observed on
+  `theme/ThemeProvider.tsx:163`, which read as ours and is Elizabet Oliveira's.
+
+### The squashed import, and the graft that repairs it
+
+`e58f01d3 "Initial HyperDX commit"` is a FLATTENED copy of upstream, not a
+continuation of their history, so git had no path from our tree back to theirs.
+That is what broke blame and ancestry, and it also means `git log` on any
+upstream file showed our import rather than the change that actually caused a
+behaviour.
+
+The import was taken from upstream `fbeaf152` - their HEAD at the import
+timestamp, and only NINE files differ from our import commit (the `.env`
+removals and the HyperI additions made at the time). `scripts/fork-setup.sh`
+reconnects them:
+
+```
+git replace --graft e58f01d3f4ede7b691ee4cf2873ad8548d93f210 fbeaf152...
+```
+
+NON-DESTRUCTIVE. No object is rewritten and no SHA changes; `git replace -d`
+undoes it. Verified after grafting: the merge base is unchanged (`e2103f78`), so
+the sync workflow, the drift report and the attribution script all behave
+identically - blame and `git log` simply stop lying.
+
+It is per-clone config like rerere, applied by `fork-setup.sh` from the two SHAs
+recorded there, rather than pushed as a `refs/replace/*` ref that no clone
+fetches by default.
 
 THE THING THAT BREAKS IT: reformatting an upstream file rewrites every line into
 the diff, so the whole file reads as ours and the signal is gone. That is a
