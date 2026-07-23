@@ -404,21 +404,41 @@ second is the load-bearing one.
 
 ### Measured, 2026-07-23
 
-A dry-run merge of `upstream/main` (34 commits ahead, incl. #2561 touching
-`DBRowJsonViewer.test.tsx`) was run against the tree before and after the
-restructure above:
+FIRST, A TRAP WORTH KNOWING. The first pass at this measurement used a local
+`upstream/main` that had not been fetched in weeks, and reported 34 commits of
+drift and 2 conflicts. A fresh `git fetch upstream` showed the truth: **122
+commits and 11 conflicts**. A stale ref does not announce itself - it just
+quietly tells you the sync is smaller than it is. `upstream-drift.yml` fetches
+every run, which is precisely why the daily CI number is the one to trust over
+whatever your laptop says.
 
-- Both: conflicts in `README.md` and `package.json` only.
-- Before: `DBRowJsonViewer.test.tsx` auto-merged - git resolved it, no human
-  needed. The delta did NOT force a conflict on this particular sync.
-- After: the file is identical to the merge base, so there was nothing to merge
-  - upstream's new test arrived verbatim.
-- Our delta gate (`src/dfe` + the upstream viewer suite) passed **109 tests
-  against the merged tree**, up one, that one being upstream's new test.
+Real state at 2026-07-23: upstream is **122 commits** ahead of merge base
+`e2103f78`, touching **24** of our 64 catalogued files.
 
-Read that honestly: the restructure removed the RISK, it did not avoid a
-conflict that was otherwise certain. The value is that a file identical to the
-base can never conflict, however upstream rewrites it.
+A dry-run merge of the real `upstream/main` conflicts on 11 files:
+
+```
+.github/workflows/{deep-review,e2e-tests,knip,main,release}.yml
+README.md  nx.json  package.json
+packages/api/package.json  packages/api/tsconfig.build.json
+packages/app/src/components/OnboardingModal.tsx
+```
+
+Five of those are workflows we replaced wholesale when migrating to hyperi-ci,
+so they are cheap. The rest are config.
+
+What the restructure bought, stated honestly:
+
+- `DBRowJsonViewer.tsx` and `.test.tsx` are **not in that conflict set**, across
+  122 commits of upstream change.
+- On the narrower stale-ref merge, `DBRowJsonViewer.test.tsx` auto-merged even
+  BEFORE the restructure - git resolved it without a human. So the restructure
+  removed the RISK; it did not avoid a conflict that was otherwise certain. The
+  value is that a file identical to the merge base can never conflict, however
+  upstream rewrites it later.
+- The delta gate is the real result: **all 81 `src/dfe` tests pass against the
+  fully merged 122-commit tree**. That is the thing rerere cannot tell you, and
+  the reason the tests exist.
 
 **Priming rerere:** rerere has nothing to replay until a resolution is recorded.
 Prime it by doing the first post-2.29 upstream merge by hand on a `sync/<tag>`
