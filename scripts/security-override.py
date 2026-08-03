@@ -189,14 +189,28 @@ def _git(*args: str) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
+def _upstream_base() -> str:
+    """The upstream commit whose manifest is our baseline.
+
+    MID-MERGE, HEAD IS STILL THE OLD COMMIT. `git merge-base HEAD upstream/main`
+    during an unfinished merge returns the PREVIOUS upstream, so --apply would
+    rewrite the block back to the version we just merged away from. MERGE_HEAD is
+    the upstream actually being taken, so it wins whenever a merge is in flight.
+    """
+    merge_head = _git("rev-parse", "--verify", "--quiet", "MERGE_HEAD")
+    if merge_head:
+        return merge_head
+    return _git("merge-base", "HEAD", UPSTREAM_REF)
+
+
 def _base_resolutions() -> dict[str, str] | None:
-    """Upstream's own resolutions block at our merge base.
+    """Upstream's own resolutions block at our upstream base.
 
     This is the baseline the fork's block must equal once our layer is stripped.
     Returns None when upstream is unavailable, so callers can decline to act
     rather than rewrite the block from a baseline they could not read.
     """
-    base = _git("merge-base", "HEAD", UPSTREAM_REF)
+    base = _upstream_base()
     if not base:
         return None
     raw = _git("show", f"{base}:package.json")

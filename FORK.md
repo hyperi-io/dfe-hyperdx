@@ -77,6 +77,79 @@ additions reusing upstream's own predicate): **15 insertions**,
 `buildJSONExtractQuery` byte pristine, and `DBRowJsonViewer.test.tsx` back to
 pristine and off the catalogue. Same feature, a quarter of the standing cost.
 
+### Two lifetimes, two mechanisms
+
+Everything in this fork is one of two things, and almost every mistake made here
+comes from treating them the same way.
+
+| content | lifetime | mechanism | conflict surface |
+| --- | --- | --- | --- |
+| our features + additions | PERMANENT | merged history, `dfe/` dirs, rerere, `.fork-surface` | real, managed, catalogued |
+| security dep pins | TEMPORARY | generated into `resolutions` from `security/overrides.yaml` | none |
+| security code fixes | TEMPORARY | `security/patches/*.patch`, applied on top | none |
+
+The permanent half is what rerere is for. The temporary half is what rerere
+CANNOT do, and asking it to is the trap:
+
+- upstream uses `resolutions` for its OWN security pins - fourteen of them as of
+  2.33.0, five of which moved between 2.29.0 and 2.33.0. Anything we add there
+  lands in a block that changes contents every cycle, so a recorded conflict
+  preimage never matches twice and rerere just accumulates one-shot resolutions
+  that never replay.
+- `yarn.lock` is a megabyte of generated text. "Replay these hunks" is not a
+  meaningful answer for a lockfile; "take upstream's and regenerate" is the only
+  correct one, every time.
+
+So the temporary layer is GENERATED, never merged. `security/overrides.yaml` and
+`security/patches/` are the source of truth; the resolutions block and the
+patched files are derived from them. The layer is stripped before an upstream
+merge and rebuilt after, which is what makes "undo our security fixes and try
+again" a command instead of an afternoon.
+
+#### The cycle
+
+```
+scripts/security-override.py --unapply    # 1. strip the temporary layer
+git merge <upstream-tag>                  # 2. rerere replays the PERMANENT deltas
+scripts/security-override.py --apply      # 3. rebuild the layer on the new upstream
+scripts/upstream-pin.py --set <tag>       # 4. record what we are now built on
+yarn install                              # 5. re-derive our lockfile entries
+scripts/security-override.py --verify     # 6. the invariants
+scripts/upstream-pin.py --verify
+yarn build && yarn test                   # 7. the delta gate - the real guarantee
+scripts/security-triage.py --audit --patches --carried   # 8. what is new, what can go
+```
+
+`.github/workflows/upstream-sync.yml` runs exactly that and opens a PR. Steps 1
+and 3 are the ones that did not exist before, and they are what removes the
+hand work.
+
+#### The invariants, checked on every PR
+
+```
+package.json resolutions == upstream's block at our base
+                            + the register, applied ONLY where it raises the floor
+
+every security/patches/*.patch applies cleanly
+
+.upstream-version == git merge-base HEAD upstream/main
+```
+
+The "only where it raises the floor" clause is not tidiness. A pin left in the
+register after upstream passes it does not go quietly stale - `^2.0.2` against
+an upstream now shipping 2.1.2 drags the whole tree BACKWARDS onto the
+vulnerable line. Taking the higher of the two makes a forgotten entry inert
+instead of harmful, and `--check` still nags until someone deletes it.
+
+#### What stays human
+
+Reachability. `scripts/security-triage.py` drafts a verdict on every
+HIGH/CRITICAL advisory, on any patch that stopped applying, and on whether
+upstream has quietly fixed something we still carry - but it PROPOSES only. A
+model that could clear its own findings would rebuild precisely the alert queue
+the inverted posture below exists to avoid. It degrades to the mechanical facts
+when no API key is configured, so a sync is never blocked by an expired secret.
+
 ### Security + dependency posture is INVERTED here
 
 The house standard is scanners-on, dependencies-current. In this repo that is
@@ -356,12 +429,27 @@ GRANTs; HyperDX trusts the identity injected at the edge. Removed:
 - `.releaserc.json` -- semantic-release
 - `.gitleaks.toml` -- secret-scan false-positive rules
 - `scripts/audit.sh` -- `yarn npm audit` wrapper (Yarn 4 removed built-in audit)
-- `packages/api/jest.dfe.config.js` -- fork-local UNIT config for the api
-  package (upstream has no `ci:unit` there; every api test is `ci:int` and wants
-  Mongo + ClickHouse). Scoped to `src/dfe/**` and transforms `jose`, which is
-  ESM-only. A separate file rather than an edit to upstream's `jest.config.js`.
-  The matching `"ci:unit"` script IS an in-place edit to
-  `packages/api/package.json`, which is already catalogued surface.
+- `packages/api/jest.dfe.config.js` -- upstream's unit config plus one
+  transform: `jose` is ESM-only and Jest's CJS loader cannot load it, so the
+  tests exercise real ES384 verification rather than a crypto double. A separate
+  file rather than an edit to upstream's `jest.config.js`. The matching
+  `"ci:unit"` script IS an in-place edit to `packages/api/package.json`, which is
+  already catalogued surface.
+
+  It deliberately does NOT narrow `testMatch`. It used to, back when upstream's
+  api package had no unit target at all; 2.33.0 added one, and a scoped config
+  would have run our seven tests while silently skipping upstream's 600-odd.
+- `.upstream-version` + `scripts/upstream-pin.py` -- which upstream release the
+  fork is built on, verified against `git merge-base` rather than trusted.
+- `security/overrides.yaml`, `security/patches/`,
+  `scripts/security-override.py`, `scripts/security-triage.py` -- the generated
+  temporary security layer (see "Two lifetimes, two mechanisms").
+- `.gitattributes` -- ONE added line routing `yarn.lock` to
+  `scripts/merge-lockfile.sh`. A lockfile has exactly one correct merge
+  resolution, so it never reaches rerere or a human. The driver itself is
+  per-clone config installed by `scripts/fork-setup.sh`, and an unconfigured
+  driver fails OPEN -- git falls back to a text merge and hands you a megabyte
+  of conflict markers -- so a fresh clone or CI checkout must run the setup.
 - `.dfe[CHG]` copies: `nx`, root + per-package `package.json`, `.prettierrc`,
   `.prettierignore`, `.gitignore`, `tsconfig.build.json`
 
@@ -586,6 +674,68 @@ branch, resolving each conflict on the modified upstream files above, and
 committing -- that writes the resolutions into `.git/rr-cache`. CI persists
 `rr-cache` (actions/cache) so later scheduled runs replay them. Use MERGE, not
 rebase-onto-upstream (shared team repo; rerere replays either way).
+
+---
+
+## The exit: leaving the upstream dependency
+
+Forking is a position, not a destination. The intent is to stop tracking
+hyperdxio/hyperdx eventually - once HyperDX settles, or once we can allocate
+enough resource to own the whole thing - and this section exists so that
+decision is made deliberately rather than drifted into.
+
+There are three ways out, and they are not equally good.
+
+**A. Stay forked (today's position).** Cheapest while upstream is moving fast
+and our delta is small. The cost is a recurring sync, and the whole apparatus
+above exists to keep that cost roughly flat as upstream accelerates.
+
+**B. Upstream absorbs our delta, and we de-fork to a plain dependency.** The
+best outcome, and it is not hypothetical: in 2.33.0 upstream added a "kiosk
+mode" that hides the nav on dashboards, which is our embed feature arriving
+under a different name. `packages/app/src/layout.tsx` now carries both
+conditions. Each time upstream lands something we already hold, our delta
+shrinks and the case for B strengthens. Getting there means raising our
+extensions upstream one at a time - the `upstream:` field in the register is
+the same habit applied to dependencies.
+
+**C. Hard fork - stop merging, own the code.** The expensive one, and the
+default we slide into by neglect rather than choose. It is only the right answer
+when our delta is large enough that upstream's releases stop being worth the
+merge, and we have the people to carry a full observability platform.
+
+### What has to be true before we choose
+
+Pick the exit against evidence, not fatigue after a bad sync:
+
+- **Delta size and shape.** `.githooks/fork-surface-check.py --audit` and the
+  catalogue below. A shrinking delta argues for B; one growing into upstream's
+  hot files argues for C.
+- **Sync cost, measured.** Conflicts per sync and how many rerere replays rather
+  than hand-resolves. Rising despite the ladder is the signal.
+- **Upstream velocity.** 164 commits between 2.29.0 and 2.33.0. If that slows to
+  a trickle, C gets cheaper and B gets less urgent.
+- **What we would lose.** Upstream ships features we do not maintain - the OTel
+  collector build, the MCP server, the CLI, the eval harness. C means owning all
+  of it, not just the parts we changed.
+- **Whether the delta is even ours to keep.** Several entries in the catalogue
+  are branding and config that would evaporate under B.
+
+### What C would actually cost
+
+Not a rename. It means: taking ownership of the security posture inverted below
+(upstream currently patches their own dependency tree for us - fourteen pins in
+their `resolutions` block that we inherit for free); maintaining the collector
+and the CLI; and losing the delta gate's meaning, since there is no longer an
+upstream to be broken by.
+
+The security layer here is the honest measure. Every pin and patch it carries is
+work upstream is currently doing that we would inherit permanently under C. An
+empty `security/overrides.yaml` is the goal state precisely because it means
+upstream is still carrying that load.
+
+**This is a human decision, taken once, with the numbers in front of us.** It is
+not an agent's call and it is not something to conclude in the middle of a sync.
 
 ---
 

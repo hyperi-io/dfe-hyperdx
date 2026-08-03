@@ -80,6 +80,19 @@ need migrating.
    rerere replay, runs build + test, then opens a PR. `main` is never touched
    directly.
 
+6. **A security fix is TEMPORARY and must never be committed in place.** Upstream
+   ships their own within weeks, so a fix committed into an upstream file is
+   permanent conflict surface for something we expect to delete - and it lands in
+   `package.json`'s `resolutions` block, which upstream churns for their own
+   security pins. Declare it instead:
+   - a dependency pin -> an entry in `security/overrides.yaml`
+   - a code fix -> a patch in `security/patches/`
+
+   Both are GENERATED into the tree, stripped before an upstream merge and
+   rebuilt after (`scripts/security-override.py --unapply` / `--apply`), so they
+   never reach rerere. Our PERMANENT features are the opposite and DO belong in
+   merged history. The test is lifetime, not size.
+
 ## Mechanical guard + the tools
 
 Run this ONCE per clone (rerere and the hook are per-clone git config, so a

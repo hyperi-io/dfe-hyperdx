@@ -257,6 +257,39 @@ class SecurityLayerTest(unittest.TestCase):
         self.assertIn("Untrusted event bodies reach parse()", result.stdout)
 
 
+class MidMergeTest(unittest.TestCase):
+    """--apply runs while a merge is in flight, when HEAD is still the old commit."""
+
+    def setUp(self) -> None:
+        self.fork = ForkFixture()
+        self.addCleanup(self.fork.cleanup)
+
+        # A newer upstream that moved one of its own pins and added another.
+        git(self.fork.dir, "checkout", "-q", "-b", "newer", self.fork.upstream_sha)
+        newer = json.loads(json.dumps(UPSTREAM_MANIFEST))
+        newer["resolutions"]["brace-expansion"] = "^2.1.2"
+        newer["resolutions"]["@asyncapi/specs"] = "6.11.1"
+        self.fork.write_manifest(newer)
+        git(self.fork.dir, "commit", "-qam", "upstream 2")
+        self.newer_sha = git(self.fork.dir, "rev-parse", "HEAD").stdout.strip()
+        git(self.fork.dir, "update-ref", "refs/remotes/upstream/main", self.newer_sha)
+        git(self.fork.dir, "checkout", "-q", "main")
+
+    def test_apply_uses_the_upstream_being_merged_not_the_one_left_behind(self) -> None:
+        self.fork.run("security-override.py", "--unapply")
+        subprocess.run(
+            ["git", "merge", "--no-commit", "--no-ff", self.newer_sha],
+            cwd=self.fork.dir,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(self.fork.run("security-override.py", "--apply").returncode, 0)
+
+        block = self.fork.manifest()["resolutions"]
+        self.assertEqual(block["brace-expansion"], "^2.1.2")
+        self.assertIn("@asyncapi/specs", block)
+
+
 class PatchSeriesTest(unittest.TestCase):
     def setUp(self) -> None:
         self.fork = ForkFixture()

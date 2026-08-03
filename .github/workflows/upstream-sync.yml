@@ -64,12 +64,22 @@ jobs:
           restore-keys: |
             rr-cache-
 
-      - name: Configure git + rerere
+      # The merge driver is per-clone config and a fresh CI checkout has none.
+      # An unconfigured driver fails OPEN - git falls back to a text merge and
+      # produces 1MB of conflict markers in yarn.lock - so this is not optional.
+      - name: Configure git + rerere + the lockfile driver
         run: |
           git config user.name  "dfe-upstream-bot"
           git config user.email "bot@dfe.hyperi.io"
           git config rerere.enabled true
           git config rerere.autoupdate true
+          git config merge.upstream-lock.name "take upstream's lockfile, then yarn install"
+          git config merge.upstream-lock.driver "$PWD/scripts/merge-lockfile.sh %O %A %B"
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
 
       # The dispatch input goes through `env:`, never straight into the shell -
       # it is free text and interpolating it into `run:` executes it.
@@ -84,6 +94,15 @@ jobs:
           if [ -z "$ref" ]; then ref="upstream/main"; fi
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "short=$(git rev-parse --short "$ref")" >> "$GITHUB_OUTPUT"
+
+      # THE TEMPORARY LAYER COMES OFF BEFORE THE MERGE, and after the upstream
+      # fetch it depends on. Our security pins and patches are generated, not
+      # committed, precisely so the merge sees no delta in package.json's
+      # resolutions block or in a patched upstream file - a delta there conflicts
+      # every cycle and rerere cannot help, because the block's contents change
+      # each time so no preimage ever recurs.
+      - name: Strip the temporary security layer
+        run: scripts/security-override.py --unapply
 
       - name: Merge upstream (rerere replays)
         id: merge
@@ -116,6 +135,29 @@ jobs:
           path: .git/rr-cache
           key: rr-cache-${{ github.run_id }}
 
+      # THE LAYER GOES BACK ON. --apply reads MERGE_HEAD, so it layers over the
+      # upstream just merged rather than the one left behind. A pin is re-applied
+      # only where it raises the floor above upstream's own, and a patch that no
+      # longer applies is reported rather than forced - both are the cycle asking
+      # whether upstream has taken the fix off our hands.
+      - name: Re-apply the temporary security layer
+        id: relayer
+        if:
+          steps.merge.outputs.status == 'clean' || steps.merge.outputs.status ==
+          'replayed'
+        continue-on-error: true # a stale patch must surface in the PR, not kill the run
+        run: |
+          scripts/security-override.py --apply | tee relayer.txt
+          scripts/upstream-pin.py --set '${{ steps.ref.outputs.ref }}'
+
+      - name: Commit the regenerated layer
+        if:
+          steps.merge.outputs.status == 'clean' || steps.merge.outputs.status ==
+          'replayed'
+        run: |
+          git add -A
+          git diff --cached --quiet || git commit -m 'chore: re-apply the fork security layer + move the upstream pin'
+
       # Clean / replayed: push the branch, build+test, open a PR for review.
       - name: Push sync branch
         if:
@@ -137,9 +179,41 @@ jobs:
         continue-on-error: true # a failure must still surface a PR, not just red the run
         run: |
           corepack enable
-          yarn install --immutable
+          # NOT --immutable: the lockfile is upstream's at this point (the merge
+          # driver took it whole) and our fork-only entries have yet to be
+          # re-derived. --immutable is the right flag everywhere else and the
+          # wrong one exactly here.
+          yarn install --mode=update-lockfile
+          yarn install
+          scripts/security-override.py --verify
+          scripts/upstream-pin.py --verify
           yarn build
           yarn test
+
+      - name: Commit the re-derived lockfile
+        if:
+          steps.merge.outputs.status == 'clean' || steps.merge.outputs.status ==
+          'replayed'
+        run: |
+          git add yarn.lock
+          git diff --cached --quiet || git commit -m 'chore: re-derive the lockfile after the upstream merge'
+          git push --force-with-lease origin '${{ steps.merge.outputs.branch }}'
+
+      # The judgement calls, drafted for the reviewer. Never a gate: reachability
+      # is a human verdict (FORK.md), and a model that could clear its own
+      # findings would rebuild the alert queue the fork's posture exists to
+      # avoid. Degrades to the mechanical facts when no key is configured.
+      - name: Draft the security triage
+        if:
+          steps.merge.outputs.status == 'clean' || steps.merge.outputs.status ==
+          'replayed'
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          pip install --disable-pip-version-check anthropic || true
+          scripts/security-triage.py --audit --patches --carried -o triage.md
+          cat triage.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Open sync PR
         if:
@@ -148,6 +222,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TEST: ${{ steps.test.outcome }}
+          RELAYER: ${{ steps.relayer.outcome }}
         run: |
           if [ "$TEST" = "success" ]; then
             draft=""
@@ -156,14 +231,31 @@ jobs:
             draft="--draft"
             note="WARNING: build+test FAILED after rerere replay -- an upstream change broke our DFE deltas. DO NOT MERGE until fixed; the fix (new resolution) will be recorded into rr-cache for future replay. See FORK.md."
           fi
+          if [ "$RELAYER" != "success" ]; then
+            draft="--draft"
+            note="$note
+
+          The security layer did NOT re-apply cleanly -- a carried patch no longer fits the new upstream. That is the signal, not a fault: either upstream fixed it their own way (delete the patch) or the code moved (re-derive it). The drafted verdict is in the run summary."
+          fi
+          {
+            echo "Automated upstream drift sync (rerere replay: ${{ steps.merge.outputs.status }})."
+            echo
+            echo "$note"
+            echo
+            echo '## Security layer'
+            echo
+            echo '```'
+            cat relayer.txt 2>/dev/null || echo '(not reached)'
+            echo '```'
+            echo
+            echo 'Full advisory triage is in the run summary. Reachability is a HUMAN verdict -- nothing in it has been applied.'
+            echo
+            echo 'Review FORK.md deltas, re-derive any drifted upstream copies, then merge.'
+          } > pr-body.md
           gh pr create $draft \
             --base main --head '${{ steps.merge.outputs.branch }}' \
             --title 'chore: sync upstream hyperdxio/hyperdx@${{ steps.ref.outputs.short }}' \
-            --body "Automated upstream drift sync (rerere replay: ${{ steps.merge.outputs.status }}).
-
-          $note
-
-          Review FORK.md deltas, re-derive any drifted upstream copies, then merge." \
+            --body-file pr-body.md \
             || echo "PR may already exist for this branch."
 
       # Unresolved conflicts: no push, file/refresh a drift issue for a human.
