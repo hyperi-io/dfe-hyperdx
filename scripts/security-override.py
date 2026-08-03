@@ -276,12 +276,28 @@ def _write_resolutions(block: dict[str, str]) -> bool:
         print("ERROR: package.json has no resolutions block to write into.", file=sys.stderr)
         return False
 
+    # Brace-count to the matching close, skipping string literals - a resolution
+    # value is free text and a brace inside one would otherwise silently
+    # miscount and corrupt the manifest.
     depth = 0
     end = -1
+    in_string = False
+    escaped = False
     for index in range(match.end() - 1, len(text)):
-        if text[index] == "{":
+        char = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
             depth += 1
-        elif text[index] == "}":
+        elif char == "}":
             depth -= 1
             if depth == 0:
                 end = index + 1

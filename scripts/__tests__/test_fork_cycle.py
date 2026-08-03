@@ -290,6 +290,38 @@ class MidMergeTest(unittest.TestCase):
         self.assertIn("@asyncapi/specs", block)
 
 
+class BraceInAValueTest(unittest.TestCase):
+    """A resolution value is free text - the block scanner must skip strings.
+
+    Yarn's `patch:` protocol is the realistic carrier. A naive brace count would
+    find the wrong end of the block and silently corrupt the manifest.
+    """
+
+    def setUp(self) -> None:
+        self.fork = ForkFixture()
+        self.addCleanup(self.fork.cleanup)
+
+        git(self.fork.dir, "checkout", "-q", "-b", "braced", self.fork.upstream_sha)
+        upstream = json.loads(json.dumps(UPSTREAM_MANIFEST))
+        upstream["resolutions"]["weird"] = "patch:weird@1.0.0#./p{0}.patch"
+        self.fork.write_manifest(upstream)
+        git(self.fork.dir, "commit", "-qam", "upstream with a braced value")
+        git(self.fork.dir, "update-ref", "refs/remotes/upstream/main", "HEAD")
+        git(self.fork.dir, "checkout", "-q", "main")
+        git(self.fork.dir, "merge", "-q", "--no-edit", "braced")
+
+    def test_the_block_and_everything_after_it_survive(self) -> None:
+        self.fork.set_register([{"package": "some-parser", "range": ">=1.2.3"}])
+        result = self.fork.run("security-override.py", "--apply")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        manifest = self.fork.manifest()
+        self.assertEqual(manifest["resolutions"]["weird"], "patch:weird@1.0.0#./p{0}.patch")
+        self.assertEqual(manifest["resolutions"]["some-parser"], ">=1.2.3")
+        self.assertEqual(manifest["version"], "2.0.0")
+        self.assertEqual(manifest["scripts"], {"build": "nx build"})
+
+
 class PatchSeriesTest(unittest.TestCase):
     def setUp(self) -> None:
         self.fork = ForkFixture()
@@ -374,6 +406,29 @@ class UpstreamPinTest(unittest.TestCase):
         body = (self.fork.dir / ".upstream-version").read_text(encoding="utf-8")
         self.assertIn(self.fork.upstream_sha, body)
         self.assertEqual(self.fork.run("upstream-pin.py", "--verify").returncode, 0)
+
+    def test_set_names_a_branch_by_its_release_tag(self) -> None:
+        """The scheduled sync merges upstream/main; a branch name is not a pin."""
+        git(self.fork.dir, "tag", "@hyperdx/app@2.29.0", self.fork.upstream_sha)
+        result = self.fork.run("upstream-pin.py", "--set", "upstream/main")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        body = (self.fork.dir / ".upstream-version").read_text(encoding="utf-8")
+        self.assertIn("@hyperdx/app@2.29.0", body)
+        self.assertNotIn("upstream_ref: 'upstream/main'", body)
+
+    def test_set_marks_a_branch_ahead_of_its_last_tag(self) -> None:
+        """Pinning past a release must not silently claim to BE that release."""
+        git(self.fork.dir, "tag", "@hyperdx/app@2.29.0", self.fork.upstream_sha)
+        git(self.fork.dir, "checkout", "-q", "-b", "ahead", self.fork.upstream_sha)
+        (self.fork.dir / "app.js").write_text("// moved on\n", encoding="utf-8")
+        git(self.fork.dir, "commit", "-qam", "past the tag")
+        git(self.fork.dir, "update-ref", "refs/remotes/upstream/main", "HEAD")
+        git(self.fork.dir, "checkout", "-q", "main")
+
+        self.fork.run("upstream-pin.py", "--set", "upstream/main")
+        body = (self.fork.dir / ".upstream-version").read_text(encoding="utf-8")
+        self.assertIn("@hyperdx/app@2.29.0+", body)
 
     def test_set_refuses_a_ref_that_does_not_resolve(self) -> None:
         result = self.fork.run("upstream-pin.py", "--set", "@hyperdx/app@9.9.9")

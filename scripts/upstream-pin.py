@@ -37,6 +37,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MARKER = REPO_ROOT / ".upstream-version"
 UPSTREAM_REF = "upstream/main"
+RELEASE_TAG_PREFIX = "@hyperdx/app@"
 
 _FIELD = re.compile(r"^(?P<key>[a-z_]+):\s*(?P<value>.*?)\s*$")
 
@@ -135,6 +136,26 @@ def _verify() -> int:
     return 1
 
 
+def _name_for(ref: str, sha: str) -> str:
+    """A durable label for the commit, preferring an upstream release tag.
+
+    The scheduled sync merges `upstream/main`, and recording that as the pin
+    names a moving branch rather than the release we are actually on - useless
+    the moment the branch advances. The nearest release tag is the answer to
+    "which upstream is this build?"; the raw ref is kept when there is none.
+    """
+    if ref.startswith(RELEASE_TAG_PREFIX):
+        return ref
+    described = _git(
+        "describe", "--tags", "--abbrev=0", "--match", f"{RELEASE_TAG_PREFIX}*", sha
+    )
+    if not described:
+        return ref
+    if _git("rev-parse", f"{described}^{{commit}}") == sha:
+        return described
+    return f"{described}+ ({ref})"
+
+
 def _set(ref: str, synced: str | None) -> int:
     sha = _git("rev-parse", f"{ref}^{{commit}}")
     if not sha:
@@ -147,8 +168,9 @@ def _set(ref: str, synced: str | None) -> int:
 
     if synced is None:
         synced = _git("show", "-s", "--format=%cs", sha)
-    write_pin(ref, sha, synced)
-    print(f"pin -> {ref} ({sha[:8]}, upstream committed {synced})")
+    name = _name_for(ref, sha)
+    write_pin(name, sha, synced)
+    print(f"pin -> {name} ({sha[:8]}, upstream committed {synced})")
     return 0
 
 
