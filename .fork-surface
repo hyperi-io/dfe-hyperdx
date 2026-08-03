@@ -34,6 +34,9 @@
 # upstream rarely touches that single line - so rerere replays it cleanly.
 CLAUDE.md
 
+# One added line routing yarn.lock to the merge driver - see FORK.md.
+.gitattributes
+
 .gitignore
 .prettierignore
 .prettierrc

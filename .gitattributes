@@ -1,1 +1,7 @@
 /.yarn/releases/** binary
+
+# FORK DELTA. A lockfile has one correct merge resolution - take upstream's and
+# regenerate - so it never goes to rerere or to a human. See
+# scripts/merge-lockfile.sh; the driver itself is per-clone config installed by
+# scripts/fork-setup.sh.
+yarn.lock merge=upstream-lock
