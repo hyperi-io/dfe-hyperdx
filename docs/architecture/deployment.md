@@ -1,167 +1,115 @@
 # Deployment
 
-> **Documentation status.** This page was carried over from the original
-> embedding design and still reads in places as a PLAN ("changes required",
-> "files to modify") rather than a description of what the code does today. The
-> structure and diagrams have been corrected; the prose has not yet been
-> re-verified against the code line by line. Treat a specific claim here as
-> needing a check until this note is removed.
+**MongoDB is replaced by FerretDB over PostgreSQL, and HyperDX does not know.**
+Mongoose, `connect-mongo`, `passport-local-mongoose`, `migrate-mongo` and every
+model and route work unchanged - `MONGO_URI` simply points somewhere else.
 
-For production, we replace MongoDB with [FerretDB](https://www.ferretdb.com/) -
-an open-source proxy that speaks the MongoDB wire protocol but stores data in
-PostgreSQL via the
-[DocumentDB extension](https://github.com/FerretDB/documentdb). HyperDX requires
-**zero code changes**; the Mongoose ODM, `connect-mongo` session store, and all
-MongoDB queries work transparently through FerretDB.
+Why FerretDB rather than porting to SQL:
+[ADR 0001](../decisions/0001-ferretdb-over-direct-postgres.md).
 
-### Why FerretDB
+---
 
-- **Drop-in replacement**: FerretDB implements the MongoDB 5.0+ wire protocol.
-  Existing drivers, tools (mongosh, Compass, mongodump), and ODMs (Mongoose)
-  connect to it with a standard `mongodb://` connection string.
-- **PostgreSQL backend**: All document data is stored in PostgreSQL as JSONB via
-  the DocumentDB extension, giving you PostgreSQL's mature ecosystem for
-  backups, replication, monitoring, and operational tooling.
-- **No vendor lock-in**: Apache 2.0 licensed, avoids MongoDB's SSPL.
-- **No application migration needed**: HyperDX talks to FerretDB exactly as it
-  would to MongoDB. The `MONGO_URI` just points at FerretDB instead.
-
-### Architecture with FerretDB
+## The data layer
 
 ```mermaid
 flowchart LR
-    subgraph HyperDX_Application["HyperDX Application"]
-        API["HyperDX API<br/>(Mongoose ODM)"]
-        SESS["Session Store<br/>(connect-mongo)"]
+    subgraph app["HyperDX, unmodified"]
+        API["API<br/>Mongoose ODM"]
+        SESS["session store<br/>connect-mongo"]
     end
 
-    subgraph FerretDB_Layer["FerretDB Layer"]
-        FERRET["FerretDB Proxy<br/>:27017<br/>(MongoDB wire protocol)"]
-    end
+    FERRET["FerretDB<br/>MongoDB wire protocol<br/>:27017"]
+    PG[(PostgreSQL 17<br/>+ DocumentDB extension<br/>:5432)]
 
-    subgraph PostgreSQL["PostgreSQL"]
-        PG[(PostgreSQL 17<br/>+ DocumentDB Extension<br/>:5432)]
-    end
+    API -->|mongodb://| FERRET
+    SESS -->|mongodb://| FERRET
+    FERRET -->|SQL| PG
 
-    API -->|mongodb://ferretdb:27017/hyperdx| FERRET
-    SESS -->|mongodb://ferretdb:27017/hyperdx| FERRET
-    FERRET -->|SQL over<br/>PostgreSQL protocol| PG
+    classDef upstream fill:#009E73,stroke:#005f45,color:#ffffff
+    classDef ours fill:#0072B2,stroke:#00456b,color:#ffffff
+    classDef store fill:#E69F00,stroke:#8a6100,color:#000000
+    class API,SESS upstream
+    class FERRET ours
+    class PG store
 ```
 
-HyperDX connects to FerretDB using a standard MongoDB connection string.
-FerretDB translates MongoDB wire protocol operations into SQL and executes them
-against PostgreSQL with the DocumentDB extension. The DocumentDB extension adds
-native BSON support and document operations to PostgreSQL.
+FerretDB implements the MongoDB 5.0+ wire protocol, so standard drivers and
+tools (`mongosh`, Compass, `mongodump`) connect with an ordinary `mongodb://`
+string. Documents land in PostgreSQL as BSON via the DocumentDB extension, which
+brings PostgreSQL's backup, replication and monitoring ecosystem to data that
+was previously Mongo's.
 
-### Production Docker Compose
+---
 
-Replace the `db` service in `docker-compose.yml` with two services:
+## Running it
 
-```yaml
-services:
-  postgres:
-    image: ghcr.io/ferretdb/postgres-documentdb:17-0.107.0-ferretdb-2.7.0
-    restart: on-failure
-    environment:
-      - POSTGRES_USER=hyperdx
-      - POSTGRES_PASSWORD=hyperdx
-      - POSTGRES_DB=postgres
-    volumes:
-      - .volumes/pg_data:/var/lib/postgresql/data
-    networks:
-      - internal
+The override is `docker-compose.dfe.yml`, which replaces the `db` service and
+repoints the app. **Read that file for the current values** - reproducing them
+here just creates a second copy to go stale.
 
-  ferretdb:
-    image: ghcr.io/ferretdb/ferretdb:2.7.0
-    restart: on-failure
-    environment:
-      - FERRETDB_POSTGRESQL_URL=postgres://hyperdx:hyperdx@postgres:5432/postgres
-    depends_on:
-      - postgres
-    networks:
-      - internal
+Three things about it are worth knowing, because they are easy to get wrong:
 
-  app:
-    # ... existing app config, only change MONGO_URI:
-    environment:
-      MONGO_URI: 'mongodb://hyperdx:hyperdx@ferretdb:27017/hyperdx'
-      # ... all other env vars unchanged
-```
+- **`POSTGRES_DB` must be `postgres`.** DocumentDB requires it for `pg_cron`.
+- **`MONGO_URI` needs `?authMechanism=PLAIN`.** FerretDB authenticates the
+  PostgreSQL user through the Mongo protocol, and without this the driver
+  negotiates SCRAM and fails.
+- **The two images are a matched pair.** `postgres-documentdb` and `ferretdb`
+  tags encode each other's version, and they are pinned together for that
+  reason. FerretDB 2.x also **cannot be upgraded in place from 1.x** - it needs
+  a clean install plus dump and restore.
 
-Key points:
+Credentials come from the environment (`POSTGRES_USER`, `POSTGRES_PASSWORD`),
+not from literals in the compose file.
 
-- **`postgres`** runs PostgreSQL 17 with the DocumentDB extension pre-installed.
-  `POSTGRES_DB` must be `postgres` (required by DocumentDB for `pg_cron`).
-- **`ferretdb`** is a stateless proxy that translates MongoDB protocol to SQL.
-  It connects to PostgreSQL via `FERRETDB_POSTGRESQL_URL`.
-- **`app`** changes only `MONGO_URI` to point at FerretDB. All application code,
-  Mongoose models, session storage, and alert checking work unchanged.
-- Pin both image tags to matching versions (e.g. `17-0.107.0-ferretdb-2.7.0` and
-  `ferretdb:2.7.0`) to avoid compatibility issues between DocumentDB and
-  FerretDB releases.
+---
 
-### Full Production Service Topology
+## Service topology
 
 ```mermaid
 flowchart TB
-    subgraph Docker_Compose_Network_hdx_oss["Docker Compose Network (hdx-oss)"]
-        APP["app<br/>(HyperDX all-in-one)<br/>Ports: API + UI + OpAMP"]
-        OTEL["otel-collector<br/>(OTel Contrib + OpAMP Supervisor)<br/>Ports: 4317, 4318, 24225"]
-        CH["ch-server<br/>(ClickHouse 25.6)<br/>Ports: 8123, 9000"]
-        FERRET["ferretdb<br/>(FerretDB 2.7)<br/>Port: 27017"]
-        PG["postgres<br/>(PostgreSQL 17 + DocumentDB)<br/>Port: 5432"]
+    ext(["external traffic"])
+
+    subgraph net["compose network"]
+        APP["app<br/>UI + API + OpAMP server"]
+        OTEL["otel-collector<br/>OpAMP supervisor mode"]
+        CH[(ClickHouse<br/>telemetry)]
+        FERRET["ferretdb"]
+        PG[(PostgreSQL<br/>+ DocumentDB)]
     end
 
-    APP -->|Queries HTTP| CH
-    APP -->|Metadata Mongoose| FERRET
-    FERRET -->|SQL| PG
-    APP <-->|OpAMP protobuf| OTEL
-    OTEL -->|Writes TCP| CH
-    OTEL -->|Scrapes metrics| CH
+    ext -->|OTLP :4317 / :4318| OTEL
+    ext -->|UI + API| APP
+    OTEL -->|writes| CH
+    OTEL -->|scrapes| CH
+    APP -->|queries| CH
+    APP -->|metadata| FERRET
+    FERRET --> PG
+    APP <-->|OpAMP| OTEL
 
-    EXT["External Traffic"] -->|:4317/:4318<br/>OTLP| OTEL
-    EXT -->|:8080<br/>UI + API| APP
+    classDef edge fill:#F0E442,stroke:#8a8200,color:#000000
+    classDef svc fill:#009E73,stroke:#005f45,color:#ffffff
+    classDef ours fill:#0072B2,stroke:#00456b,color:#ffffff
+    classDef store fill:#E69F00,stroke:#8a6100,color:#000000
+    class ext edge
+    class APP,OTEL svc
+    class FERRET ours
+    class CH,PG store
 ```
 
-### What Stays the Same
+The `app` container bundles the Next.js frontend and the Express API. The
+collector runs in **OpAMP supervisor mode** - it takes its pipeline
+configuration from the API at runtime rather than from a static file, which is
+why the API is both a query server and a control plane.
 
-Everything in HyperDX is unchanged:
+Image tags and ports live in the compose files; see
+[../development/docker-local.md](../development/docker-local.md) for running it
+locally.
 
-- **Mongoose models** - User, Team, Dashboard, Alert, SavedSearch, Connection,
-  Source, Webhook, etc. all work identically
-- **Session store** - `connect-mongo` stores sessions via the same MongoDB
-  protocol; FerretDB handles the translation
-- **Passport.js auth** - `passport-local-mongoose` plugin works through Mongoose
-- **Alert checker** - background task queries metadata through the same ODM
-  layer
-- **Migrations** - `migrate-mongo` runs against FerretDB the same way
-- **All API routes and controllers** - no code changes required
+---
 
-### Service Topology
+## What DFE adds on top
 
-```mermaid
-flowchart TB
-    subgraph Docker_Compose_Network_hdx_oss["Docker Compose Network (hdx-oss)"]
-        APP["app<br/>(hyperdx-all-in-one)<br/>Ports: API + UI + OpAMP"]
-        OTEL["otel-collector<br/>(OTel Contrib + OpAMP Supervisor)<br/>Ports: 4317, 4318, 24225"]
-        CH["ch-server<br/>(ClickHouse 25.6)<br/>Ports: 8123 (HTTP), 9000 (TCP)"]
-        FERRET["ferretdb<br/>(FerretDB 2.7)<br/>Port: 27017"]
-        PG["postgres<br/>(PostgreSQL 17 + DocumentDB)<br/>Port: 5432"]
-    end
-
-    APP -->|Queries HTTP| CH
-    APP -->|Metadata Mongoose| FERRET
-    FERRET -->|SQL| PG
-    APP <-->|OpAMP protobuf| OTEL
-    OTEL -->|Writes TCP| CH
-    OTEL -->|Scrapes metrics| CH
-
-    EXT["External Traffic"] -->|:4317/:4318<br/>OTLP| OTEL
-    EXT -->|:8080<br/>UI + API| APP
-```
-
-In production, five services run in a single Docker Compose network. The `app`
-container bundles both the Next.js frontend and the Express API. FerretDB sits
-between the app and PostgreSQL, translating MongoDB wire protocol to SQL
-transparently. The OTel collector runs in **OpAMP supervisor mode** - it
-receives its pipeline configuration dynamically from the API server.
+In the DFE platform this sits behind Envoy, which terminates OIDC - see
+[oidc-authentication.md](oidc-authentication.md). Alerting is not started; the
+DFE rules engine owns detection
+([ADR 0002](../decisions/0002-alerting-disabled-for-dfe-rules.md)).
