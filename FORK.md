@@ -82,11 +82,11 @@ pristine and off the catalogue. Same feature, a quarter of the standing cost.
 Everything in this fork is one of two things, and almost every mistake made here
 comes from treating them the same way.
 
-| content | lifetime | mechanism | conflict surface |
-| --- | --- | --- | --- |
-| our features + additions | PERMANENT | merged history, `dfe/` dirs, rerere, `.fork-surface` | real, managed, catalogued |
-| security dep pins | TEMPORARY | generated into `resolutions` from `security/overrides.yaml` | none |
-| security code fixes | TEMPORARY | `security/patches/*.patch`, applied on top | none |
+| content                  | lifetime  | mechanism                                                   | conflict surface          |
+| ------------------------ | --------- | ----------------------------------------------------------- | ------------------------- |
+| our features + additions | PERMANENT | merged history, `dfe/` dirs, rerere, `.fork-surface`        | real, managed, catalogued |
+| security dep pins        | TEMPORARY | generated into `resolutions` from `security/overrides.yaml` | none                      |
+| security code fixes      | TEMPORARY | `security/patches/*.patch`, applied on top                  | none                      |
 
 The permanent half is what rerere is for. The temporary half is what rerere
 CANNOT do, and asking it to is the trap:
@@ -121,8 +121,8 @@ scripts/security-triage.py --audit --patches --carried   # 8. what is new, what 
 ```
 
 `.github/workflows/upstream-sync.yml` runs exactly that and opens a PR. Steps 1
-and 3 are the ones that did not exist before, and they are what removes the
-hand work.
+and 3 are the ones that did not exist before, and they are what removes the hand
+work.
 
 #### The invariants, checked on every PR
 
@@ -433,12 +433,13 @@ GRANTs; HyperDX trusts the identity injected at the edge. Removed:
   transform: `jose` is ESM-only and Jest's CJS loader cannot load it, so the
   tests exercise real ES384 verification rather than a crypto double. A separate
   file rather than an edit to upstream's `jest.config.js`. The matching
-  `"ci:unit"` script IS an in-place edit to `packages/api/package.json`, which is
-  already catalogued surface.
+  `"ci:unit"` script IS an in-place edit to `packages/api/package.json`, which
+  is already catalogued surface.
 
   It deliberately does NOT narrow `testMatch`. It used to, back when upstream's
   api package had no unit target at all; 2.33.0 added one, and a scoped config
   would have run our seven tests while silently skipping upstream's 600-odd.
+
 - `.upstream-version` + `scripts/upstream-pin.py` -- which upstream release the
   fork is built on, verified against `git merge-base` rather than trusted.
 - `security/overrides.yaml`, `security/patches/`,
@@ -696,8 +697,8 @@ mode" that hides the nav on dashboards, which is our embed feature arriving
 under a different name. `packages/app/src/layout.tsx` now carries both
 conditions. Each time upstream lands something we already hold, our delta
 shrinks and the case for B strengthens. Getting there means raising our
-extensions upstream one at a time - the `upstream:` field in the register is
-the same habit applied to dependencies.
+extensions upstream one at a time - the `upstream:` field in the register is the
+same habit applied to dependencies.
 
 **C. Hard fork - stop merging, own the code.** The expensive one, and the
 default we slide into by neglect rather than choose. It is only the right answer
