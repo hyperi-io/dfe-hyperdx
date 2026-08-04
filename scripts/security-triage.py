@@ -234,9 +234,15 @@ def collect_dependabot() -> list[dict]:
     if code != 0:
         detail = out.strip().splitlines()[-1] if out.strip() else "no output"
         if "not authorized" in out.lower() or "403" in out:
+            credential = (
+                "the supplied DEPENDABOT_TOKEN" if token else "the workflow GITHUB_TOKEN"
+            )
             detail = (
-                "not authorized - the workflow GITHUB_TOKEN cannot read Dependabot "
-                "alerts; set DEPENDABOT_TOKEN to a PAT with the security_events scope"
+                f"not authorized - {credential} lacks the Dependabot alerts "
+                "permission. In CI this token is minted from the "
+                "hyperi-container-mgt GitHub App, so the fix is to add "
+                "'Dependabot alerts: Read' to that app and accept it on the "
+                "installation - not a new PAT"
             )
         return [], detail
     try:
