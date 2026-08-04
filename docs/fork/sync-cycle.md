@@ -233,6 +233,14 @@ With no `ANTHROPIC_API_KEY` or no `anthropic` SDK it prints the mechanical facts
 and marks each unjudged section `NOT JUDGED`. A sync is never blocked by an
 expired secret.
 
+**CI needs `DEPENDABOT_TOKEN` for the Dependabot half.** The workflow
+`GITHUB_TOKEN` cannot read the alerts endpoint - `security-events: read` in
+`permissions:` is not the `security_events` scope the API wants, and the 403
+reads exactly like a missing scope on your own account. Set the secret to a PAT
+that carries it. Without it the triage falls back to `yarn npm audit`, loses the
+scope field, and says so in the report rather than looking like a repo with 18
+advisories instead of 72.
+
 **CodeQL is off** here (the
 [inverted security posture](design.md#the-security-posture-is-inverted-here)),
 so there is nothing to read from it. `attribute-findings.py` takes SARIF and
