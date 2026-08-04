@@ -519,7 +519,27 @@ def main() -> int:
         parser.error("choose at least one of --audit, --code, --patches, --carried")
 
     drafter = Drafter(model=args.model)
-    report = ["# Security triage", "", "Drafted for review. Nothing here has been applied.", ""]
+
+    # State the drafting capability UP FRONT. Without it a quiet report is
+    # ambiguous in the worst direction: "nothing to judge" and "no key, so
+    # nothing was attempted" read identically, and the second one looks like
+    # a clean bill of health.
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        capability = f"Model drafting AVAILABLE ({drafter.model})."
+    else:
+        capability = (
+            "Model drafting UNAVAILABLE - ANTHROPIC_API_KEY is not set. "
+            "Mechanical findings below are complete; nothing has been judged."
+        )
+
+    report = [
+        "# Security triage",
+        "",
+        "Drafted for review. Nothing here has been applied.",
+        "",
+        capability,
+        "",
+    ]
     if args.audit:
         report.extend([section_audit(drafter), ""])
     if args.code:
