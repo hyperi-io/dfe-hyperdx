@@ -198,6 +198,59 @@ class SecurityLayerTest(unittest.TestCase):
         self.assertIn('"scripts": {\n    "build": "nx build"\n  }', text)
         self.assertEqual(self.fork.manifest()["version"], "2.0.0")
 
+    def test_an_entry_after_the_empty_marker_is_not_lost(self) -> None:
+        """`overrides: []` must not swallow the rest of the file.
+
+        The shipped register carries that marker with the example commented out
+        BELOW it, so the natural way to add a pin - uncomment, forget the
+        marker - left every entry invisible while every command reported
+        success.
+        """
+        (self.fork.dir / "security" / "overrides.yaml").write_text(
+            "overrides: []\n"
+            "  - package: some-parser\n"
+            '    range: ">=1.2.3"\n'
+            "    advisory: GHSA-x\n"
+            "    severity: critical\n"
+            "    vector: >-\n"
+            "      Reachable on the ingest path.\n"
+            "    upstream: https://example.invalid/1\n"
+            "    added: 2026-08-05\n",
+            encoding="utf-8",
+        )
+        result = self.fork.run("security-override.py", "--list")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("some-parser", result.stdout)
+
+    def test_an_uncomparable_range_keeps_the_pin(self) -> None:
+        """A `patch:` spec parses to nothing; that must not read as redundant.
+
+        An unreadable range compared as lower than everything, so the pin was
+        dropped AND the tool printed that upstream ships something higher.
+        """
+        self.fork.set_register(
+            [{"package": "brace-expansion", "range": "patch:brace-expansion@2.0.2#./p.patch"}]
+        )
+        result = self.fork.run("security-override.py", "--apply")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("SUPERSEDED", result.stdout)
+        self.assertEqual(
+            self.fork.manifest()["resolutions"]["brace-expansion"],
+            "patch:brace-expansion@2.0.2#./p.patch",
+        )
+
+    def test_verify_enforces_the_severity_bar(self) -> None:
+        """--verify is the only register check on a PR, so it must validate."""
+        self.fork.set_register(
+            [{"package": "some-parser", "range": ">=1.2.3", "severity": "moderate"}]
+        )
+        result = self.fork.run("security-override.py", "--verify")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("does not meet the bar", result.stderr)
+
     def test_verify_fails_on_a_hand_edited_block(self) -> None:
         manifest = self.fork.manifest()
         manifest["resolutions"]["lodash"] = "^4.17.21"

@@ -89,7 +89,13 @@ def _load_register() -> list[dict]:
         if not raw.strip() or raw.lstrip().startswith("#"):
             continue
         if raw.strip() == "overrides: []":
-            return []
+            # NOT a return. The shipped file carries `overrides: []` with the
+            # example entry commented out BELOW it, so the natural way to add a
+            # pin - uncomment the example, forget the sentinel - left every
+            # entry invisible while --list, --check, --apply and --verify all
+            # reported success. Keep reading and let the empty marker mean
+            # nothing on its own.
+            continue
         if raw.strip() == "overrides:":
             continue
 
@@ -167,10 +173,21 @@ def _parse_version(value: str) -> tuple[int, ...]:
     return tuple(parts)
 
 
-def _minimum_of(range_spec: str) -> tuple[int, ...]:
-    """Lowest version a range admits, e.g. '>=1.2.3' or '^1.2.3' -> (1, 2, 3)."""
+def _minimum_of(range_spec: str) -> tuple[int, ...] | None:
+    """Lowest version a range admits, or None when it cannot be read.
+
+    RETURNS None RATHER THAN (). An empty tuple compares as lower than every
+    real version, so an unparseable range silently read as "upstream already
+    covers this" - the pin was dropped, and the tool PRINTED that upstream
+    ships something higher when it did not. Yarn's `patch:` protocol is the
+    documented way to pin a patched dependency and parses to nothing at all; a
+    stray `v` prefix does the same.
+
+    None means "do not compare" - callers keep the pin and say why.
+    """
     cleaned = range_spec.strip().lstrip("^~>=< ").strip()
-    return _parse_version(cleaned)
+    parsed = _parse_version(cleaned)
+    return parsed or None
 
 
 def _git(*args: str) -> str:
@@ -252,8 +269,12 @@ def _expected(base: dict[str, str], entries: list[dict]) -> tuple[dict[str, str]
     for entry in entries:
         package = entry["package"]
         ours = _minimum_of(entry["range"])
-        theirs = _minimum_of(base[package]) if package in base else ()
-        if theirs >= ours and package in base:
+        theirs = _minimum_of(base[package]) if package in base else None
+        # Only stand a pin down when BOTH ranges are comparable and upstream's
+        # is genuinely at least as high. An unreadable range on either side
+        # means we cannot know, so the pin stays - keeping a redundant pin is
+        # recoverable, dropping a live one is not.
+        if ours is not None and theirs is not None and theirs >= ours:
             superseded.append(entry)
             continue
         merged[package] = entry["range"]
@@ -324,9 +345,9 @@ def _write_resolutions(block: dict[str, str]) -> bool:
 def _redundant(entries: list[dict], resolved: dict[str, set[str]]) -> tuple[list[dict], list[str]]:
     """Split the register into entries still doing work and those that are not.
 
-    Returns (kept, notes) where notes are the per-entry lines to print. Shared by
-    --check (which nags) and --apply (which acts on the same verdict), so the two
-    can never disagree about what "redundant" means.
+    Returns (kept, notes) where notes are the per-entry lines to print. Used by
+    --check, which nags; --apply decides separately, in _expected, on whether an
+    entry raises the floor.
     """
     kept: list[dict] = []
     notes: list[str] = []
@@ -335,6 +356,17 @@ def _redundant(entries: list[dict], resolved: dict[str, set[str]]) -> tuple[list
         package = entry["package"]
         floor = _minimum_of(entry["range"])
         present = resolved.get(package, set())
+
+        if floor is None:
+            # Unreadable range (a `patch:` spec, a `v` prefix, a typo). Do not
+            # guess - an unreadable range read as "redundant" is a live pin
+            # deleted on a false claim.
+            kept.append(entry)
+            notes.append(
+                f"  [unknown]   {package} {entry['range']} - range not comparable; "
+                f"keeping the pin, check it by hand"
+            )
+            continue
 
         if not present:
             notes.append(f"  [gone]      {package} - not in the tree at all; the pin does nothing")
@@ -495,6 +527,21 @@ def _verify() -> int:
         return 1
 
     entries = _load_register()
+
+    # --verify is the ONLY register check that runs on a PR (fork-surface.yml).
+    # --check runs on the daily drift job and --apply only during a sync, so
+    # without this the severity-and-vector bar the register documents was not
+    # enforced anywhere a change could be stopped. It also stops _expected
+    # dying on a raw KeyError when an entry has no `package`.
+    problems: list[str] = []
+    for index, entry in enumerate(entries):
+        problems.extend(_validate(entry, index))
+    if problems:
+        print("Register is malformed:\n", file=sys.stderr)
+        for problem in problems:
+            print(f"  ERROR: {problem}", file=sys.stderr)
+        return 1
+
     expected, superseded = _expected(base, entries)
     actual = _current_resolutions()
     failed = False

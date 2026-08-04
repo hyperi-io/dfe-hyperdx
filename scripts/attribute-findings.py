@@ -77,6 +77,7 @@ def load_accepted() -> list[dict]:
     entries: list[dict] = []
     current: dict | None = None
     key: str | None = None
+    folded = False
 
     for raw in ACCEPTED_FILE.read_text(encoding="utf-8").splitlines():
         if not raw.strip() or raw.lstrip().startswith("#"):
@@ -89,6 +90,7 @@ def load_accepted() -> list[dict]:
             if current:
                 entries.append(current)
             current = {}
+            key, folded = None, False
             stripped = stripped[2:]
         if current is None:
             continue
@@ -97,11 +99,19 @@ def load_accepted() -> list[dict]:
         # colon anywhere is wrong: prose reasons quote settings like
         # "`secrets: inherit`", and treating that as a new key silently
         # truncated the reason mid-sentence.
-        key_match = _YAML_KEY.match(stripped)
+        #
+        # ONCE INSIDE A FOLDED BLOCK, EVERYTHING IS PROSE. Without that rule a
+        # reason ending in a line like "path: some/other/file.ts" rebound the
+        # entry's path, so an acceptance declared against a harmless file
+        # suppressed a real finding somewhere else entirely - and reading the
+        # YAML as YAML would not show it, because a real parser keeps the whole
+        # block as text.
+        key_match = None if folded else _YAML_KEY.match(stripped)
         if key_match:
             key = key_match.group("key")
             value = key_match.group("value").strip()
-            current[key] = "" if value in (">-", ">", "|") else value.strip("\"'")
+            folded = value in (">-", ">", "|", "|-")
+            current[key] = "" if folded else value.strip("\"'")
         elif key:
             # continuation of a folded block
             current[key] = f"{current.get(key, '')} {stripped}".strip()
@@ -154,15 +164,32 @@ class Attributor:
         self._changed: dict[str, set[int]] = {}
 
     def _our_lines(self, path: str) -> set[int]:
+        """Lines we added or changed, PLUS the seam either side of a deletion.
+
+        A pure deletion has an added-count of zero (`@@ -2 +1,0 @@`), so range()
+        is empty and nothing reads as ours. Deleting a line is one of the more
+        plausible ways a fork introduces a hole - drop an authorization guard and
+        the finding lands on the surviving code, on a line we never touched.
+
+        So a deletion claims the lines it sits BETWEEN. That over-claims by at
+        most two lines per deletion, which is the right way to be wrong here: it
+        can only move a finding into the bucket that gates.
+        """
         if path in self._changed:
             return self._changed[path]
         lines: set[int] = set()
         for line in _git("diff", "-U0", self._base, "--", path).splitlines():
             match = _HUNK.match(line)
-            if match:
-                start = int(match.group(1))
-                count = int(match.group(2) or 1)
-                lines.update(range(start, start + count))
+            if not match:
+                continue
+            start = int(match.group(1))
+            count = int(match.group(2) or 1)
+            if count == 0:
+                # Deletion: `+start,0` means the removed text sat between
+                # `start` and `start + 1` in the new file.
+                lines.update({start, start + 1})
+                continue
+            lines.update(range(start, start + count))
         self._changed[path] = lines
         return lines
 
@@ -184,28 +211,75 @@ class Attributor:
             return False
         return line in self._our_lines(path)
 
+    def finding_is_ours(self, finding: dict) -> bool:
+        """Ours if ANY site the finding touches is ours.
+
+        A dataflow result spans source to sink; the vulnerability is ours the
+        moment we wrote any step of it, wherever the scanner chose to report.
+        """
+        sites = finding.get("sites") or [(finding["path"], finding.get("line"))]
+        return any(self.is_ours(path, line) for path, line in sites)
+
+
+def _physical(location: dict) -> tuple[str | None, int | None]:
+    """(path, line) from a SARIF location, or (None, None)."""
+    phys = (location or {}).get("physicalLocation", {})
+    uri = phys.get("artifactLocation", {}).get("uri")
+    if not uri:
+        return None, None
+    return uri.removeprefix("file://").lstrip("/"), phys.get("region", {}).get("startLine")
+
+
+def _all_sites(result: dict) -> list[tuple[str, int | None]]:
+    """EVERY place a result touches - primary, related, and dataflow steps.
+
+    Reading only `locations[0]` loses the finding. Semgrep taint-mode and CodeQL
+    both report a dataflow result at the SINK, so a vulnerability introduced on
+    the SOURCE line is reported on a line we never touched, and attributing by
+    the primary location alone hands it to the inherited bucket - the gate goes
+    green on a hole we just added.
+
+    A finding is ours if ANY site it touches is ours. That errs towards gating,
+    which is the correct direction for the bucket that fails the build.
+    """
+    sites: list[tuple[str, int | None]] = []
+
+    def add(location: dict) -> None:
+        path, line = _physical(location)
+        if path:
+            sites.append((path, line))
+
+    for location in result.get("locations") or []:
+        add(location)
+    for location in result.get("relatedLocations") or []:
+        add(location)
+    for flow in result.get("codeFlows") or []:
+        for thread in flow.get("threadFlows") or []:
+            for step in thread.get("locations") or []:
+                add(step.get("location") or {})
+    return sites
+
 
 def load_findings(sarif_path: Path) -> list[dict]:
-    """Flatten SARIF results to {path, line, rule, level, message}."""
+    """Flatten SARIF results to {path, line, rule, level, message, sites}."""
     data = json.loads(sarif_path.read_text(encoding="utf-8"))
     findings: list[dict] = []
 
     for run in data.get("runs", []):
         tool = run.get("tool", {}).get("driver", {}).get("name", "scanner")
         for result in run.get("results", []):
-            locations = result.get("locations") or []
-            path, line = None, None
-            if locations:
-                phys = locations[0].get("physicalLocation", {})
-                path = phys.get("artifactLocation", {}).get("uri")
-                line = phys.get("region", {}).get("startLine")
-            if not path:
+            sites = _all_sites(result)
+            if not sites:
                 continue
+            path, line = sites[0]
             findings.append(
                 {
                     "tool": tool,
-                    "path": path.removeprefix("file://").lstrip("/"),
+                    "path": path,
                     "line": line,
+                    # Reported at the primary location, but ATTRIBUTED across
+                    # all of them.
+                    "sites": sites,
                     "rule": result.get("ruleId", "?"),
                     "level": result.get("level", "warning"),
                     "message": (result.get("message", {}).get("text") or "").strip(),
@@ -276,7 +350,7 @@ def main() -> int:
     inherited: list[dict] = []
 
     for finding in findings:
-        if not attributor.is_ours(finding["path"], finding["line"]):
+        if not attributor.finding_is_ours(finding):
             inherited.append(finding)
         elif (entry := is_accepted(finding, accepted_rules)) is not None:
             finding["reason"] = entry.get("reason", "")
