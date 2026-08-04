@@ -83,6 +83,20 @@ def load_catalogue() -> list[str]:
     return patterns
 
 
+def merge_in_progress() -> bool:
+    """True while a merge is being resolved.
+
+    AN UPSTREAM MERGE IS NOT AN EDIT. The commit that lands a sync legitimately
+    carries hundreds of upstream files, and judging it by "did this commit touch
+    an uncatalogued upstream file" flags every one of them - so the guard would
+    block the exact operation it exists to protect, on every single sync.
+
+    The conflict surface is what WE changed, and that is checked on the PR
+    afterwards against the merge base. Here the honest answer is to stand down.
+    """
+    return (REPO_ROOT / ".git" / "MERGE_HEAD").exists()
+
+
 def changed_files(base: str | None) -> list[str]:
     """Staged files, or the files changed since *base*."""
     if base:
@@ -290,6 +304,15 @@ def main() -> int:
 
     if args.audit:
         warn_test_paths(catalogue)
+        return 0
+
+    if not args.base and merge_in_progress():
+        print(
+            "fork-surface: merge in progress - standing down.\n"
+            "An upstream merge legitimately carries upstream's own files; what WE\n"
+            "changed is checked on the PR against the merge base.",
+            file=sys.stderr,
+        )
         return 0
 
     files = changed_files(args.base)
