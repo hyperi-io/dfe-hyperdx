@@ -231,6 +231,22 @@ jobs:
           git diff --cached --quiet || git commit -m 'chore: re-derive the lockfile after the upstream merge'
           git push --force-with-lease origin '${{ steps.merge.outputs.branch }}'
 
+      # An App token beats a PAT: scoped, auditable, and not tied to a person's
+      # account (see the CI standard). `hyperi-container-mgt` is the app whose id
+      # and key are already org-wide, so it needs no new secret here - only the
+      # Dependabot-alerts READ permission added to the app itself. Until that is
+      # granted this mints a token without it and the triage falls back, loudly.
+      - name: Mint an App token for the Dependabot read
+        id: app-token
+        if:
+          steps.merge.outputs.status == 'clean' || steps.merge.outputs.status ==
+          'replayed'
+        continue-on-error: true # no token is a degraded triage, not a failed sync
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.CONTAINER_MGT_APP_ID }}
+          private-key: ${{ secrets.CONTAINER_MGT_APP_PRIVATE_KEY }}
+
       # The judgement calls, drafted for the reviewer. Never a gate: reachability
       # is a human verdict (FORK.md), and a model that could clear its own
       # findings would rebuild the alert queue the fork's posture exists to
@@ -243,12 +259,13 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-          # The workflow GITHUB_TOKEN CANNOT read Dependabot alerts - the
-          # endpoint wants the `security_events` scope, which `permissions:` does
-          # not grant. Without this secret the triage falls back to
-          # `yarn npm audit` and loses the scope field that settles
-          # development-only advisories for free. It says so in the report.
-          DEPENDABOT_TOKEN: ${{ secrets.DEPENDABOT_TOKEN }}
+          # The workflow GITHUB_TOKEN cannot read Dependabot alerts whatever
+          # `permissions:` says - the endpoint wants the app-level Dependabot
+          # alerts permission. An App token is the house standard over a PAT, so
+          # this prefers one minted above and only falls back to a PAT secret.
+          # With neither, the triage uses `yarn npm audit` and says so.
+          DEPENDABOT_TOKEN:
+            ${{ steps.app-token.outputs.token || secrets.DEPENDABOT_TOKEN }}
         run: |
           pip install --disable-pip-version-check anthropic || true
           scripts/security-triage.py --audit --patches --carried -o triage.md
