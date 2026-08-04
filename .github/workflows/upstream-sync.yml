@@ -215,7 +215,11 @@ jobs:
           yarn install
           scripts/security-override.py --verify
           scripts/upstream-pin.py --verify
-          yarn build
+          # NOT `yarn build`: that is the DFE wrapper
+          # `dotenvx run --env-file .env.dfe`, and .env.dfe is gitignored local
+          # config that no runner has. It exits 9 before compiling anything, so
+          # the gate reported failure without ever running a test.
+          yarn build:common-utils
           yarn test
 
       - name: Commit the re-derived lockfile
@@ -238,7 +242,13 @@ jobs:
         continue-on-error: true
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GH_TOKEN: ${{ github.token }} # the advisory source is Dependabot, via gh
+          GH_TOKEN: ${{ github.token }}
+          # The workflow GITHUB_TOKEN CANNOT read Dependabot alerts - the
+          # endpoint wants the `security_events` scope, which `permissions:` does
+          # not grant. Without this secret the triage falls back to
+          # `yarn npm audit` and loses the scope field that settles
+          # development-only advisories for free. It says so in the report.
+          DEPENDABOT_TOKEN: ${{ secrets.DEPENDABOT_TOKEN }}
         run: |
           pip install --disable-pip-version-check anthropic || true
           scripts/security-triage.py --audit --patches --carried -o triage.md

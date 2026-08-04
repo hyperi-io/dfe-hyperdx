@@ -96,8 +96,17 @@ em dashes, arrows or emoji. No marketing language.\
 """
 
 
-def _run(*args: str, cwd: Path | None = None) -> tuple[int, str]:
-    """Run a command, returning (returncode, stdout+stderr)."""
+def _run(
+    *args: str, cwd: Path | None = None, env: dict[str, str] | None = None
+) -> tuple[int, str]:
+    """Run a command, returning (returncode, stdout+stderr).
+
+    `env` is MERGED over the inherited environment rather than replacing it -
+    gh needs PATH and HOME to work at all.
+    """
+    merged = None
+    if env:
+        merged = {**os.environ, **env}
     try:
         result = subprocess.run(
             args,
@@ -107,6 +116,7 @@ def _run(*args: str, cwd: Path | None = None) -> tuple[int, str]:
             encoding="utf-8",
             errors="replace",
             check=False,
+            env=merged,
         )
     except OSError as exc:
         return 1, str(exc)
@@ -196,26 +206,45 @@ def collect_dependabot() -> list[dict]:
     free. Yarn's audit does not surface it, so every finding had to go to the
     model.
 
-    Returns [] when gh is absent, unauthenticated, or the repo has alerts off,
-    so the caller can fall back rather than report nothing.
+    THE WORKFLOW GITHUB_TOKEN CANNOT READ THIS ENDPOINT. `security-events: read`
+    is not enough - the Dependabot alerts API wants a PAT or App token carrying
+    the `security_events` scope, so CI needs `DEPENDABOT_TOKEN` set to one.
+    Without it this returns [] and the caller falls back to `yarn npm audit`,
+    losing the scope field that settles development-only advisories for free.
+
+    Returns (alerts, reason) so a fallback can say WHY rather than looking like
+    a repo with nothing to report.
     """
     slug = origin_slug()
     if not slug:
-        return []
+        return [], "could not resolve the origin remote"
+
+    env = {}
+    token = os.environ.get("DEPENDABOT_TOKEN")
+    if token:
+        env["GH_TOKEN"] = token
+
     code, out = _run(
         "gh",
         "api",
         f"repos/{slug}/dependabot/alerts?state=open&severity=critical,high&per_page=100",
         "--paginate",
+        env=env or None,
     )
     if code != 0:
-        return []
+        detail = out.strip().splitlines()[-1] if out.strip() else "no output"
+        if "not authorized" in out.lower() or "403" in out:
+            detail = (
+                "not authorized - the workflow GITHUB_TOKEN cannot read Dependabot "
+                "alerts; set DEPENDABOT_TOKEN to a PAT with the security_events scope"
+            )
+        return [], detail
     try:
         alerts = json.loads(out)
     except json.JSONDecodeError:
-        return []
+        return [], "the alerts response was not JSON"
     if not isinstance(alerts, list):
-        return []
+        return [], "the alerts response was not a list"
 
     collected: list[dict] = []
     for alert in alerts:
@@ -235,7 +264,7 @@ def collect_dependabot() -> list[dict]:
                 "source": "dependabot",
             }
         )
-    return collected
+    return collected, ""
 
 
 def collect_yarn_audit() -> list[dict]:
@@ -281,11 +310,11 @@ def collect_audit() -> tuple[list[dict], list[dict], str]:
     Every advisory answered mechanically is one that needs no key, no network
     and no human, so the split happens BEFORE anything reaches the model.
     """
-    advisories = collect_dependabot()
+    advisories, reason = collect_dependabot()
     source = "Dependabot"
     if not advisories:
         advisories = collect_yarn_audit()
-        source = "yarn npm audit (Dependabot unavailable)"
+        source = f"yarn npm audit - Dependabot unavailable ({reason})"
 
     if not advisories:
         return [], [], "No high or critical advisories reported."
@@ -299,16 +328,36 @@ def collect_audit() -> tuple[list[dict], list[dict], str]:
     return rest, dev, note
 
 
+DEPLOYMENT_CONTEXT = (
+    "docs/fork/design.md",
+    "docs/architecture/README.md",
+    "docs/development/docker-local.md",
+)
+
+
 def describe_deployment() -> str:
-    """What this fork actually ships, so reachability has something to bite on."""
-    parts = ["HOW THIS FORK IS DEPLOYED (use this to judge reachability):"]
-    for name in ("FORK.md", "DFE-DOCKER-LOCAL.md"):
+    """What this fork actually ships, so reachability has something to bite on.
+
+    Without it the model has no entry points, no run mode and no dependency
+    tree, and correctly refuses to call anything reachable - which reads like a
+    clean bill of health but is really the prompt arriving empty. A run that
+    finds NO context says so loudly rather than asking the question anyway.
+    """
+    parts: list[str] = []
+    for name in DEPLOYMENT_CONTEXT:
         path = REPO_ROOT / name
         if not path.is_file():
             continue
         text = path.read_text(encoding="utf-8")
         parts.append(f"\n--- {name} (first 6000 chars) ---\n{text[:6000]}")
-    return "\n".join(parts)
+
+    if not parts:
+        return (
+            "HOW THIS FORK IS DEPLOYED: NOT AVAILABLE - none of "
+            f"{', '.join(DEPLOYMENT_CONTEXT)} could be read. Say so in your "
+            "answer and mark every finding UNKNOWN; do not guess a vector."
+        )
+    return "HOW THIS FORK IS DEPLOYED (use this to judge reachability):" + "".join(parts)
 
 
 def section_audit(drafter: Drafter) -> str:
