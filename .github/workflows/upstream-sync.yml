@@ -37,6 +37,7 @@ permissions:
   contents: write # push the bot branch
   pull-requests: write # open the sync PR
   issues: write # file the drift issue when conflicts remain
+  security-events: read # read Dependabot alerts for the triage
 
 concurrency:
   group: upstream-sync
@@ -210,6 +211,7 @@ jobs:
         continue-on-error: true
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ github.token }} # the advisory source is Dependabot, via gh
         run: |
           pip install --disable-pip-version-check anthropic || true
           scripts/security-triage.py --audit --patches --carried -o triage.md

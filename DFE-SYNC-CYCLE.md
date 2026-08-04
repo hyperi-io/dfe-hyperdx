@@ -201,14 +201,27 @@ only -- see below.
 
 ## The triage step, and its limits
 
-`scripts/security-triage.py` answers the three questions the mechanical tooling
-cannot:
+`scripts/security-triage.py` answers the questions the mechanical tooling
+cannot. It reads the signals this repo already produces rather than rescanning:
 
-| Flag        | Question                                                      |
-| ----------- | ------------------------------------------------------------- |
-| `--audit`   | This advisory is HIGH. Is it reachable HERE?                  |
-| `--patches` | Did upstream fix this, or did the code just move?             |
-| `--carried` | Has upstream landed an equivalent for anything we still hold? |
+| Flag        | Question                                            | Source it reads                      |
+| ----------- | --------------------------------------------------- | ------------------------------------ |
+| `--audit`   | This advisory is HIGH. Is it reachable HERE?        | Dependabot alerts via `gh`           |
+| `--code`    | Is this scanner finding on OUR line real?           | `attribute-findings.py --json`       |
+| `--patches` | Did upstream fix this, or did the code just move?   | `security/patches/` against the tree |
+| `--carried` | Has upstream landed an equivalent for what we hold? | the register against upstream's log  |
+
+**Mechanical first.** Every finding answered deterministically is one that needs
+no key, no network and no human, so the existing signals do as much as they can
+before anything reaches the model:
+
+- Dependabot carries `dependency.scope`. A development-scoped advisory is build
+  tooling that never reaches the shipped image, so it is answered outright.
+  Measured on this repo: 13 of 72 settled for free.
+- `attribute-findings.py` has already sorted scanner findings into OURS /
+  ACCEPTED / INHERITED, so only OURS is drafted. That bucket is usually empty.
+
+The model is asked the residue, not the pile.
 
 It writes a markdown report and nothing else. It does not edit the register,
 apply a patch, or clear a finding. Reachability is a human verdict: a model that
@@ -218,6 +231,17 @@ inverted posture exists to avoid.
 With no `ANTHROPIC_API_KEY` or no `anthropic` SDK it prints the mechanical facts
 and marks each unjudged section `NOT JUDGED`. A sync is never blocked by an
 expired secret.
+
+**CodeQL is off** here (the posture in [FORK.md](FORK.md)), so there is nothing
+to read from it. `attribute-findings.py` takes SARIF and serves CodeQL as
+readily as semgrep, so turning it on later needs no change to the triage.
+**Renovate** is scoped to the action pins in our own workflows and produces no
+dependency signal by design.
+
+**Never use `gh api repos/{owner}/{repo}/...` in this repo.** A fork has two
+remotes, and with no default set gh resolves the placeholders to UPSTREAM: the
+query asks hyperdxio/hyperdx for its Dependabot data and returns a 403 that
+reads like a missing token scope. Resolve the slug from `origin` instead.
 
 ---
 
