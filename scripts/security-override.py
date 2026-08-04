@@ -9,7 +9,8 @@
 
 THE PROBLEM THIS SOLVES. This fork mutes dependency advisories by default,
 because we do not own upstream's dependency tree and a queue of unmergeable
-bumps trains everyone to ignore the queue (see FORK.md). The exception is a
+bumps trains everyone to ignore the queue (see docs/fork/design.md). The
+exception is a
 HIGH/CRITICAL advisory with a REAL VECTOR - the vulnerable path is actually
 reachable in how DFE runs this. Then we do pin it, in `resolutions`.
 

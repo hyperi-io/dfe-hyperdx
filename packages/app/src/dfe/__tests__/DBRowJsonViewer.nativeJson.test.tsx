@@ -9,7 +9,7 @@
  * guaranteed hand-resolve on every sync, for tests upstream has no stake in.
  *
  * The house rule this encodes: OUR TESTS NEVER LIVE IN AN UPSTREAM TEST FILE.
- * See FORK.md.
+ * See docs/fork/what-we-changed.md.
  *
  * The helpers below are duplicated from upstream's test file rather than
  * imported, because it exports none of them. That is deliberate - a few lines

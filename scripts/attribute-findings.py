@@ -30,7 +30,7 @@ actually works here:
 THE ONE THING THAT BREAKS IT: reformatting an upstream file. That rewrites every
 line into the diff, so the whole file reads as ours and the signal is gone. The
 fork already bans bulk reformatting to protect `git rerere`; this is a second,
-independent reason. See FORK.md.
+independent reason. See docs/fork/design.md.
 
 SARIF in, so the same tool serves semgrep and CodeQL (and anything else that
 speaks it) rather than parsing one scanner's console output.

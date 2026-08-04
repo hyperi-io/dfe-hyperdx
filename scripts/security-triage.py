@@ -33,7 +33,8 @@ is asked the residue, not the pile.
 
 IT PROPOSES, IT DOES NOT DECIDE. Output is a markdown report for the sync PR.
 Nothing here writes the register, applies a patch, or clears a finding.
-FORK.md's bar - "npm audit says high is not a vector" - is a judgement the fork
+The bar in docs/fork/design.md - "npm audit says high is not a vector" - is a
+judgement the fork
 owner makes, and a model that could clear its own findings would rebuild exactly
 the alert queue the inverted posture exists to avoid.
 

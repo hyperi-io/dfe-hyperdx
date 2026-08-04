@@ -21,7 +21,7 @@
  * function BODY there buys a fresh hand-resolve every single sync. So the whole
  * of our logic lives here, and the call sites carry the smallest edit that can
  * express it: one swapped identifier, or a three-line `else if` appended to an
- * existing brace. See FORK.md.
+ * existing brace. See docs/fork/what-we-changed.md.
  *
  * DIRECTION OF TRAVEL: upstream #2344 ("don't wrap JSON filters in toString
  * until query rendering") moved deliberately away from build-time wrapping, and

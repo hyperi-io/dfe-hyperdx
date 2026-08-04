@@ -8,7 +8,7 @@
     "WHY. We do not own upstream's dependency tree. Bumping a transitive dep in",
     "packages/*/package.json diverges us from hyperdxio/hyperdx for a fix we did",
     "not write, turns a pristine file into permanent rerere conflict surface",
-    "(see FORK.md), and gets reverted or re-conflicted on the next sync anyway.",
+    "(see docs/fork/design.md), and gets reverted or re-conflicted on the next",
     "Upstream patches upstream; we get the fix when we sync. A PR queue full of",
     "bumps we must close unmerged is worse than no queue - it trains everyone to",
     "ignore the queue, including the one bump that matters.",

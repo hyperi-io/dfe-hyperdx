@@ -22,17 +22,14 @@ AGENTS.md
 CONTRIBUTING.md
 MCP.md
 README.md
-agent_docs/README.md
-agent_docs/architecture.md
-agent_docs/code_style.md
-agent_docs/data_viz_colors.md
-agent_docs/development.md
-agent_docs/observability.md
-agent_docs/page_layout.md
-agent_docs/themes.md
+# Upstream's agent documentation, entirely. Listing it file by file meant every
+# doc upstream added arrived unformatted and failed the gate - evals.md did
+# exactly that in 2.33.0. We never format this tree, so say so once.
+agent_docs/
 docker/hyperdx/refresh-env.js
 packages/api/CHANGELOG.md
 packages/api/docs/auto_provision/AUTO_PROVISION.md
+packages/api/jest.config.js
 packages/app/CHANGELOG.md
 packages/app/eslint.config.mjs
 packages/app/tests/e2e/README.md

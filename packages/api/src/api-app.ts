@@ -67,7 +67,7 @@ if (!config.IS_LOCAL_APP_MODE) {
 // --- DFE START ---
 // DFE OIDC identity middleware. When DFE_AUTH_MODE is unset, this block
 // is skipped entirely and HyperDX behaves exactly as upstream.
-// See DFE-ARCHITECTURE.md for design details.
+// See docs/architecture/oidc-authentication.md for design details.
 {
   const { isDfeEnabled } = require('./dfe/config');
   if (isDfeEnabled) {
