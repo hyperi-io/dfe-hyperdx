@@ -13,7 +13,7 @@ hand-reverted when upstream fixes it their own way. That last step is the
 expensive one, and it is exactly what this layer removes.
 
 Our PERMANENT changes are different and do belong in merged history - see
-FORK.md. The test is lifetime, not size: if we would keep it after upstream
+docs/fork/what-we-changed.md. The test is lifetime, not size: if we would keep it after upstream
 fixed the vulnerability, it is not a security patch, it is a fork delta.
 
 ## The bar

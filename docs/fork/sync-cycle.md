@@ -1,10 +1,11 @@
-# DFE-SYNC-CYCLE.md -- running an upstream sync
+# Running an upstream sync
 
 **The runbook.** How to move this fork onto a newer upstream HyperDX and keep
 our security fixes correct while doing it.
 
-Why the fork is shaped this way, and the catalogue of what we changed, live in
-[FORK.md](FORK.md). This file is the procedure.
+Why the fork is shaped this way is [design.md](design.md); the catalogue of what
+we changed is [what-we-changed.md](what-we-changed.md). This file is the
+procedure.
 
 ---
 
@@ -171,7 +172,7 @@ scripts/security-override.py --apply
 ```
 
 The numeric prefix is the apply order and reverses for unapply, so it is
-load-bearing. See [security/patches/README.md](security/patches/README.md).
+load-bearing. See [the patch series contract](../../security/patches/README.md).
 
 ---
 
@@ -232,11 +233,12 @@ With no `ANTHROPIC_API_KEY` or no `anthropic` SDK it prints the mechanical facts
 and marks each unjudged section `NOT JUDGED`. A sync is never blocked by an
 expired secret.
 
-**CodeQL is off** here (the posture in [FORK.md](FORK.md)), so there is nothing
-to read from it. `attribute-findings.py` takes SARIF and serves CodeQL as
-readily as semgrep, so turning it on later needs no change to the triage.
-**Renovate** is scoped to the action pins in our own workflows and produces no
-dependency signal by design.
+**CodeQL is off** here (the
+[inverted security posture](design.md#the-security-posture-is-inverted-here)),
+so there is nothing to read from it. `attribute-findings.py` takes SARIF and
+serves CodeQL as readily as semgrep, so turning it on later needs no change to
+the triage. **Renovate** is scoped to the action pins in our own workflows and
+produces no dependency signal by design.
 
 **Never use `gh api repos/{owner}/{repo}/...` in this repo.** A fork has two
 remotes, and with no default set gh resolves the placeholders to UPSTREAM: the
@@ -269,16 +271,82 @@ git fetch upstream
 ```
 
 `--drift` answers "has upstream touched anything we hold a delta in?" That is
-the cheap moment to shrink a delta down the ladder in
-[FORK.md](FORK.md#the-cheapest-edit-ladder), long before a merge turns it into a
-conflict. `upstream-drift.yml` runs it daily.
+the cheap moment to shrink a delta down the
+[cheapest-edit ladder](design.md#the-cheapest-edit-ladder), long before a merge
+turns it into a conflict. `upstream-drift.yml` runs it daily.
+
+**A stale `upstream/main` lies quietly.** One measurement taken against a ref
+that had not been fetched in weeks reported 34 commits of drift and 2 conflicts;
+a fresh fetch showed 122 commits and 11 conflicts. Nothing announces the
+staleness - it just tells you the sync is smaller than it is. The daily CI
+number fetches every run, so trust it over whatever your laptop says.
+
+---
+
+## Priming rerere
+
+rerere has nothing to replay until a resolution is recorded, and **`rr-cache` is
+PER-CLONE**. Resolving a conflict on your laptop does not prime CI, and CI's
+cache does not prime you. Each has to see the conflict once.
+
+Prime a clone by doing an upstream merge by hand on a `sync/<tag>` branch,
+resolving each conflict, and running `git rerere` (or committing, which records
+the same thing). CI persists its own cache via actions/cache, so the first
+scheduled run after a new conflict shape files a drift issue and the run after
+that replays.
+
+Use MERGE, not rebase-onto-upstream. This is a shared repo, and rerere replays
+either way.
+
+---
+
+## When the merge gets too ugly
+
+The cycle above assumes merge debt stays low. When it does not, the fallback is
+to re-fork and replay: take the target upstream tag fresh, re-apply each
+catalogued in-place edit from `.fork-surface` against the NEW original (smallest
+edit first, per the ladder), regenerate the security layer with `--apply` rather
+than carrying the old block across, and move the pin.
+
+[what-we-changed.md](what-we-changed.md) is what makes that tractable, which is
+why it has to stay accurate.
+
+---
+
+## Track record
+
+Sync cost over time is the evidence the [de-fork decision](leaving-upstream.md)
+should be taken against, so it gets recorded.
+
+|                        | 2026-07-23 (dry run) | 2026-08-04 (2.29.0 -> 2.33.0, full run) |
+| ---------------------- | -------------------- | --------------------------------------- |
+| upstream commits ahead | 122                  | 164                                     |
+| conflicting files      | 11                   | 12                                      |
+| `yarn.lock` conflicted | yes                  | **no**                                  |
+| delta gate             | 81 `src/dfe` tests   | 211 suites / 4795 tests                 |
+
+What changed between the two rows is the merge driver and the generated security
+layer. The lockfile stopped conflicting outright: the driver took upstream's
+copy and `yarn install` re-derived exactly ONE entry, `jose`, our OIDC
+dependency.
+
+Of the 12 conflicts, 7 carried content; the other 5 were modify/delete on the
+workflows hyperi-ci replaced, whose resolution is to stay deleted. Two are worth
+remembering:
+
+- `packages/api/tsconfig.build.json` - our only delta turned out to be
+  FORMATTING; the `include` content was upstream's all along. Taking theirs
+  wholesale removed the file from the conflict surface entirely.
+- `packages/app/src/layout.tsx` - upstream added a kiosk mode that also hides
+  the nav. Both conditions now sit side by side, and that convergence is the
+  first real evidence for the de-fork path.
 
 ---
 
 ## Related
 
-- [FORK.md](FORK.md) -- why the fork is shaped this way, the change catalogue,
-  and the plan for eventually leaving the upstream dependency
-- [security/patches/README.md](security/patches/README.md) -- the patch series
-  contract
-- [CLAUDE.md](CLAUDE.md) -- the rules an agent must not break here
+- [design.md](design.md) - why the fork is shaped this way
+- [what-we-changed.md](what-we-changed.md) - the change catalogue
+- [leaving-upstream.md](leaving-upstream.md) - how this ends
+- [../../security/patches/README.md](../../security/patches/README.md) - the
+  patch series contract

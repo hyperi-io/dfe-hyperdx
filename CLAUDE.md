@@ -60,7 +60,7 @@ need migrating.
    convention is RETIRED - we modify in place now, so those files ARE our
    conflict surface. An exception is only legitimate when it is:
    - **identified** - you know you are touching a pristine upstream file,
-   - **documented** - listed in the catalogue in [FORK.md](FORK.md) with why,
+   - **documented** - listed in the catalogue in [docs/fork/what-we-changed.md](docs/fork/what-we-changed.md) with why,
    - **tooled** - matched by an entry in `.fork-surface` so the guard passes.
 
 3. **NEVER bulk-reformat or mass-autofix upstream files.** A repo-wide formatter
@@ -121,7 +121,26 @@ hook is a convenience rather than the control. `FORK_SURFACE_WARN=1` downgrades
 it to a warning when you genuinely need to land an exception - add the path to
 `.fork-surface` and FORK.md in the same commit.
 
-Full model and change catalogue: [FORK.md](FORK.md). How to run a sync:
-[DFE-SYNC-CYCLE.md](DFE-SYNC-CYCLE.md).
+## Our files get our standards. Upstream's stay untouched.
+
+This applies to DOCS as much as code, and it is the rule that decides where a
+new file goes:
+
+- **Ours** - `docs/`, `packages/**/dfe/**`, `scripts/`, `security/`,
+  `.githooks/`, and the workflows we own. HyperI standards apply in full:
+  lowercase-kebab under `docs/`, mermaid over prose, ASCII only, ADRs for
+  decisions.
+- **Upstream's** - `agent_docs/`, `AGENTS.md`, `MCP.md`, `LOCAL.md`,
+  `DEPLOY.md`, `CONTRIBUTING.md`, and everything under `packages/` outside a
+  `dfe/` directory. Leave them exactly as upstream ships them. Applying our
+  conventions there buys nothing and creates conflict surface on every sync.
+
+`README.md` and `CLAUDE.md` are the two shared files: both exist upstream, both
+carry a small catalogued delta, both are listed in `.fork-surface`.
+
+**Never put a new doc of ours at the repo root.** It goes under `docs/`.
+
+Full model and change catalogue: [docs/fork/](docs/fork/README.md). How to run a
+sync: [docs/fork/sync-cycle.md](docs/fork/sync-cycle.md).
 
 @AGENTS.md

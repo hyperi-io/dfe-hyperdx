@@ -5,17 +5,17 @@ This repository is the DFE fork of upstream
 its visualisation and search layer. It is the ACTIVE fork - all DFE
 customisation lives here, one clean hop off upstream.
 
-See [FORK.md](FORK.md) for the catalogue of what we changed and why, plus the
-upstream-sync recovery plan. Upstream syncs merge `hyperdxio/hyperdx` into this
-repo (`git rerere` replays our resolved conflicts).
+Our documentation lives in [docs/](docs/README.md). Upstream's own docs
+(`AGENTS.md`, `agent_docs/`, `MCP.md`, `LOCAL.md`, `DEPLOY.md`) are left exactly
+as upstream ships them.
 
 ## Quick Links
 
+- [docs/](docs/README.md) - our documentation
+- [docs/fork/](docs/fork/README.md) - what we changed, and how we keep it in sync
+- [docs/architecture/](docs/architecture/README.md) - how the embedded system fits together
 - [HyperDX Official Documentation](https://www.hyperdx.io/docs)
 - [Upstream HyperDX](https://github.com/hyperdxio/hyperdx)
-- [FORK.md](FORK.md) - our divergence catalogue and why the fork is shaped this
-  way
-- [DFE-SYNC-CYCLE.md](DFE-SYNC-CYCLE.md) - how to run an upstream sync
 
 ## Maintenance Workflow (upstream sync)
 
@@ -36,7 +36,7 @@ are DECLARED and generated into the tree, so they never become merge-conflict
 surface for something upstream will fix in a fortnight anyway.
 
 Step by step, including how to add a security pin or patch:
-[DFE-SYNC-CYCLE.md](DFE-SYNC-CYCLE.md).
+[docs/fork/sync-cycle.md](docs/fork/sync-cycle.md).
 
 ### Running the app for development
 

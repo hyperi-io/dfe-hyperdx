@@ -4,11 +4,11 @@
 # comes from upstream. Upstream HyperDX moves fast enough on its own - we do not
 # want to be managing small fry on top of it. Everything we do must work with
 # git rerere, and editing a pristine upstream file is an EXCEPTION that must be
-# identified, documented (FORK.md) and tooled (listed here).
+# identified, documented (docs/fork/what-we-changed.md) and tooled (listed here).
 #
 # Every path below is an upstream file we modify in place, so it is permanent
 # merge-conflict surface on every upstream sync. Adding a line here is a
-# deliberate act - do it in the same commit that documents the delta in FORK.md.
+# deliberate act - do it in the same commit that documents the delta in docs/fork/what-we-changed.md.
 #
 # Formatting is NOT a reason to be on this list. If a gate wants an upstream
 # file reformatted, exclude the path from the tool (.prettierignore) instead.
@@ -34,7 +34,7 @@
 # upstream rarely touches that single line - so rerere replays it cleanly.
 CLAUDE.md
 
-# One added line routing yarn.lock to the merge driver - see FORK.md.
+# One added line routing yarn.lock to the merge driver - see docs/fork/what-we-changed.md.
 .gitattributes
 
 .gitignore
