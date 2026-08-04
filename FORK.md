@@ -19,11 +19,11 @@ is the _design_. Downstream repos (dfe-engine, dfe-infra, dfe-docs) should
 ## Upstream base
 
 - **Upstream:** <https://github.com/hyperdxio/hyperdx> (HyperDX v2)
-- **Synced to:** `@hyperdx/app@2.29.0` (merge `f95c8773`, 2026-07-07). Recorded
-  as a real 2-parent merge (base `e58f01d`), so future syncs are clean 3-way
-  merges off 2.29. `git rerere` is enabled for the fork (future conflict
-  resolutions auto-replay). Sync process: `git merge <new-upstream-tag>` on a
-  `sync/<tag>` branch, then build + test (see DFE-DOCKER-LOCAL.md).
+- **Synced to:** see `.upstream-version`, which is the machine-readable record
+  and is verified against `git merge-base` on every PR
+  (`scripts/upstream-pin.py --verify`). Recorded as a real 2-parent merge, so
+  syncs are clean 3-way merges. The procedure is
+  [DFE-SYNC-CYCLE.md](DFE-SYNC-CYCLE.md).
 - **RETIRED - the `.dfe[CHG]` shadow-copy convention.** It was never wired (no
   swap alias/script/config; pages import the pristine originals; docker build
   ignores the `package.dfe[CHG].json`/`nx.dfe[CHG].json` variants), had drifted
@@ -32,9 +32,10 @@ is the _design_. Downstream repos (dfe-engine, dfe-infra, dfe-docs) should
   `dfe/` dirs. When customising an upstream file now, prefer an upstream config
   seam (e.g. the `brandName`/theme hooks) over shadowing.
 - **Imported at:** commit `e58f01d` "Initial HyperDX commit" (2026-02-16)
-- **No `upstream` remote is configured** as of this writing -- only `origin`
-  points at `github.com/hyperi-io/dfe-hyperdx`. To assess or pull upstream you
-  must add it (see [Syncing with upstream](#syncing-with-upstream)).
+- **The `upstream` remote is required**, and `scripts/fork-setup.sh` adds it.
+  Without it the conflict-surface guard cannot tell our files from upstream's,
+  the drift report has no baseline, and both `--verify` checks decline to run
+  rather than pass on nothing.
 - **Our changes live on `main`**, merged in as feature PRs (#2 config, #3 title
   tweaks, #4 dfe pg rbac OIDC, #10 generate-hunt-from-saved-search, #11
   source-create + json-parse, #13 hyperi rebrand). They are NOT a curated patch
@@ -106,40 +107,16 @@ patched files are derived from them. The layer is stripped before an upstream
 merge and rebuilt after, which is what makes "undo our security fixes and try
 again" a command instead of an afternoon.
 
-#### The cycle
+The procedure, the invariants CI checks, and how to add a pin or a patch are in
+[DFE-SYNC-CYCLE.md](DFE-SYNC-CYCLE.md).
 
-```
-scripts/security-override.py --unapply    # 1. strip the temporary layer
-git merge <upstream-tag>                  # 2. rerere replays the PERMANENT deltas
-scripts/security-override.py --apply      # 3. rebuild the layer on the new upstream
-scripts/upstream-pin.py --set <tag>       # 4. record what we are now built on
-yarn install                              # 5. re-derive our lockfile entries
-scripts/security-override.py --verify     # 6. the invariants
-scripts/upstream-pin.py --verify
-yarn build && yarn test                   # 7. the delta gate - the real guarantee
-scripts/security-triage.py --audit --patches --carried   # 8. what is new, what can go
-```
-
-`.github/workflows/upstream-sync.yml` runs exactly that and opens a PR. Steps 1
-and 3 are the ones that did not exist before, and they are what removes the hand
-work.
-
-#### The invariants, checked on every PR
-
-```
-package.json resolutions == upstream's block at our base
-                            + the register, applied ONLY where it raises the floor
-
-every security/patches/*.patch applies cleanly
-
-.upstream-version == git merge-base HEAD upstream/main
-```
-
-The "only where it raises the floor" clause is not tidiness. A pin left in the
-register after upstream passes it does not go quietly stale - `^2.0.2` against
-an upstream now shipping 2.1.2 drags the whole tree BACKWARDS onto the
-vulnerable line. Taking the higher of the two makes a forgotten entry inert
-instead of harmful, and `--check` still nags until someone deletes it.
+One rule from it is worth restating here, because it is a design choice rather
+than a step: a register entry is applied ONLY where it RAISES the floor above
+upstream's own pin. That is not tidiness. A pin left in the register after
+upstream passes it does not go quietly stale - `^2.0.2` against an upstream now
+shipping 2.1.2 drags the whole tree BACKWARDS onto the vulnerable line. Taking
+the higher of the two makes a forgotten entry inert instead of harmful, and
+`--check` still nags until someone deletes it.
 
 #### What stays human
 
@@ -482,15 +459,21 @@ cleanly.
 
 ### A. Merge upstream into the fork
 
+The full procedure, with the security layer and the pin, is
+[DFE-SYNC-CYCLE.md](DFE-SYNC-CYCLE.md). The merge itself is the middle step of
+it:
+
 ```bash
-git remote add upstream https://github.com/hyperdxio/hyperdx.git   # one-time
-git fetch upstream
-git checkout -b chore/upstream-sync main
-git merge upstream/main      # or a specific upstream tag
-# Conflicts should land ONLY on pristine upstream files, never on dfe/ or
-# .dfe[CHG] files. If a .dfe[CHG] copy needs updating, re-derive it from its
-# now-updated pristine original by hand.
+./scripts/fork-setup.sh                       # once per clone
+git switch -c sync/upstream-<tag> main
+scripts/security-override.py --unapply        # the temporary layer comes off
+git merge '@hyperdx/app@<tag>'
 ```
+
+Conflicts should land ONLY on pristine upstream files catalogued in
+`.fork-surface`, never on `dfe/` paths, and never on the resolutions block or
+`yarn.lock` -- those two are handled by the layer and the merge driver
+respectively.
 
 ### B. Re-fork and replay (clean reset)
 
@@ -500,10 +483,11 @@ When (A) gets ugly:
 2. Re-apply each extension in this catalogue, in order: data layer -> OIDC ->
    Casbin -> provisioning -> integration features -> config/bootstrap ->
    branding -> CI -> docs.
-3. Re-derive each `.dfe[CHG]` copy from the _new_ upstream original (do not
-   blindly copy the old `.dfe[CHG]` -- diff it against its old original first to
-   extract just the DFE delta).
-4. Update this file's upstream-base commit + counts.
+3. Re-apply each catalogued in-place edit from `.fork-surface` against the NEW
+   upstream original, smallest edit first (see the cheapest-edit ladder above).
+4. Regenerate the temporary security layer with
+   `scripts/security-override.py --apply` rather than carrying the old block
+   across, and move `.upstream-version` with `scripts/upstream-pin.py --set`.
 
 This catalogue is what makes (B) tractable. Keep it current.
 
@@ -669,12 +653,49 @@ What the restructure bought, stated honestly:
   fully merged 122-commit tree**. That is the thing rerere cannot tell you, and
   the reason the tests exist.
 
-**Priming rerere:** rerere has nothing to replay until a resolution is recorded.
-Prime it by doing the first post-2.29 upstream merge by hand on a `sync/<tag>`
-branch, resolving each conflict on the modified upstream files above, and
-committing -- that writes the resolutions into `.git/rr-cache`. CI persists
-`rr-cache` (actions/cache) so later scheduled runs replay them. Use MERGE, not
-rebase-onto-upstream (shared team repo; rerere replays either way).
+### Measured, 2026-08-04 (2.29.0 -> 2.33.0, run end to end)
+
+The sync-cost track record the [exit](#the-exit-leaving-the-upstream-dependency)
+decision is meant to be taken against. Upstream 164 commits ahead of the merge
+base at the time of the run.
+
+|                        | 2026-07-23 (dry run) | 2026-08-04 (full run)   |
+| ---------------------- | -------------------- | ----------------------- |
+| upstream commits ahead | 122                  | 164                     |
+| conflicting files      | 11                   | 12                      |
+| `yarn.lock` conflicted | yes                  | **no**                  |
+| delta gate             | 81 `src/dfe` tests   | 211 suites / 4795 tests |
+
+What changed between the two rows is the merge driver and the generated security
+layer. The lockfile stopped conflicting outright: the driver took upstream's
+copy and `yarn install` re-derived exactly ONE entry, `jose`, our OIDC
+dependency.
+
+Of the 12 conflicts, 7 carried content and were resolved and recorded; the other
+5 are modify/delete on the workflows hyperi-ci replaced, whose resolution is to
+stay deleted. Two are worth remembering:
+
+- `packages/api/tsconfig.build.json` -- our only delta turned out to be
+  FORMATTING; the `include` content was upstream's all along. Taking theirs
+  wholesale removed the file from the conflict surface entirely.
+- `packages/app/src/layout.tsx` -- upstream added a kiosk mode that also hides
+  the nav. Both conditions now sit side by side, and that convergence is the
+  first real evidence for the de-fork path.
+
+The delta gate is the result that matters: our DFE deltas still passed against a
+fully merged 164-commit tree.
+
+**Priming rerere:** rerere has nothing to replay until a resolution is recorded,
+and `rr-cache` is PER-CLONE -- resolving a conflict on your laptop does not
+prime CI, and CI's cache does not prime yours. Each has to see the conflict
+once.
+
+Prime a clone by doing an upstream merge by hand on a `sync/<tag>` branch,
+resolving each conflict, and running `git rerere` (or committing, which records
+the same thing). CI persists its own `rr-cache` via actions/cache, so the first
+scheduled run after a new conflict shape files a drift issue and the run after
+that replays. Use MERGE, not rebase-onto-upstream (shared team repo; rerere
+replays either way).
 
 ---
 

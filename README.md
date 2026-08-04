@@ -9,34 +9,34 @@ See [FORK.md](FORK.md) for the catalogue of what we changed and why, plus the
 upstream-sync recovery plan. Upstream syncs merge `hyperdxio/hyperdx` into this
 repo (`git rerere` replays our resolved conflicts).
 
-## Original HyperDX Documentation
-
-For comprehensive documentation about HyperDX, including installation,
-configuration, features, and more, please refer to:
-
-- **[Original HyperDX README](README_hyperdx.md)** - Complete HyperDX
-  documentation and getting started guide
-
 ## Quick Links
 
 - [HyperDX Official Documentation](https://www.hyperdx.io/docs)
 - [Upstream HyperDX](https://github.com/hyperdxio/hyperdx)
-- [FORK.md](FORK.md) - our divergence catalogue + upstream-sync recovery plan
+- [FORK.md](FORK.md) - our divergence catalogue and why the fork is shaped this
+  way
+- [DFE-SYNC-CYCLE.md](DFE-SYNC-CYCLE.md) - how to run an upstream sync
 
 ## Maintenance Workflow (upstream sync)
 
-This is the single active fork - there is no second repo to hop through. To pull
-a newer upstream:
+This is the single active fork - there is no second repo to hop through.
 
-1. **Add the upstream remote** (one-time):
-   `git remote add upstream https://github.com/hyperdxio/hyperdx.git`
-2. **Merge the target upstream tag** on a `sync/<tag>` branch. `git rerere`
-   replays our previously-resolved conflicts; conflicts should land only on
-   pristine upstream files.
-3. **Build + test** (see [DFE-DOCKER-LOCAL.md](DFE-DOCKER-LOCAL.md)), then open a
-   PR and verify pinned dashboards still work.
+```sh
+./scripts/fork-setup.sh   # once per clone: rerere, the guard, the merge driver
+```
 
-Full recovery plan + change catalogue: [FORK.md](FORK.md).
+`.github/workflows/upstream-sync.yml` runs the sync weekly and opens a PR, so
+the usual answer is to review that PR rather than merge by hand. `main` is never
+merged into directly.
+
+The cycle in one line: strip our temporary security layer, merge upstream, put
+the layer back on the NEW upstream, then gate on build and test. Our features
+are carried as merged history and replayed by `git rerere`; our security fixes
+are DECLARED and generated into the tree, so they never become merge-conflict
+surface for something upstream will fix in a fortnight anyway.
+
+Step by step, including how to add a security pin or patch:
+[DFE-SYNC-CYCLE.md](DFE-SYNC-CYCLE.md).
 
 ### Running the app for development
 

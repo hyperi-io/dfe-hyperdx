@@ -121,6 +121,7 @@ hook is a convenience rather than the control. `FORK_SURFACE_WARN=1` downgrades
 it to a warning when you genuinely need to land an exception - add the path to
 `.fork-surface` and FORK.md in the same commit.
 
-Full model, change catalogue and recovery plan: [FORK.md](FORK.md).
+Full model and change catalogue: [FORK.md](FORK.md). How to run a sync:
+[DFE-SYNC-CYCLE.md](DFE-SYNC-CYCLE.md).
 
 @AGENTS.md
