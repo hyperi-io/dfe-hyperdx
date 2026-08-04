@@ -118,10 +118,10 @@ jobs:
         id: branch
         env:
           BASE_REF_INPUT: ${{ inputs.base_ref }}
+          SHORT: ${{ steps.ref.outputs.short }}
         run: |
-          short='${{ steps.ref.outputs.short }}'
           base="${BASE_REF_INPUT:-origin/main}"
-          branch="chore/upstream-sync-${short}"
+          branch="chore/upstream-sync-${SHORT}"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
           echo "Cutting $branch from $base"
           git checkout -B "$branch" "$base"
@@ -134,11 +134,18 @@ jobs:
       - name: Strip the temporary security layer
         run: scripts/security-override.py --unapply
 
+      # Every one of these goes through `env:`. The dispatch input is free text
+      # and reaches `ref` unchanged, so interpolating it into `run:` executes
+      # it - which is the thing the comment above the resolve step promises we
+      # never do, and did.
       - name: Merge upstream (rerere replays)
         id: merge
+        env:
+          REF: ${{ steps.ref.outputs.ref }}
+          BRANCH: ${{ steps.branch.outputs.branch }}
         run: |
-          ref='${{ steps.ref.outputs.ref }}'
-          branch='${{ steps.branch.outputs.branch }}'
+          ref="$REF"
+          branch="$BRANCH"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
           if git merge --no-edit "$ref"; then
             echo "status=clean" >> "$GITHUB_OUTPUT"
@@ -174,9 +181,11 @@ jobs:
           steps.merge.outputs.status == 'clean' || steps.merge.outputs.status ==
           'replayed'
         continue-on-error: true # a stale patch must surface in the PR, not kill the run
+        env:
+          REF: ${{ steps.ref.outputs.ref }}
         run: |
           scripts/security-override.py --apply | tee relayer.txt
-          scripts/upstream-pin.py --set '${{ steps.ref.outputs.ref }}'
+          scripts/upstream-pin.py --set "$REF"
 
       - name: Commit the regenerated layer
         if:
@@ -319,9 +328,24 @@ jobs:
         if: steps.merge.outputs.status == 'conflict'
         env:
           GH_TOKEN: ${{ github.token }}
+          # UPSTREAM controls these filenames. A path containing a single quote
+          # broke out of the printf argument and ran, so the conflict list goes
+          # through env and into a file - never through a shell word.
+          SHORT: ${{ steps.ref.outputs.short }}
+          FILES: ${{ steps.merge.outputs.files }}
         run: |
+          {
+            echo 'rerere could not replay all conflicts. Resolve manually per'
+            echo 'docs/fork/sync-cycle.md, which records the resolution into'
+            echo 'rr-cache so future runs replay it.'
+            echo
+            echo 'Unresolved files:'
+            echo '```'
+            printf '%s\n' "$FILES"
+            echo '```'
+          } > issue-body.md
           gh issue create \
-            --title 'upstream-sync: manual merge needed for hyperdxio/hyperdx@${{ steps.ref.outputs.short }}' \
+            --title "upstream-sync: manual merge needed for hyperdxio/hyperdx@${SHORT}" \
             --label 'upstream-sync' \
-            --body "$(printf 'rerere could not replay all conflicts. Resolve manually per FORK.md (Syncing with upstream), which records the resolution into rr-cache so future runs replay it.\n\nUnresolved files:\n```\n%s\n```\n' '${{ steps.merge.outputs.files }}')" \
+            --body-file issue-body.md \
             || echo "Issue may already exist."
