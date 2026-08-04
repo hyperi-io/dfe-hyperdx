@@ -32,6 +32,20 @@ name: upstream-sync
         default: ''
         description:
           'Upstream ref to merge (tag/branch). Empty -> upstream/main.'
+      base_ref:
+        type: string
+        required: false
+        default: ''
+        description:
+          'Branch to sync ONTO. Empty -> origin/main. Set it to exercise a
+          change to this workflow before that change is on main.'
+      open_pr:
+        type: boolean
+        required: false
+        default: true
+        description:
+          'Open a PR for the result. Turn off for a dry run that only proves the
+          cycle.'
 
 permissions:
   contents: write # push the bot branch
@@ -96,12 +110,27 @@ jobs:
           echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "short=$(git rev-parse --short "$ref")" >> "$GITHUB_OUTPUT"
 
-      # THE TEMPORARY LAYER COMES OFF BEFORE THE MERGE, and after the upstream
-      # fetch it depends on. Our security pins and patches are generated, not
-      # committed, precisely so the merge sees no delta in package.json's
-      # resolutions block or in a patched upstream file - a delta there conflicts
-      # every cycle and rerere cannot help, because the block's contents change
-      # each time so no preimage ever recurs.
+      # The sync branch is cut BEFORE the layer is stripped. Doing it the other
+      # way round strips the checked-out tree and then throws that tree away,
+      # so the merge still sees the layer applied and conflicts on the
+      # resolutions block exactly as if none of this existed.
+      - name: Create the sync branch
+        id: branch
+        env:
+          BASE_REF_INPUT: ${{ inputs.base_ref }}
+        run: |
+          short='${{ steps.ref.outputs.short }}'
+          base="${BASE_REF_INPUT:-origin/main}"
+          branch="chore/upstream-sync-${short}"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "Cutting $branch from $base"
+          git checkout -B "$branch" "$base"
+
+      # THE TEMPORARY LAYER COMES OFF BEFORE THE MERGE. Our security pins and
+      # patches are generated, not committed, precisely so the merge sees no
+      # delta in package.json's resolutions block or in a patched upstream file
+      # - a delta there conflicts every cycle and rerere cannot help, because
+      # the block's contents change each time so no preimage ever recurs.
       - name: Strip the temporary security layer
         run: scripts/security-override.py --unapply
 
@@ -109,10 +138,8 @@ jobs:
         id: merge
         run: |
           ref='${{ steps.ref.outputs.ref }}'
-          short='${{ steps.ref.outputs.short }}'
-          branch="chore/upstream-sync-${short}"
+          branch='${{ steps.branch.outputs.branch }}'
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
-          git checkout -B "$branch" origin/main
           if git merge --no-edit "$ref"; then
             echo "status=clean" >> "$GITHUB_OUTPUT"
             exit 0
@@ -219,8 +246,8 @@ jobs:
 
       - name: Open sync PR
         if:
-          steps.merge.outputs.status == 'clean' || steps.merge.outputs.status ==
-          'replayed'
+          (steps.merge.outputs.status == 'clean' || steps.merge.outputs.status
+          == 'replayed') && inputs.open_pr != false
         env:
           GH_TOKEN: ${{ github.token }}
           TEST: ${{ steps.test.outcome }}
