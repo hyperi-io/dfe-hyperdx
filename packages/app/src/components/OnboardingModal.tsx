@@ -24,6 +24,187 @@ import { TableSourceForm } from './Sources/SourceForm';
 const DFE_SHOW_SOURCE_ADD =
   process.env.NEXT_PUBLIC_DFE_SHOW_SOURCE_ADD === 'true';
 
+async function addOtelDemoSources({
+  connectionId,
+  createSourceMutation,
+  updateSourceMutation,
+
+  logSourceDatabaseName,
+  logSourceName,
+  logSourceTableName,
+
+  metricsSourceDatabaseName,
+  metricsSourceName,
+
+  sessionSourceDatabaseName,
+  sessionSourceName,
+  sessionSourceTableName,
+
+  traceSourceDatabaseName,
+  traceSourceName,
+  traceSourceTableName,
+  traceSourceHighlightedTraceAttributes,
+  traceSourceMaterializedViews,
+}: {
+  connectionId: string;
+  createSourceMutation: ReturnType<typeof useCreateSource>;
+  createConnectionMutation: ReturnType<typeof useCreateConnection>;
+  updateSourceMutation: ReturnType<typeof useUpdateSource>;
+  deleteSourceMutation: ReturnType<typeof useDeleteSource>;
+
+  logSourceDatabaseName?: string;
+  logSourceName?: string;
+  logSourceTableName?: string;
+
+  metricsSourceDatabaseName?: string;
+  metricsSourceName?: string;
+
+  sessionSourceDatabaseName: string;
+  sessionSourceName: string;
+  sessionSourceTableName: string;
+
+  traceSourceDatabaseName: string;
+  traceSourceName: string;
+  traceSourceTableName: string;
+  traceSourceHighlightedTraceAttributes?: TTraceSource['highlightedTraceAttributeExpressions'];
+  traceSourceMaterializedViews?: TTraceSource['materializedViews'];
+}) {
+  const hasLogSource =
+    logSourceDatabaseName && logSourceName && logSourceTableName;
+  const hasMetricsSource = metricsSourceDatabaseName && metricsSourceName;
+
+  let logSource: TLogSource | undefined;
+  if (hasLogSource) {
+    const newSource = await createSourceMutation.mutateAsync({
+      source: {
+        kind: SourceKind.Log,
+        name: logSourceName,
+        connection: connectionId,
+        from: {
+          databaseName: logSourceDatabaseName,
+          tableName: logSourceTableName,
+        },
+        timestampValueExpression: 'TimestampTime',
+        defaultTableSelectExpression:
+          'Timestamp, ServiceName, SeverityText, Body',
+        serviceNameExpression: 'ServiceName',
+        severityTextExpression: 'SeverityText',
+        eventAttributesExpression: 'LogAttributes',
+        resourceAttributesExpression: 'ResourceAttributes',
+        traceIdExpression: 'TraceId',
+        spanIdExpression: 'SpanId',
+        implicitColumnExpression: 'Body',
+        displayedTimestampValueExpression: 'Timestamp',
+      },
+    });
+    if (isLogSource(newSource)) {
+      logSource = newSource;
+    }
+  }
+  const traceSource = await createSourceMutation.mutateAsync({
+    source: {
+      kind: SourceKind.Trace,
+      name: traceSourceName,
+      connection: connectionId,
+      from: {
+        databaseName: traceSourceDatabaseName,
+        tableName: traceSourceTableName,
+      },
+      timestampValueExpression: 'Timestamp',
+      defaultTableSelectExpression:
+        'Timestamp, ServiceName, StatusCode, round(Duration / 1e6), SpanName',
+      serviceNameExpression: 'ServiceName',
+      eventAttributesExpression: 'SpanAttributes',
+      resourceAttributesExpression: 'ResourceAttributes',
+      traceIdExpression: 'TraceId',
+      spanIdExpression: 'SpanId',
+      implicitColumnExpression: 'SpanName',
+      durationExpression: 'Duration',
+      durationPrecision: 9,
+      parentSpanIdExpression: 'ParentSpanId',
+      spanKindExpression: 'SpanKind',
+      spanNameExpression: 'SpanName',
+      ...(hasLogSource ? { logSourceId: 'l-758211293' } : {}),
+      statusCodeExpression: 'StatusCode',
+      statusMessageExpression: 'StatusMessage',
+      spanEventsValueExpression: 'Events',
+      spanLinksValueExpression: 'Links',
+      highlightedTraceAttributeExpressions:
+        traceSourceHighlightedTraceAttributes,
+      materializedViews: traceSourceMaterializedViews,
+    },
+  });
+  if (!isTraceSource(traceSource)) {
+    // Should be impossible
+    throw new Error('Source that is not trace was somehow created');
+  }
+  let metricsSource: TSource | undefined;
+  if (hasMetricsSource) {
+    metricsSource = await createSourceMutation.mutateAsync({
+      source: {
+        kind: SourceKind.Metric,
+        name: metricsSourceName,
+        connection: connectionId,
+        from: {
+          databaseName: metricsSourceDatabaseName,
+          tableName: '',
+        },
+        timestampValueExpression: 'TimeUnix',
+        serviceNameExpression: 'ServiceName',
+        metricTables: {
+          [MetricsDataType.Gauge]: 'otel_metrics_gauge',
+          [MetricsDataType.Histogram]: 'otel_metrics_histogram',
+          [MetricsDataType.Sum]: 'otel_metrics_sum',
+          [MetricsDataType.Summary]: 'otel_metrics_summary',
+          [MetricsDataType.ExponentialHistogram]:
+            'otel_metrics_exponential_histogram',
+        },
+        resourceAttributesExpression: 'ResourceAttributes',
+        ...(hasLogSource && logSource ? { logSourceId: logSource.id } : {}),
+      },
+    });
+  }
+  const sessionSource = await createSourceMutation.mutateAsync({
+    source: {
+      kind: SourceKind.Session,
+      name: sessionSourceName,
+      connection: connectionId,
+      from: {
+        databaseName: sessionSourceDatabaseName,
+        tableName: sessionSourceTableName,
+      },
+      timestampValueExpression: 'TimestampTime',
+      resourceAttributesExpression: 'ResourceAttributes',
+      traceSourceId: traceSource.id,
+    },
+  });
+  await Promise.all([
+    ...(hasLogSource && logSource
+      ? [
+          updateSourceMutation.mutateAsync({
+            source: {
+              ...logSource,
+              traceSourceId: traceSource.id,
+              ...(hasMetricsSource && metricsSource
+                ? { metricSourceId: metricsSource.id }
+                : {}),
+            },
+          }),
+        ]
+      : []),
+    updateSourceMutation.mutateAsync({
+      source: {
+        ...traceSource,
+        ...(hasLogSource && logSource ? { logSourceId: logSource.id } : {}),
+        ...(hasMetricsSource && metricsSource
+          ? { metricSourceId: metricsSource.id }
+          : {}),
+        sessionSourceId: sessionSource.id,
+      },
+    }),
+  ]);
+}
+
 function OnboardingModalComponent({
   requireSource = true,
 }: {

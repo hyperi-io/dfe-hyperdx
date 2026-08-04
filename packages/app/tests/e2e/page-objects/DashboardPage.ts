@@ -30,7 +30,16 @@ export type TileConfig = {
   groupBy?: string;
   markdown?: string;
 };
-type SeriesType = 'time' | 'number' | 'table' | 'search' | 'markdown' | 'pie';
+type SeriesType =
+  | 'time'
+  | 'number'
+  | 'table'
+  | 'search'
+  | 'markdown'
+  | 'pie'
+  | 'event_patterns'
+  | 'bar';
+
 /**
  * Series data structure for chart verification
  * Supports all chart types: time, number, table, search, markdown
@@ -88,6 +97,11 @@ export class DashboardPage {
   private readonly saveDefaultQueryAndFiltersMenuItem: Locator;
   private readonly removeDefaultQueryAndFiltersMenuItem: Locator;
   private readonly exportDashboardMenuItem: Locator;
+  private readonly enterKioskModeMenuItem: Locator;
+  private readonly exitKioskModeBtn: Locator;
+  private readonly kioskHeaderContainer: Locator;
+  private readonly kioskLiveStatusBadge: Locator;
+  readonly appNav: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -145,6 +159,13 @@ export class DashboardPage {
     this.exportDashboardMenuItem = page.getByTestId(
       'export-dashboard-menu-item',
     );
+    this.enterKioskModeMenuItem = page.getByTestId(
+      'enter-kiosk-mode-menu-item',
+    );
+    this.exitKioskModeBtn = page.getByTestId('exit-kiosk-mode-button');
+    this.kioskHeaderContainer = page.getByTestId('kiosk-header');
+    this.kioskLiveStatusBadge = page.getByTestId('kiosk-live-status');
+    this.appNav = page.getByTestId('app-nav');
   }
 
   /**
@@ -589,10 +610,21 @@ export class DashboardPage {
   }
 
   /**
+   * Open a tile's actions (kebab) menu, revealing the Duplicate / View
+   * fullscreen / Edit / Delete items (which now live inside the menu).
+   */
+  async openTileActionsMenu(tileIndex: number) {
+    await this.page
+      .locator('[data-testid^="tile-actions-button-"]')
+      .nth(tileIndex)
+      .click();
+  }
+
+  /**
    * Edit a tile
    */
   async editTile(tileIndex: number) {
-    await this.hoverOverTile(tileIndex);
+    await this.openTileActionsMenu(tileIndex);
     await this.getTileButton('edit').click();
   }
 
@@ -600,7 +632,7 @@ export class DashboardPage {
    * Duplicate a tile
    */
   async duplicateTile(tileIndex: number) {
-    await this.hoverOverTile(tileIndex);
+    await this.openTileActionsMenu(tileIndex);
     await this.getTileButton('duplicate').click();
 
     const confirmButton = this.page.locator(
@@ -613,7 +645,7 @@ export class DashboardPage {
    * Delete a tile
    */
   async deleteTile(tileIndex: number) {
-    await this.hoverOverTile(tileIndex);
+    await this.openTileActionsMenu(tileIndex);
     await this.getTileButton('delete').click();
 
     const confirmButton = this.page.locator(
@@ -810,6 +842,74 @@ export class DashboardPage {
   }
 
   /**
+   * Locator for the freeform search/text field inside a dashboard filter's
+   * select (the underlying Mantine `PillsInput.Field`). Scoped to the
+   * filter's select test id so it stays unambiguous across multiple filters.
+   */
+  getFilterSearchInput(filterName: string): Locator {
+    return this.getFilterSelectByName(filterName).getByRole('textbox');
+  }
+
+  /**
+   * Locator for the pill rendered for `value` inside a dashboard filter's
+   * select. Pills (Mantine `Pill`) render the selected value as their text
+   * content; scoping to the filter select keeps this from matching an
+   * equally-named dropdown option or another filter's pill.
+   */
+  getFilterPill(filterName: string, value: string): Locator {
+    return this.getFilterSelectByName(filterName).getByText(value, {
+      exact: true,
+    });
+  }
+
+  /**
+   * Locator for the "Nothing found..." Combobox.Empty state rendered when a
+   * dashboard filter's search text matches no dropdown option. This renders
+   * in a portaled Combobox.Dropdown outside the filter select's DOM subtree,
+   * so it's located at the page level. `.first()` guards against multiple
+   * (mostly-hidden) dropdown portals coexisting in the DOM.
+   */
+  getFilterEmptyDropdownState(): Locator {
+    return this.page.getByText('Nothing found...').first();
+  }
+
+  /**
+   * Click into a dashboard filter's select and type `value` into its search
+   * field without submitting. Used to drive the freeform-filter-value flow,
+   * where the caller asserts the "Nothing found..." empty dropdown state
+   * before pressing Enter (see `submitFilterSearchValue`) to add the typed
+   * value as a pill.
+   */
+  async typeFilterSearchValue(filterName: string, value: string) {
+    const select = this.getFilterSelectByName(filterName);
+    await select.click();
+    const input = this.getFilterSearchInput(filterName);
+    await input.click();
+    await input.fill(value);
+  }
+
+  /**
+   * Press Enter in a dashboard filter's search field. When no dropdown
+   * option is keyboard-highlighted, `VirtualMultiSelect` treats this as
+   * "add the typed value as a pill" rather than submitting a highlighted
+   * option (see `handleKeyDown` in VirtualMultiSelect.tsx).
+   */
+  async submitFilterSearchValue(filterName: string) {
+    await this.getFilterSearchInput(filterName).press('Enter');
+  }
+
+  /**
+   * Focus a dashboard filter's (empty) search field and press Backspace,
+   * removing the most recently added pill. Mirrors `handleKeyDown`'s
+   * "Backspace with empty search removes the last value" behavior.
+   */
+  async removeLastFilterPillViaBackspace(filterName: string) {
+    const input = this.getFilterSearchInput(filterName);
+    await input.click();
+    await input.press('Backspace');
+  }
+
+  /**
    * Create a Number tile that counts events from `sourceName`. The tile editor's
    * default aggregation is "Count of Events", so no agg configuration is needed.
    * Leaves exactly one tile on the dashboard.
@@ -909,7 +1009,7 @@ export class DashboardPage {
 
   getChartTypeTab(type: SeriesType) {
     if (type === 'time') {
-      return this.page.getByRole('tab', { name: /line/i });
+      return this.page.getByRole('tab', { name: /time series/i });
     }
     return this.page.getByRole('tab', { name: new RegExp(type, 'i') });
   }
@@ -1193,6 +1293,79 @@ export class DashboardPage {
       .click();
   }
 
+  // ---- Kiosk mode helpers ----
+
+  /**
+   * Open the dashboard overflow menu and click "Enter kiosk mode".
+   * Expects the menu item with data-testid="enter-kiosk-mode-menu-item".
+   */
+  async enterKioskMode() {
+    await this.dashboardMenuButton.click();
+    await this.enterKioskModeMenuItem.click();
+  }
+
+  /**
+   * Click the "Exit kiosk mode" button (data-testid="exit-kiosk-mode-button")
+   * that is rendered as part of the kiosk chrome.
+   */
+  async exitKioskMode() {
+    await this.exitKioskModeBtn.click();
+  }
+
+  /**
+   * Locator scoped to the kiosk header bar that contains `name` as text.
+   * Used to verify the saved dashboard name is displayed in kiosk mode.
+   */
+  getKioskHeading(name: string): Locator {
+    return this.kioskHeaderContainer.getByText(name, { exact: false });
+  }
+
+  /** The full kiosk header bar (data-testid="kiosk-header"). */
+  get kioskHeader(): Locator {
+    return this.kioskHeaderContainer;
+  }
+
+  /**
+   * The "Live" read-only status badge shown in kiosk mode
+   * (data-testid="kiosk-live-status").
+   */
+  get kioskLiveStatus(): Locator {
+    return this.kioskLiveStatusBadge;
+  }
+
+  /**
+   * The first tile actions (kebab) button. In kiosk mode this should be absent
+   * or hidden, confirming that tile edit affordances are locked.
+   */
+  get firstTileActionsButton(): Locator {
+    return this.page.locator('[data-testid^="tile-actions-button-"]').first();
+  }
+
+  /**
+   * All react-grid-layout resize handles on the dashboard grid. In kiosk mode
+   * the grid is static so every handle must be absent or hidden.
+   */
+  get tileResizeHandles(): Locator {
+    return this.page.locator('.react-resizable-handle');
+  }
+
+  /**
+   * Reload the current page and wait for the network to settle.
+   * Prefer this over `page.reload()` in spec files so all navigation
+   * stays inside the page object.
+   */
+  async reload() {
+    await this.page.reload({ waitUntil: 'networkidle' });
+  }
+
+  /**
+   * The dashboard overflow ("...") menu button. Exposed so specs can assert
+   * it is hidden in kiosk mode without needing to open it.
+   */
+  get menuButton(): Locator {
+    return this.dashboardMenuButton;
+  }
+
   // Getters for assertions
 
   get createButton() {
@@ -1267,7 +1440,7 @@ export class DashboardPage {
    * Waits for the fullscreen modal's TimePicker to appear before returning.
    */
   async openFullscreenForTile(index: number) {
-    await this.hoverOverTile(index);
+    await this.openTileActionsMenu(index);
     const fullscreenBtn = this.page
       .locator('[data-testid^="tile-fullscreen-button-"]')
       .first();

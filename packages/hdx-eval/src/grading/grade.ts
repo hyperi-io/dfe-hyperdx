@@ -1,15 +1,21 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 
-import type { RunRecord } from '@/harness/types';
-import { isModelSubdir, isRunJson, runsRoot, safeReaddir } from '@/runs/path';
+import { PLUGIN_NONE, type RunRecord } from '@/harness/types';
+import { columnKeyFor } from '@/reports/aggregate';
+import { getRunFilesInBatch, runsRoot } from '@/runs/path';
 import { readRun } from '@/runs/store';
 import { getScenario, SCENARIO_NAMES } from '@/scenarios';
+import type { PostRunInspectionResult } from '@/scenarios/types';
 
 import type { BlindingEntry } from './blind';
 import { judgeTrajectory } from './judge';
-import { runProgrammaticChecks } from './programmatic';
+import {
+  DEFAULT_JUDGE_SPEC,
+  judgeCredentialsAvailable,
+  parseJudgeSpec,
+} from './judgeModel';
+import { runProgrammaticChecks, runTranscriptChecks } from './programmatic';
 import { loadScenarioRubric } from './rubric';
 import {
   COMBINED_SCORE_JUDGE_WEIGHT,
@@ -70,12 +76,29 @@ function computeToolErrorStats(record: RunRecord): ToolErrorStats {
 }
 
 export type GradeBatchOptions = {
+  /**
+   * Judge model spec in `provider:model` form (e.g. `openai:gpt-4o`). A bare
+   * model name defaults to the anthropic provider. Defaults to the built-in
+   * {@link DEFAULT_JUDGE_SPEC}.
+   */
   judgeModel?: string;
   rerunJudge?: boolean;
   skipJudge?: boolean;
-  apiKey?: string;
   /** Blinding entries for anonymizing MCP identity during judging. */
   blindingEntries?: BlindingEntry[];
+  /**
+   * API config for post-run inspection hooks. When provided, scenarios
+   * with a `postRunInspection` hook will receive this config so they
+   * can call the HyperDX API to inspect artifacts.
+   */
+  inspectionConfig?: {
+    apiUrl: string;
+    accessKey: string;
+    email: string;
+    password: string;
+    anchorTimeIso?: string;
+    cleanup?: boolean;
+  };
 };
 
 export type GradeBatchSummary = {
@@ -94,6 +117,28 @@ export async function gradeBatch(
   }
   const runFiles = listRunFiles(resolved);
 
+  // Detect whether this batch varies models/plugins so the per-run log labels
+  // use the same column keys as the run output (e.g. `hyperdx/none/0`).
+  const models = new Set<string>();
+  const plugins = new Set<string>();
+  for (const p of runFiles) {
+    try {
+      const r = readRun(p);
+      models.add(r.model);
+      plugins.add(r.plugin ?? PLUGIN_NONE);
+    } catch {
+      // Unreadable runs are reported by the grading loop below.
+    }
+  }
+  const keyOpts = {
+    multiModel: models.size > 1,
+    multiPlugin: plugins.size > 1,
+  };
+
+  // Resolve the judge spec once so the credential check and the per-run judge
+  // calls agree on which provider/model will be used.
+  const judgeSpec = parseJudgeSpec(opts.judgeModel ?? DEFAULT_JUDGE_SPEC).spec;
+
   // Decide whether we'll actually need the judge: skipJudge wins, otherwise
   // we need it if any run is missing a cached judge OR rerun was requested.
   const needsJudge =
@@ -101,21 +146,26 @@ export async function gradeBatch(
     runFiles.some(p => {
       if (opts.rerunJudge) return true;
       const existing = readExistingGrade(gradeFilePath(p));
-      return !existing?.judge;
+      // Re-judge if there's no cached judge, OR the cache came from a
+      // DIFFERENT judge model. Keying on judge identity (not mere presence)
+      // is what lets a judge-swap — e.g. re-grading an Opus-graded batch with
+      // `openai:gpt-5.6-sol` — actually re-run instead of silently returning
+      // the previous judge's stale scores.
+      return !existing?.judge || existing.judgeModel !== judgeSpec;
     });
 
-  if (needsJudge && !opts.apiKey && !process.env.ANTHROPIC_API_KEY) {
+  if (needsJudge && !judgeCredentialsAvailable(judgeSpec)) {
+    const { provider } = parseJudgeSpec(judgeSpec);
+    const keyHint =
+      provider === 'openai'
+        ? 'AI_API_KEY or OPENAI_API_KEY'
+        : 'AI_API_KEY or ANTHROPIC_API_KEY';
     throw new Error(
-      'ANTHROPIC_API_KEY is not set; pass --no-judge to skip the LLM judge ' +
-        'or supply a key via env.',
+      `No API key set for the "${provider}" judge (${judgeSpec}); set ` +
+        `${keyHint}, or pass --no-judge to skip the LLM judge.`,
     );
   }
 
-  const client = needsJudge
-    ? new Anthropic({
-        apiKey: opts.apiKey ?? process.env.ANTHROPIC_API_KEY,
-      })
-    : undefined;
   const graded: GradeRecord[] = [];
   const errors: { runPath: string; error: string }[] = [];
 
@@ -127,7 +177,8 @@ export async function gradeBatch(
 
       const grade = await gradeOne({
         record,
-        client,
+        judgeSpec,
+        needsJudge,
         existing,
         opts,
       });
@@ -142,12 +193,25 @@ export async function gradeBatch(
             ? ` (-${(grade.toolErrors.penalty * 100).toFixed(0)}pp)`
             : '')
         : '';
+      const adoptBit = grade.adoption
+        ? `  adopt=${(grade.adoption.score * 100).toFixed(0)}%`
+        : '';
+      // Show inspection summary if present.
+      const inspBit = grade.inspectionSummary
+        ? formatInspectionLogBit(grade.inspectionSummary)
+        : '';
+      const cellLabel = columnKeyFor(
+        record.mcp,
+        record.model,
+        record.plugin ?? PLUGIN_NONE,
+        keyOpts,
+      );
       console.log(
-        `  ${grade.scenario}/${grade.mcp}/${grade.runId.split('-').slice(-1)[0]}  prog=${(
+        `  ${grade.scenario}/${cellLabel}/${grade.runId.split('-').slice(-1)[0]}  prog=${(
           grade.programmatic.score * 100
         ).toFixed(
           0,
-        )}%  ${judgeBit}  combined=${(grade.combinedScore * 100).toFixed(0)}%${errBit}`,
+        )}%  ${judgeBit}  combined=${(grade.combinedScore * 100).toFixed(0)}%${adoptBit}${errBit}${inspBit}`,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -159,13 +223,33 @@ export async function gradeBatch(
   return { batchDir: resolved, graded, errors };
 }
 
+function formatInspectionLogBit(summary: Record<string, unknown>): string {
+  const parts: string[] = [];
+  if (
+    typeof summary.totalTiles === 'number' &&
+    typeof summary.tilesWithData === 'number'
+  ) {
+    parts.push(`tiles=${summary.tilesWithData}/${summary.totalTiles}`);
+  }
+  if (typeof summary.createCalls === 'number') {
+    parts.push(`creates=${summary.createCalls}`);
+  }
+  if (typeof summary.patchCalls === 'number') {
+    parts.push(`patches=${summary.patchCalls}`);
+  }
+  return parts.length > 0 ? `  ${parts.join('  ')}` : '';
+}
+
 async function gradeOne(args: {
   record: RunRecord;
-  client?: Anthropic;
+  /** Fully-qualified `provider:model` judge spec. */
+  judgeSpec: string;
+  /** Whether the batch resolved a usable judge (credentials present). */
+  needsJudge: boolean;
   existing: GradeRecord | null;
   opts: GradeBatchOptions;
 }): Promise<GradeRecord> {
-  const { record, client, existing, opts } = args;
+  const { record, judgeSpec, needsJudge, existing, opts } = args;
   const scenario = getScenario(record.scenario);
   const rubric = loadScenarioRubric(record.scenario);
 
@@ -174,20 +258,76 @@ async function gradeOne(args: {
     rubric.programmatic,
   );
 
-  let judge: JudgeResult | null = existing?.judge ?? null;
-  if (!opts.skipJudge && client && (!judge || opts.rerunJudge)) {
+  // Transcript-aware (adoption) checks. Reported alongside the outcome score
+  // but intentionally EXCLUDED from combinedScore below — measuring tool
+  // usage must not inflate outcome quality.
+  const adoption = rubric.transcript
+    ? runTranscriptChecks(record.toolCalls, rubric.transcript)
+    : undefined;
+
+  const toolErrors = computeToolErrorStats(record);
+
+  // ── Post-run inspection (scenario hook) ──────────────────────────
+  // Runs BEFORE the judge so evidence can be passed to the judge prompt.
+  // On re-grade, reuse the cached inspectionSummary from the existing
+  // grade record — the artifacts were likely cleaned up on the first pass,
+  // so re-running the hook would fail or produce empty evidence.
+  let inspectionResult: PostRunInspectionResult | undefined;
+
+  if (existing?.inspectionSummary) {
+    // Reuse cached inspection from previous grading pass. The artifacts
+    // were likely cleaned up, so re-running the hook would fail. The
+    // persisted evidence string lets --rerun-judge work without re-inspection.
+    inspectionResult = {
+      evidence: existing.inspectionEvidence ?? '',
+      summary: existing.inspectionSummary,
+    };
+  } else if (scenario.postRunInspection && opts.inspectionConfig) {
+    try {
+      inspectionResult = await scenario.postRunInspection({
+        toolCalls: record.toolCalls,
+        apiUrl: opts.inspectionConfig.apiUrl,
+        accessKey: opts.inspectionConfig.accessKey,
+        email: opts.inspectionConfig.email,
+        password: opts.inspectionConfig.password,
+        anchorTimeIso: opts.inspectionConfig.anchorTimeIso,
+        cleanup: opts.inspectionConfig.cleanup ?? true,
+      });
+    } catch (err) {
+      console.warn(
+        `  post-run inspection failed: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
+  // ── LLM Judge ────────────────────────────────────────────────────
+  // Only reuse the cached judge when it came from the SAME judge model as the
+  // one requested this pass. A grade from a different judge (e.g. a prior Opus
+  // pass when we're now grading with `openai:gpt-5.6-sol`) is treated as stale
+  // so the requested judge actually runs — mirrors the batch-level needsJudge
+  // check above. Inspection evidence is still reused from `existing` regardless
+  // of judge (handled above), since re-inspecting after artifact cleanup would
+  // fail.
+  const cachedJudge =
+    existing?.judge && existing.judgeModel === judgeSpec
+      ? existing.judge
+      : null;
+  let judge: JudgeResult | null = cachedJudge;
+  if (!opts.skipJudge && needsJudge && (!judge || opts.rerunJudge)) {
     judge = await judgeTrajectory({
       scenarioName: scenario.name,
       scenarioPrompt: scenario.agentPrompt,
       groundTruth: scenario.groundTruth,
       rubric,
       finalAnswer: record.finalAnswer,
-      judgeModel: opts.judgeModel,
-      client,
+      judgeModel: judgeSpec,
       blindingEntries: opts.blindingEntries,
+      judgeSystemPreamble: scenario.judgeSystemPreamble,
+      inspectionEvidence: inspectionResult?.evidence,
     });
   }
 
+  // ── Combined score ───────────────────────────────────────────────
   const judgeError = judge && 'error' in judge && judge.error;
   const judgeScore = judge?.weightedScore ?? 0;
   const rawCombined =
@@ -195,7 +335,7 @@ async function gradeOne(args: {
       ? COMBINED_SCORE_PROGRAMMATIC_WEIGHT * programmatic.score +
         COMBINED_SCORE_JUDGE_WEIGHT * judgeScore
       : programmatic.score;
-  const toolErrors = computeToolErrorStats(record);
+
   // Apply the tool-error penalty AFTER scoring the answer. Clamp to [0,1].
   const combinedScore = Math.max(
     0,
@@ -208,41 +348,22 @@ async function gradeOne(args: {
     scenario: record.scenario,
     mcp: record.mcp,
     programmatic,
+    ...(adoption ? { adoption } : {}),
     judge,
     toolErrors,
+    inspectionSummary: inspectionResult?.summary,
+    inspectionEvidence: inspectionResult?.evidence || undefined,
     combinedScore,
     gradedAt: new Date().toISOString(),
-    judgeModel: judge?.model ?? opts.judgeModel ?? 'skipped',
+    judgeModel: judge?.model ?? (opts.skipJudge ? 'skipped' : judgeSpec),
   };
 }
 
-/**
- * List run JSON files. Supports both the new
- * `<scenario>/<mcp>/<model>/<index>.json` layout and the legacy
- * `<scenario>/<mcp>/<index>.json` layout.
- */
+/** List run JSON files. See `getRunFilesInBatch` for the supported layouts. */
 function listRunFiles(batchDir: string): string[] {
-  const out: string[] = [];
-  for (const scenario of safeReaddir(batchDir)) {
-    if (!SCENARIO_NAMES.includes(scenario)) continue;
-    const sceneDir = join(batchDir, scenario);
-    for (const mcp of safeReaddir(sceneDir)) {
-      const mcpDir = join(sceneDir, mcp);
-      for (const entry of safeReaddir(mcpDir)) {
-        if (isRunJson(entry)) {
-          // Legacy layout: <scenario>/<mcp>/<index>.json
-          out.push(join(mcpDir, entry));
-        } else if (isModelSubdir(mcpDir, entry)) {
-          // New layout: <scenario>/<mcp>/<model>/<index>.json
-          const modelDir = join(mcpDir, entry);
-          for (const file of safeReaddir(modelDir)) {
-            if (isRunJson(file)) out.push(join(modelDir, file));
-          }
-        }
-      }
-    }
-  }
-  return out.sort();
+  return getRunFilesInBatch(batchDir, {
+    scenarioFilter: s => SCENARIO_NAMES.includes(s),
+  });
 }
 
 function readExistingGrade(path: string): GradeRecord | null {
