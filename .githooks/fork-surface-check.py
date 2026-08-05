@@ -282,6 +282,39 @@ def warn_test_paths(catalogue: list[str]) -> None:
         print(f"  {path}", file=sys.stderr)
 
 
+def warn_pristine(catalogue: list[str]) -> None:
+    """Nag about catalogued paths that now match upstream byte for byte.
+
+    A sync can hand a delta back: upstream adopts our change, or we take theirs
+    during a conflict. The file is then pristine and the catalogue entry is
+    surface held for NOTHING - it costs a check and asserts a difference that is
+    not there. Shrinking this list is the whole goal, so make the chance to do
+    it visible rather than waiting for someone to notice.
+    """
+    baseline = upstream_baseline()
+    if not baseline:
+        return
+
+    pristine = []
+    for path in catalogue:
+        if "*" in path:
+            continue
+        ours = _git("rev-parse", f"HEAD:{path}")
+        theirs = _git("rev-parse", f"{baseline}:{path}")
+        if ours and ours == theirs:
+            pristine.append(path)
+
+    if not pristine:
+        return
+    print(
+        f"\n{len(pristine)} catalogued path(s) are now IDENTICAL to upstream.\n"
+        "Delete them from .fork-surface - we are holding surface for nothing:",
+        file=sys.stderr,
+    )
+    for path in pristine:
+        print(f"  {path}", file=sys.stderr)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -308,6 +341,7 @@ def main() -> int:
 
     if args.audit:
         warn_test_paths(catalogue)
+        warn_pristine(catalogue)
         return 0
 
     if not args.base and merge_in_progress():

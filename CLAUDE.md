@@ -15,6 +15,24 @@ upstream file becomes permanent merge-conflict surface. Getting this wrong does
 NOT fail loudly - it silently makes every future upstream sync more expensive,
 and the damage is only felt months later by whoever runs the sync.
 
+## Three questions, before EVERY change
+
+Ask them in order, every time, and prefer the answer that touches upstream least:
+
+1. **Do I really need it?** The best change is the one not made.
+2. **Can it be smaller and simpler?**
+3. **Can it be done with less upstream drift risk?**
+
+This is aimed squarely at you. Models routinely go overboard here: given a small
+brief they return a large diff, because a large diff looks like effort. In this
+repo it is not effort, it is a bill someone else pays on every future sync. A
+change that touches no upstream file is free; one that touches an upstream file
+is owed forever.
+
+The same three questions apply to REMOVING surface. If a sync leaves one of our
+deltas identical to upstream again, delete the catalogue entry - the file is
+pristine and holding it on the list costs a check for nothing.
+
 ## If you change ONE thing about how you work here
 
 **You are about to make the edit bigger than it needs to be.** Every model that

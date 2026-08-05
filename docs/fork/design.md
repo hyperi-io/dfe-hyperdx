@@ -5,6 +5,30 @@ is the one that changes what you type today.
 
 ---
 
+## Three questions, before every change
+
+Before the ladder, before anything:
+
+1. **Do I really need it?**
+2. **Can it be smaller and simpler?**
+3. **Can it be done with less upstream drift risk?**
+
+The governing goal of this fork is to MINIMISE the file-level variation from
+upstream we have to maintain, while still carrying our changes, our
+integrations, and the occasional security fix. Every question above serves that
+one sentence.
+
+It is pointed at models in particular, because they reliably fail it: given a
+small brief they produce a large diff, since a large diff reads as effort. Here
+it is not effort. A change touching no upstream file is free; a change touching
+an upstream file is a bill paid at every future sync, by whoever runs it.
+
+Applies to removal too. When a sync leaves one of our deltas identical to
+upstream again, take it OFF `.fork-surface` - the file is pristine and the entry
+now costs a check for nothing.
+
+---
+
 ## The cheapest-edit ladder
 
 **Before changing an upstream file, stop at the first option that fits.**
