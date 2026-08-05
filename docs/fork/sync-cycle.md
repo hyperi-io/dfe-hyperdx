@@ -393,6 +393,29 @@ remembering:
   the nav. Both conditions now sit side by side, and that convergence is the
   first real evidence for the de-fork path.
 
+### Expect `Build All-in-One Image` to fail on a sync PR
+
+It is upstream's workflow, and it dies with `no space left on device` partway
+through the collector's Go build. Not a regression, and not something to fix by
+editing upstream's workflow.
+
+The job builds the whole Node app AND the Go collector into one image on a
+hosted runner, with no disk-reclaim step. The collector alone pulls the full
+prometheus and cloud-SDK dependency set. On an ordinary upstream PR the path
+filters keep it dormant; a sync touches those paths, so it runs, and it does not
+fit.
+
+It is worth knowing this is capacity and nothing else, because the error looks
+alarming. Our only deltas anywhere near it are config and entry-script -
+`docker/otel-collector/*.yaml`, `docker/hyperdx/entry.prod.sh` - so the Go
+compile that runs out of room is byte-identical to upstream's. Built on adequate
+hardware (12 cores, 540G free), the same commit produces a 2.62GB
+`all-in-one-auth` image with zero disk errors. Verified for 2.33.0; do that
+again rather than trusting this paragraph if the failure ever looks different.
+
+The standing options are a self-hosted runner, a disk-reclaim step (upstream
+surface, so no), or accepting the red check on sync PRs. Currently the last.
+
 ---
 
 ## Related
