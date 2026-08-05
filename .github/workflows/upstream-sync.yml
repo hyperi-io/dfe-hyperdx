@@ -198,8 +198,22 @@ jobs:
         env:
           REF: ${{ steps.ref.outputs.ref }}
         run: |
-          scripts/security-override.py --apply | tee relayer.txt
-          scripts/upstream-pin.py --set "$REF"
+          # NOT `--apply | tee`. A pipeline reports tee's status, which is
+          # always 0, so `steps.relayer.outcome` was always 'success' and the
+          # "did NOT re-apply cleanly" branch below was dead code. tee also
+          # only sees stdout, and the stuck-patch report goes to stderr - so
+          # the PR body carried the good news and dropped the warning.
+          #
+          # Outside the work tree, because the next step is `git add -A` and
+          # this is scratch, not something to commit.
+          status=0
+          scripts/security-override.py --apply > "$RUNNER_TEMP/relayer.txt" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/relayer.txt"
+          # The pin moves even when the layer did not settle. A merge that
+          # moved the upstream base but not the pin makes every later "which
+          # upstream is this built on?" guesswork.
+          scripts/upstream-pin.py --set "$REF" || status=1
+          exit $status
 
       - name: Commit the regenerated layer
         if:
@@ -319,7 +333,7 @@ jobs:
             draft="--draft"
             note="$note
 
-          The security layer did NOT re-apply cleanly -- a carried patch no longer fits the new upstream. That is the signal, not a fault: either upstream fixed it their own way (delete the patch) or the code moved (re-derive it). The drafted verdict is in the run summary."
+          The security layer did NOT re-apply cleanly. Read the block below for which patch and why -- it is one of two very different things. STALE (neither direction applies) is the signal, not a fault: either upstream fixed it their own way (delete the patch) or the code moved (re-derive it), and the drafted verdict is in the run summary. AMBIGUOUS is a hazard: the patch applies in BOTH directions, so it names more than one site and the tooling refused to guess which. Re-derive it against the current tree before merging."
           fi
           {
             echo "Automated upstream drift sync (rerere replay: ${{ steps.merge.outputs.status }})."
@@ -329,7 +343,7 @@ jobs:
             echo '## Security layer'
             echo
             echo '```'
-            cat relayer.txt 2>/dev/null || echo '(not reached)'
+            cat "$RUNNER_TEMP/relayer.txt" 2>/dev/null || echo '(not reached)'
             echo '```'
             echo
             echo 'Full advisory triage is in the run summary. Reachability is a HUMAN verdict -- nothing in it has been applied.'
