@@ -5,38 +5,38 @@ This repository is the DFE fork of upstream
 its visualisation and search layer. It is the ACTIVE fork - all DFE
 customisation lives here, one clean hop off upstream.
 
-See [FORK.md](FORK.md) for the catalogue of what we changed and why, plus the
-upstream-sync recovery plan. Upstream syncs merge `hyperdxio/hyperdx` into this
-repo (`git rerere` replays our resolved conflicts).
-
-## Original HyperDX Documentation
-
-For comprehensive documentation about HyperDX, including installation,
-configuration, features, and more, please refer to:
-
-- **[Original HyperDX README](README_hyperdx.md)** - Complete HyperDX
-  documentation and getting started guide
+Our documentation lives in [docs/](docs/README.md). Upstream's own docs
+(`AGENTS.md`, `agent_docs/`, `MCP.md`, `LOCAL.md`, `DEPLOY.md`) are left exactly
+as upstream ships them.
 
 ## Quick Links
 
+- [docs/](docs/README.md) - our documentation
+- [docs/fork/](docs/fork/README.md) - what we changed, and how we keep it in sync
+- [docs/architecture/](docs/architecture/README.md) - how the embedded system fits together
 - [HyperDX Official Documentation](https://www.hyperdx.io/docs)
 - [Upstream HyperDX](https://github.com/hyperdxio/hyperdx)
-- [FORK.md](FORK.md) - our divergence catalogue + upstream-sync recovery plan
 
 ## Maintenance Workflow (upstream sync)
 
-This is the single active fork - there is no second repo to hop through. To pull
-a newer upstream:
+This is the single active fork - there is no second repo to hop through.
 
-1. **Add the upstream remote** (one-time):
-   `git remote add upstream https://github.com/hyperdxio/hyperdx.git`
-2. **Merge the target upstream tag** on a `sync/<tag>` branch. `git rerere`
-   replays our previously-resolved conflicts; conflicts should land only on
-   pristine upstream files.
-3. **Build + test** (see [DFE-DOCKER-LOCAL.md](DFE-DOCKER-LOCAL.md)), then open a
-   PR and verify pinned dashboards still work.
+```sh
+./scripts/fork-setup.sh   # once per clone: rerere, the guard, the merge driver
+```
 
-Full recovery plan + change catalogue: [FORK.md](FORK.md).
+`.github/workflows/upstream-sync.yml` runs the sync weekly and opens a PR, so
+the usual answer is to review that PR rather than merge by hand. `main` is never
+merged into directly.
+
+The cycle in one line: strip our temporary security layer, merge upstream, put
+the layer back on the NEW upstream, then gate on build and test. Our features
+are carried as merged history and replayed by `git rerere`; our security fixes
+are DECLARED and generated into the tree, so they never become merge-conflict
+surface for something upstream will fix in a fortnight anyway.
+
+Step by step, including how to add a security pin or patch:
+[docs/fork/sync-cycle.md](docs/fork/sync-cycle.md).
 
 ### Running the app for development
 

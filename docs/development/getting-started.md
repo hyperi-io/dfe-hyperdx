@@ -4,8 +4,8 @@ Quick reference for developing against the DFE fork of HyperDX.
 
 ## Prerequisites
 
-Same as upstream HyperDX — see [CLAUDE.md](CLAUDE.md) for the full development
-setup. The only difference is the Docker Compose invocation.
+Same as upstream HyperDX — see [CLAUDE.md](../../CLAUDE.md) for the full
+development setup. The only difference is the Docker Compose invocation.
 
 ## Starting Infrastructure (FerretDB + ClickHouse)
 
@@ -39,8 +39,8 @@ The `app` service `MONGO_URI` is automatically overridden in
 
 ## Architecture
 
-See [DFE-ARCHITECTURE.md](DFE-ARCHITECTURE.md) for the full design document
-covering FerretDB, OIDC, and the additive-only fork strategy.
+See [the architecture docs](../architecture/README.md) for the full design
+document covering FerretDB, OIDC, and the additive-only fork strategy.
 
 ## Branch
 

@@ -37,7 +37,8 @@
         ".github/workflows/ci.yml",
         ".github/workflows/upstream-sync.yml",
         ".github/workflows/upstream-drift.yml",
-        ".github/workflows/fork-surface.yml"
+        ".github/workflows/fork-surface.yml",
+        ".github/workflows/fork-security.yml"
       ],
       "enabled": true,
       "pinDigests": true

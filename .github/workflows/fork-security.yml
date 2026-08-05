@@ -80,6 +80,20 @@ jobs:
       - name: Attribute findings
         run:
           scripts/attribute-findings.py semgrep.sarif --summary attribution.md
+          --json attribution.json
+
+      # Only the OURS bucket is drafted, and it is usually empty - the sort has
+      # already done the expensive part. Never a gate: the attribution step
+      # above is what gates.
+      - name: Draft verdicts on our own findings
+        if: always()
+        continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          pip install --disable-pip-version-check anthropic || true
+          scripts/security-triage.py --code --attribution attribution.json -o code-triage.md
+          cat code-triage.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish the digest
         if: always()

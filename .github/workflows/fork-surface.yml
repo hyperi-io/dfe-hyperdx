@@ -65,3 +65,15 @@ jobs:
           fi
           echo "Checking $base...HEAD"
           .githooks/fork-surface-check.py --base "$base"
+
+      # The temporary security layer is GENERATED, so it can drift from its
+      # declaration the moment somebody edits the resolutions block by hand.
+      # That drift is silent until a sync, which is exactly when it is most
+      # expensive, so it is checked on every PR instead.
+      - name: Check the security layer matches its register
+        run: scripts/security-override.py --verify
+
+      # A merge that moved the upstream base but not the pin leaves every later
+      # "which upstream is this built on?" as guesswork.
+      - name: Check the upstream pin matches the tree
+        run: scripts/upstream-pin.py --verify

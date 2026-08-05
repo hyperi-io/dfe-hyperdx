@@ -52,7 +52,15 @@ echo "  [ok] rerere enabled (+ autoupdate)"
 git config core.hooksPath .githooks
 echo "  [ok] hooks path -> .githooks"
 
-# 3. The upstream remote. The guard needs it to tell OUR files from upstream's,
+# 3. The yarn.lock merge driver. `.gitattributes` routes the lockfile here, but
+#    the driver itself is per-clone config, and an unconfigured driver fails
+#    OPEN - git silently falls back to a normal text merge and hands you 1MB of
+#    conflict markers.
+git config merge.upstream-lock.name "take upstream's lockfile, then yarn install"
+git config merge.upstream-lock.driver "$REPO_ROOT/scripts/merge-lockfile.sh %O %A %B"
+echo "  [ok] yarn.lock merge driver -> scripts/merge-lockfile.sh"
+
+# 4. The upstream remote. The guard needs it to tell OUR files from upstream's,
 #    and without it the guard errs towards flagging everything.
 if git remote get-url upstream >/dev/null 2>&1; then
     echo "  [ok] upstream remote already present"
@@ -65,7 +73,7 @@ echo ""
 echo "Fetching upstream (needed for the drift report)..."
 git fetch --no-tags upstream
 
-# 4. Reconnect the squashed import to upstream history (see the note above).
+# 5. Reconnect the squashed import to upstream history (see the note above).
 #    Needs upstream fetched first, hence the ordering.
 if git rev-parse --verify --quiet "refs/replace/${IMPORT_COMMIT}" >/dev/null; then
     echo "  [ok] import graft already in place"

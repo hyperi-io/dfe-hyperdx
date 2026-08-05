@@ -240,6 +240,11 @@ def main() -> int:
     parser.add_argument("sarif", type=Path, help="SARIF file from semgrep/CodeQL/...")
     parser.add_argument("--summary", type=Path, help="Write a markdown digest here.")
     parser.add_argument(
+        "--json",
+        type=Path,
+        help="Write the attributed buckets here, for other tools to consume.",
+    )
+    parser.add_argument(
         "--base",
         default="",
         help="Upstream baseline (default: merge-base with upstream/main).",
@@ -299,6 +304,25 @@ def main() -> int:
             print(f"  {where}")
             print(f"      {f['rule']}")
             print(f"      reason: {f['reason'][:160]}")
+
+    # Attribution is expensive to compute and useful to more than this script -
+    # security-triage.py sorts its drafting by it - so emit it rather than
+    # letting a second tool re-derive "is this line ours" and drift from here.
+    if args.json:
+        args.json.write_text(
+            json.dumps(
+                {
+                    "baseline": base,
+                    "ours": ours,
+                    "accepted": accepted,
+                    "inherited": inherited,
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
 
     if args.summary:
         lines = [

@@ -1,0 +1,14 @@
+# Which upstream HyperDX this fork is pinned to.
+#
+# Committed, so `git show <tag>:.upstream-version` answers "what upstream is
+# release X built on" for any release we cut.
+#
+# This records the INTENT. `git merge-base HEAD upstream/main` is the ground
+# truth, and `scripts/upstream-pin.py --verify` asserts the two agree - which is
+# what catches a merge of upstream that forgot to move the pin.
+#
+# Written by the sync workflow; bump it in the same commit as the merge.
+
+upstream_ref: '@hyperdx/app@2.29.0'
+upstream_sha: e2103f78e82724a2b03e3d069c78c9d1e672e1e7
+synced: 2026-07-07
