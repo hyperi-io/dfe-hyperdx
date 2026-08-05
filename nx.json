@@ -18,6 +18,9 @@
     },
     "ci:unit": {
       "dependsOn": ["^build"]
+    },
+    "ci:build": {
+      "dependsOn": ["^ci:build"]
     }
   },
   "tasksRunnerOptions": {

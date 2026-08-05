@@ -1,13 +1,14 @@
-// DFE fork-local UNIT test config.
-//
-// Upstream's api package has no unit target at all - every api test is an
-// integration test (`ci:int`) that wants Mongo and ClickHouse up. Our identity
-// middleware does not, and we want it gated on every PR, not only when the
-// integration stack is available. So this config runs ONLY `src/dfe/**`.
+// DFE unit test config - upstream's, plus the one transform our tests need.
 //
 // It is a SEPARATE file, not an edit to upstream's jest.config.js, because
 // every in-place edit to a pristine upstream file is permanent merge-conflict
-// surface for `git rerere`. See CLAUDE.md / FORK.md.
+// surface for `git rerere`. See CLAUDE.md and docs/fork/.
+//
+// It deliberately does NOT narrow testMatch. It used to, back when upstream's
+// api package had no unit target at all; 2.33.0 added one and renamed their
+// integration tests to `.int.test.ts`. Scoping this config to `src/dfe/**`
+// would run our handful of tests while silently skipping upstream's several
+// hundred.
 
 const base = require('./jest.config');
 
@@ -19,5 +20,4 @@ module.exports = {
   // it instead of ignoring it, so the tests exercise REAL ES384 verification
   // rather than a hand-rolled crypto double.
   transformIgnorePatterns: ['/node_modules/(?!jose/)'],
-  testMatch: ['<rootDir>/dfe/**/__tests__/**/*.test.ts?(x)'],
 };

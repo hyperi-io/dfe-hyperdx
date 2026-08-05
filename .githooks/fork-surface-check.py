@@ -83,6 +83,24 @@ def load_catalogue() -> list[str]:
     return patterns
 
 
+def merge_in_progress() -> bool:
+    """True while a merge is being resolved.
+
+    AN UPSTREAM MERGE IS NOT AN EDIT. The commit that lands a sync legitimately
+    carries hundreds of upstream files, and judging it by "did this commit touch
+    an uncatalogued upstream file" flags every one of them - so the guard would
+    block the exact operation it exists to protect, on every single sync.
+
+    The conflict surface is what WE changed, and that is checked on the PR
+    afterwards against the merge base. Here the honest answer is to stand down.
+
+    Ask git, not the filesystem: in a linked worktree `.git` is a FILE, so a
+    path probe is always false and the guard blocks the very sync merge it was
+    changed to allow. This repo advertises multi-worktree development.
+    """
+    return bool(_git("rev-parse", "--verify", "--quiet", "MERGE_HEAD"))
+
+
 def changed_files(base: str | None) -> list[str]:
     """Staged files, or the files changed since *base*."""
     if base:
@@ -264,6 +282,39 @@ def warn_test_paths(catalogue: list[str]) -> None:
         print(f"  {path}", file=sys.stderr)
 
 
+def warn_pristine(catalogue: list[str]) -> None:
+    """Nag about catalogued paths that now match upstream byte for byte.
+
+    A sync can hand a delta back: upstream adopts our change, or we take theirs
+    during a conflict. The file is then pristine and the catalogue entry is
+    surface held for NOTHING - it costs a check and asserts a difference that is
+    not there. Shrinking this list is the whole goal, so make the chance to do
+    it visible rather than waiting for someone to notice.
+    """
+    baseline = upstream_baseline()
+    if not baseline:
+        return
+
+    pristine = []
+    for path in catalogue:
+        if "*" in path:
+            continue
+        ours = _git("rev-parse", f"HEAD:{path}")
+        theirs = _git("rev-parse", f"{baseline}:{path}")
+        if ours and ours == theirs:
+            pristine.append(path)
+
+    if not pristine:
+        return
+    print(
+        f"\n{len(pristine)} catalogued path(s) are now IDENTICAL to upstream.\n"
+        "Delete them from .fork-surface - we are holding surface for nothing:",
+        file=sys.stderr,
+    )
+    for path in pristine:
+        print(f"  {path}", file=sys.stderr)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -290,6 +341,16 @@ def main() -> int:
 
     if args.audit:
         warn_test_paths(catalogue)
+        warn_pristine(catalogue)
+        return 0
+
+    if not args.base and merge_in_progress():
+        print(
+            "fork-surface: merge in progress - standing down.\n"
+            "An upstream merge legitimately carries upstream's own files; what WE\n"
+            "changed is checked on the PR against the merge base.",
+            file=sys.stderr,
+        )
         return 0
 
     files = changed_files(args.base)

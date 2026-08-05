@@ -198,6 +198,97 @@ class SecurityLayerTest(unittest.TestCase):
         self.assertIn('"scripts": {\n    "build": "nx build"\n  }', text)
         self.assertEqual(self.fork.manifest()["version"], "2.0.0")
 
+    def test_an_entry_after_the_empty_marker_is_not_lost(self) -> None:
+        """`overrides: []` must not swallow the rest of the file.
+
+        The shipped register carries that marker with the example commented out
+        BELOW it, so the natural way to add a pin - uncomment, forget the
+        marker - left every entry invisible while every command reported
+        success.
+        """
+        (self.fork.dir / "security" / "overrides.yaml").write_text(
+            "overrides: []\n"
+            "  - package: some-parser\n"
+            '    range: ">=1.2.3"\n'
+            "    advisory: GHSA-x\n"
+            "    severity: critical\n"
+            "    vector: >-\n"
+            "      Reachable on the ingest path.\n"
+            "    upstream: https://example.invalid/1\n"
+            "    added: 2026-08-05\n",
+            encoding="utf-8",
+        )
+        result = self.fork.run("security-override.py", "--list")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("some-parser", result.stdout)
+
+    def test_an_uncomparable_range_keeps_the_pin(self) -> None:
+        """A `patch:` spec parses to nothing; that must not read as redundant.
+
+        An unreadable range compared as lower than everything, so the pin was
+        dropped AND the tool printed that upstream ships something higher.
+        """
+        self.fork.set_register(
+            [{"package": "brace-expansion", "range": "patch:brace-expansion@2.0.2#./p.patch"}]
+        )
+        result = self.fork.run("security-override.py", "--apply")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("SUPERSEDED", result.stdout)
+        self.assertEqual(
+            self.fork.manifest()["resolutions"]["brace-expansion"],
+            "patch:brace-expansion@2.0.2#./p.patch",
+        )
+
+    def test_an_or_range_keeps_its_real_floor(self) -> None:
+        """`^0.7.2 || ^1.0.0` is the standard "fixed in 0.7.2 and 1.0.0" shape.
+
+        Reading only as far as the first unparseable character gave (0, 7),
+        which sorts BELOW upstream's own (0, 7, 0) - so a live pin against a
+        vulnerable 0.7.0 was dropped as superseded, on a printed claim that
+        upstream ships something higher.
+        """
+        self.fork.set_register([{"package": "cookie", "range": "^0.7.2 || ^1.0.0"}])
+        result = self.fork.run("security-override.py", "--apply")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("SUPERSEDED", result.stdout)
+        self.assertEqual(
+            self.fork.manifest()["resolutions"]["cookie"], "^0.7.2 || ^1.0.0"
+        )
+
+    def test_a_bounded_range_keeps_its_real_floor(self) -> None:
+        """`>=4.21.3 <5.0.0` floors at 4.21.3, not at the truncated (4, 21)."""
+        self.fork.set_register([{"package": "express", "range": ">=4.21.3 <5.0.0"}])
+        result = self.fork.run("security-override.py", "--apply")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("SUPERSEDED", result.stdout)
+        self.assertEqual(
+            self.fork.manifest()["resolutions"]["express"], ">=4.21.3 <5.0.0"
+        )
+
+    def test_an_or_range_upstream_has_overtaken_is_still_superseded(self) -> None:
+        """The floor must stay comparable - refusing every OR range would just
+        invert the bug, holding dead pins forever."""
+        self.fork.set_register([{"package": "cookie", "range": "^0.6.0 || ^1.0.0"}])
+        result = self.fork.run("security-override.py", "--apply")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("SUPERSEDED", result.stdout)
+        self.assertEqual(self.fork.manifest()["resolutions"]["cookie"], "^0.7.0")
+
+    def test_verify_enforces_the_severity_bar(self) -> None:
+        """--verify is the only register check on a PR, so it must validate."""
+        self.fork.set_register(
+            [{"package": "some-parser", "range": ">=1.2.3", "severity": "moderate"}]
+        )
+        result = self.fork.run("security-override.py", "--verify")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("does not meet the bar", result.stderr)
+
     def test_verify_fails_on_a_hand_edited_block(self) -> None:
         manifest = self.fork.manifest()
         manifest["resolutions"]["lodash"] = "^4.17.21"
@@ -370,8 +461,75 @@ class PatchSeriesTest(unittest.TestCase):
         result = self.fork.run("security-override.py", "--apply")
 
         self.assertEqual(result.returncode, 1)
-        self.assertIn("NO LONGER APPLY", result.stderr)
+        self.assertIn("NEED A HUMAN", result.stderr)
+        self.assertIn("the tree has moved", result.stderr)
         self.assertIn("0001-harden.patch", result.stderr)
+
+
+class AmbiguousPatchTest(unittest.TestCase):
+    """A patch that applies in BOTH directions must be refused, not guessed at.
+
+    The shape below is ordinary: the fix swaps an argument order, and upstream
+    later added a second call site ABOVE the patched one that is already in the
+    safe order. git apply searches backward from the hunk header, finds its own
+    post-image at that earlier site, and reverse-applies there cleanly.
+
+    So the patch reverses AND applies. Deciding by which check runs first reads
+    the fix as present while it is absent, and reversing on that belief rewrites
+    upstream's correct call site INTO the vulnerable order - turning one
+    vulnerable site into two, immediately before the merge.
+    """
+
+    BODY = (
+        "guard();\n"
+        "call(token, user);\n"  # upstream's, already correct
+        "log();\n"
+        "guard();\n"
+        "call(user, token);\n"  # the one the patch targets - still vulnerable
+        "log();\n"
+    )
+    DIFF = (
+        "--- a/app.js\n"
+        "+++ b/app.js\n"
+        "@@ -4,3 +4,3 @@\n"
+        " guard();\n"
+        "-call(user, token);\n"
+        "+call(token, user);\n"
+        " log();\n"
+    )
+
+    def setUp(self) -> None:
+        self.fork = ForkFixture()
+        self.addCleanup(self.fork.cleanup)
+        self.fork.add_patch("0001-arg-order.patch", self.DIFF)
+        (self.fork.dir / "app.js").write_text(self.BODY, encoding="utf-8")
+
+    def test_verify_refuses_to_certify_a_both_ways_patch(self) -> None:
+        result = self.fork.run("security-override.py", "--verify")
+
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("ambiguous", result.stderr)
+        self.assertIn("0001-arg-order.patch", result.stderr)
+
+    def test_unapply_leaves_an_ambiguous_patch_alone(self) -> None:
+        result = self.fork.run("security-override.py", "--unapply")
+
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(
+            (self.fork.dir / "app.js").read_text(encoding="utf-8"),
+            self.BODY,
+            "reversed a guess - the second call site was rewritten",
+        )
+        self.assertIn("BOTH directions", result.stderr)
+
+    def test_apply_leaves_an_ambiguous_patch_alone(self) -> None:
+        result = self.fork.run("security-override.py", "--apply")
+
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(
+            (self.fork.dir / "app.js").read_text(encoding="utf-8"), self.BODY
+        )
+        self.assertIn("BOTH directions", result.stderr)
 
 
 class UpstreamPinTest(unittest.TestCase):

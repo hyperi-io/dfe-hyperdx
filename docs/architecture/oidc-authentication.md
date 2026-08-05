@@ -1,197 +1,132 @@
 # OIDC authentication
 
-> **Documentation status.** This page was carried over from the original
-> embedding design and still reads in places as a PLAN ("changes required",
-> "files to modify") rather than a description of what the code does today. The
-> structure and diagrams have been corrected; the prose has not yet been
-> re-verified against the code line by line. Treat a specific claim here as
-> needing a check until this note is removed.
+**The DFE engine is the single JWT issuer. HyperDX verifies its token rather
+than trusting a header.**
 
-### Current Auth Model
+Envoy terminates OIDC at the edge and verifies the engine's ES384 token. HyperDX
+verifies it _again_ against the engine's JWKS, because HyperDX is a policy
+enforcement point and an unauthenticated header is not an identity.
 
-HyperDX ships with a simple, single-tenant auth model:
+None of this touches upstream's auth. It is one middleware registered ahead of
+Passport, and with `DFE_AUTH_MODE` unset it is never registered at all - the
+fork behaves exactly as upstream ships.
 
-```mermaid
-flowchart LR
-    BROWSER["Browser"] -->|POST /login/password<br/>email + password| PASSPORT["Passport.js<br/>Local Strategy"]
-    PASSPORT -->|pbkdf2 verify| MONGO["User doc<br/>(FerretDB -> PG)"]
-    PASSPORT -->|Set session cookie| SESSION["Express Session<br/>(connect-mongo)"]
-    SESSION -->|Subsequent requests<br/>cookie to deserializeUser| API["HyperDX API"]
-```
+---
 
-Key characteristics:
-
-- **Passport.js local strategy** - email + password, hashed with pbkdf2 via
-  `@hyperdx/passport-local-mongoose` (a private fork)
-- **Single-tenant** - `getTeam()` does `Team.findOne({})` with no ID filter; the
-  entire deployment assumes exactly one team
-- **No RBAC** - every user on the team has identical, full access
-- **Session-based** - Express sessions stored in MongoDB (30-day rolling cookie)
-- **Manual registration** - first user creates the team via
-  `/register/password`, subsequent users join via invite tokens
-  (`/team/setup/:token`)
-- **`allowedAuthMethods`** - exists on the Team model but only supports
-  `['password']`; no API route to configure it; enforcement is inside the
-  passport-local-mongoose fork
-
-### Target Auth Model
-
-```mermaid
-flowchart LR
-    subgraph External_Identity["External Identity"]
-        OIDC["OIDC Provider<br/>(Google / Entra ID)"]
-    end
-
-    subgraph K8s_Ingress["K8s Ingress"]
-        ENVOY["Envoy Proxy<br/>(ext_authz / OAuth2 filter)"]
-    end
-
-    subgraph HyperDX["HyperDX"]
-        API["HyperDX API<br/>(trusts identity headers)"]
-        TEAM["Team<br/>(mapped from OIDC claims)"]
-        CONN["Connection<br/>(team-specific CH user)"]
-    end
-
-    CH[(ClickHouse<br/>per-team user)]
-
-    OIDC -->|ID token| ENVOY
-    ENVOY -->|X-Forwarded-Email<br/>X-Forwarded-Groups<br/>X-Forwarded-Access-Token| API
-    API --> TEAM --> CONN
-    CONN -->|team-specific<br/>CH credentials| CH
-```
-
-The authentication boundary moves **out of HyperDX entirely**. Envoy handles the
-OIDC flow (authorization code grant, token validation, refresh). HyperDX
-receives pre-authenticated identity via trusted headers and maps it to teams and
-ClickHouse connections.
-
-### Auth Flow with Envoy and OIDC
+## The flow
 
 ```mermaid
 sequenceDiagram
     participant User as Browser
-    participant Envoy as Envoy K8s Ingress
-    participant OIDC as OIDC Provider<br/>Google/Entra
+    participant Envoy as Envoy at the edge
+    participant Engine as DFE engine
     participant HDX as HyperDX API
 
-    User->>Envoy: GET /search (no session)
-    Envoy->>OIDC: Redirect to authorization endpoint
-    OIDC->>User: Login prompt
-    User->>OIDC: Credentials
-    OIDC->>Envoy: Authorization code
-    Envoy->>OIDC: Exchange code for tokens
-    OIDC-->>Envoy: ID token and access token
-
-    Note over Envoy: Validates token, extracts claims,<br/>sets identity headers
-
-    Envoy->>HDX: GET /search<br/>X-Forwarded-Email: user@example.com<br/>X-Forwarded-Groups: team-sre,team-platform
-    HDX->>HDX: Find-or-provision the user from the email claim
-    HDX->>HDX: Map groups to Team
-    HDX->>HDX: Establish session (or stateless JWT)
-    HDX-->>User: 200 (via Envoy)
-
-    Note over User,HDX: Subsequent requests
-
-    User->>Envoy: GET /api/dashboards (session cookie)
-    Envoy->>Envoy: Validate token (still valid)
-    Envoy->>HDX: Forward with identity headers
-    HDX->>HDX: Resolve user to team to connection
-    HDX-->>User: Dashboard data
+    User->>Envoy: request
+    Envoy->>Envoy: OIDC flow, verify engine token
+    Envoy->>HDX: forward with Bearer token or dfe_token cookie
+    HDX->>Engine: fetch JWKS (cached)
+    HDX->>HDX: jwtVerify ES384, check iss
+    HDX->>HDX: sub claim to email, groups claim to team
+    HDX->>HDX: find-or-provision user and team
+    HDX->>HDX: req.login(session false)
+    HDX-->>User: upstream isUserAuthenticated now passes
 ```
 
-### Changes Required in HyperDX
+Two things about that last step are worth knowing:
 
-All changes are scoped to `packages/api`. The frontend, common-utils, and OTel
-collector are unaffected.
+- **`req.login(..., { session: false })`** populates `req.user` exactly as
+  Passport would, so every upstream route guard works unmodified. That is why
+  the fork needs no changes to upstream's auth code.
+- **A missing or invalid token falls THROUGH, it does not 401.** The route-level
+  `isUserAuthenticated` guard is what rejects the request. Failing open here
+  would be a hole; failing closed here would break upstream's own session login,
+  which still has to work.
 
-#### 1. New Auth Middleware: Trusted Header Authentication
+---
 
-Replace `isUserAuthenticated` with a new middleware that:
+## Where the identity comes from
 
-- Reads identity from headers set by Envoy (e.g. `X-Forwarded-Email`,
-  `X-Forwarded-Groups`, or a validated JWT in `Authorization`)
-- Finds or auto-creates the User document from the email claim
-- Maps group claims to a Team (find-or-create by group name)
-- Sets `req.user` with the resolved User + Team
-- Falls back to existing session auth if headers are absent (for backwards
-  compatibility or local dev)
+```mermaid
+flowchart TB
+    entry["dfeIdentityMiddleware<br/>jwt-verify.ts"] --> mode{"DFE_AUTH_MODE"}
+    mode -->|oidc-proxy, the default| jwt["engineJwtMiddleware<br/>verify ES384 against JWKS"]
+    mode -->|header-dev| hdr["oidcIdentityMiddleware<br/>trust headers UNVERIFIED"]
+    mode -->|unset| off["never registered<br/>upstream behaviour"]
 
-**Files to modify:**
+    jwt --> resolve["find-or-provision<br/>user and team"]
+    hdr --> resolve
 
-- `packages/api/src/middleware/auth.ts` - add `isExternalAuthenticated`
-  middleware
-- `packages/api/src/api-app.ts` - conditionally use the new middleware based on
-  config (e.g. `AUTH_MODE=oidc-proxy`)
+    classDef safe fill:#009E73,stroke:#005f45,color:#ffffff
+    classDef danger fill:#D55E00,stroke:#7a3500,color:#ffffff
+    classDef neutral fill:#0072B2,stroke:#00456b,color:#ffffff
+    class jwt,off safe
+    class hdr danger
+    class entry,mode,resolve neutral
+```
 
-#### 2. User Auto-Provisioning
+**`header-dev` is dev-only and trusts headers without any verification.** It
+exists so local development works without a running engine. Anything that can
+reach the API can assert any identity under it. Never set it in production.
 
-Replace the manual register + invite flow with just-in-time provisioning:
+### Token source
 
-- On first request from a new email, create the User document
-- Assign to Team based on OIDC group claims (configurable mapping)
-- Run `setupTeamDefaults()` for newly created teams (connections + sources)
-- No registration page, no invite tokens needed
+`Authorization: Bearer <token>` if present, otherwise a `dfe_token` cookie. The
+cookie header is parsed directly rather than adding `cookie-parser`, to avoid a
+dependency for one lookup.
 
-**Files to modify:**
+### Claims
 
-- `packages/api/src/controllers/user.ts` - add
-  `findOrCreateUserFromOIDC(email, groups)`
-- `packages/api/src/controllers/team.ts` - fix `getTeam()` to filter by ID (not
-  just `findOne({})`) and add `findOrCreateTeamByName(groupName)`
+| Claim    | Used for                                                     |
+| -------- | ------------------------------------------------------------ |
+| `sub`    | the user's email; without it the request falls through       |
+| `groups` | team name - accepts a JSON array or a comma-separated string |
+| `iss`    | enforced when `DFE_ENGINE_ISSUER` is set                     |
 
-#### 3. Multi-Tenancy Fix
+Team resolution is the first group, else `DFE_AUTH_DEFAULT_TEAM`, else
+`default`. Both the user and the team are find-or-create, so there is no
+registration or invite step in DFE mode.
 
-The current `getTeam()` returns the first team found. For multi-team support:
+---
 
-- All team lookups must filter by `_id` or name
-- The `getConnections()` controller bug (returns all connections unscoped) must
-  be fixed to filter by team
-- Verify all routes properly scope data access to `req.user.team`
+## Configuration
 
-**Files to modify:**
+| Variable                 | Default              | Purpose                                                 |
+| ------------------------ | -------------------- | ------------------------------------------------------- |
+| `DFE_AUTH_MODE`          | unset                | `oidc-proxy`, `header-dev`, or unset for stock upstream |
+| `DFE_ENGINE_JWKS_URL`    | -                    | engine JWKS; required in `oidc-proxy` mode              |
+| `DFE_ENGINE_ISSUER`      | unset                | enforced as the `iss` claim when set                    |
+| `DFE_AUTH_HEADER_EMAIL`  | `x-forwarded-email`  | `header-dev` only                                       |
+| `DFE_AUTH_HEADER_GROUPS` | `x-forwarded-groups` | `header-dev` only                                       |
+| `DFE_AUTH_DEFAULT_TEAM`  | unset                | team when no group claim is present                     |
 
-- `packages/api/src/controllers/team.ts` - `getTeam()` must accept and filter by
-  ID
-- `packages/api/src/controllers/connection.ts` - `getConnections()` must filter
-  by team
+Read in `packages/api/src/dfe/config.ts`; `isDfeEnabled` is what `api-app.ts`
+gates the middleware registration on.
 
-#### 4. Team -> ClickHouse User Mapping
+---
 
-This already works - each Connection stores `username` + `password` scoped to a
-Team. No code changes needed. Configuration-level: create a ClickHouse user per
-team and configure each Team's Connection accordingly.
+## The files
 
-#### 5. Disable or Gate Legacy Auth Routes
+| File                                   | Role                                                |
+| -------------------------------------- | --------------------------------------------------- |
+| `dfe/middleware/jwt-verify.ts`         | entry point, mode switch, ES384 verification        |
+| `dfe/middleware/oidc-identity.ts`      | the `header-dev` path                               |
+| `dfe/controllers/user-provisioning.ts` | find-or-create the user                             |
+| `dfe/controllers/team-provisioning.ts` | find-or-create the team                             |
+| `dfe/config.ts`                        | the variables above                                 |
+| `api-app.ts`                           | the one upstream file touched - a guarded `app.use` |
 
-The Passport.js login/register/invite routes should be disabled when running in
-OIDC proxy mode to avoid confusion:
+The JWKS resolver is built once and reused. `createRemoteJWKSet` does its own
+fetch caching, coalescing and cooldown, so there is no key cache of ours to get
+wrong.
 
-- `POST /login/password` - disabled
-- `POST /register/password` - disabled
-- `POST /team/setup/:token` - disabled
-- `POST /team/invitation` - disabled
+---
 
-**Files to modify:**
+## AI steering
 
-- `packages/api/src/routers/api/root.ts` - gate routes behind `AUTH_MODE` config
-- `packages/api/src/routers/api/team.ts` - gate invite routes
-
-#### 6. Frontend Adjustments
-
-Minimal changes - the frontend already redirects to `/search` when a session
-exists:
-
-- `LandingPage.tsx` - skip the register/login check when `AUTH_MODE=oidc-proxy`
-  (Envoy will handle the redirect)
-- `AuthPage.tsx` - hide or redirect (the login form is never shown; Envoy
-  handles it)
-- `TeamPage.tsx` - hide invite UI when running in OIDC mode
-
-#### Summary of New Config
-
-| Variable             | Value                | Purpose                                               |
-| -------------------- | -------------------- | ----------------------------------------------------- |
-| `AUTH_MODE`          | `oidc-proxy`         | Enables trusted header auth, disables Passport routes |
-| `AUTH_HEADER_EMAIL`  | `X-Forwarded-Email`  | Header containing authenticated user's email          |
-| `AUTH_HEADER_GROUPS` | `X-Forwarded-Groups` | Header containing comma-separated group/team claims   |
-| `AUTH_DEFAULT_TEAM`  | (optional)           | Default team name if no group header is present       |
+| Don't                                             | Do                                                  | Why                                                                            |
+| ------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Trust `x-forwarded-email` in new code             | Read `req.user`, set by the middleware              | The header is only authoritative in `header-dev`, which is not production      |
+| Return 401 from identity middleware               | Fall through and let `isUserAuthenticated` decide   | Upstream session login must keep working alongside DFE mode                    |
+| Add auth logic to upstream's `middleware/auth.ts` | Add it under `dfe/` and register it in `api-app.ts` | Editing upstream's auth is permanent conflict surface, and the guard blocks it |
+| Widen `algorithms` beyond `['ES384']`             | Leave it pinned                                     | Algorithm confusion is the classic JWT verification bug                        |

@@ -9,6 +9,6 @@
 #
 # Written by the sync workflow; bump it in the same commit as the merge.
 
-upstream_ref: '@hyperdx/app@2.29.0'
-upstream_sha: e2103f78e82724a2b03e3d069c78c9d1e672e1e7
-synced: 2026-07-07
+upstream_ref: '@hyperdx/app@2.33.0'
+upstream_sha: e73af38135f3003385e4b98509264dd420a06222
+synced: 2026-07-31

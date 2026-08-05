@@ -85,7 +85,8 @@ dfe-docker layers the SAME `docker-compose.caps.yml` (or copies the table above)
 onto the HyperDX service. Pin the fork image by `tag@sha256` (per the DFE
 SHA-pin rule) once the fork CI publishes to `ghcr.io/hyperi-io/dfe-hyperdx`. NB:
 the fork Makefile currently publishes to `docker.hyperdx.io/hyperdx/hyperdx` -
-reconcile the publish target before first deploy (see FORK.md).
+reconcile the publish target before first deploy (see
+docs/fork/what-we-changed.md).
 
 ## Notes
 

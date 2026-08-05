@@ -33,7 +33,8 @@ is asked the residue, not the pile.
 
 IT PROPOSES, IT DOES NOT DECIDE. Output is a markdown report for the sync PR.
 Nothing here writes the register, applies a patch, or clears a finding.
-FORK.md's bar - "npm audit says high is not a vector" - is a judgement the fork
+The bar in docs/fork/design.md - "npm audit says high is not a vector" - is a
+judgement the fork
 owner makes, and a model that could clear its own findings would rebuild exactly
 the alert queue the inverted posture exists to avoid.
 
@@ -90,6 +91,23 @@ not run, a cloud adapter that is not configured).
 Default to UNREACHABLE. Saying "cannot determine" is a correct and useful
 answer; inventing a plausible-sounding vector is the failure mode that makes
 this whole exercise worthless.
+
+THE FIX MUST BE THE SMALLEST ONE THAT WORKS. This is a long-lived FORK, and its
+governing goal is to minimise the file-level variation from upstream we have to
+maintain. Any change you propose to an upstream file is a merge conflict paid at
+every future sync, forever, by whoever runs it. So for anything you recommend,
+answer three questions first and show the answers:
+
+  1. Is it needed at all? Not fixing it is a legitimate outcome, and the usual
+     one - most advisories are unreachable here.
+  2. Can it be smaller and simpler? Prefer a dependency pin over a code patch,
+     and a one-line patch over a rewritten function.
+  3. Can it be done with less upstream drift risk? Prefer new code in a `dfe/`
+     directory (costs nothing) over editing an upstream file (costs forever).
+
+Do not return a large diff because a large diff looks thorough. Here it is not
+thorough, it is expensive. If the smallest correct fix is "wait for upstream",
+say that.
 
 Be terse and concrete. Australian English. Plain ASCII only - no smart quotes,
 em dashes, arrows or emoji. No marketing language.\

@@ -1,5 +1,10 @@
 import {
+  FilterState,
+  filterStateToPredicate,
   filtersToQuery,
+  isRenderablePinnedFilter,
+  parseQuery,
+  serializeFilterState,
   validateDashboardFilterQueries,
   validateSavedFilterValues,
   validateSavedQuery,
@@ -355,6 +360,119 @@ describe('filters', () => {
     });
   });
 
+  describe('filterStateToPredicate', () => {
+    const identity = (k: string) => k;
+
+    it('returns undefined when nothing is selected', () => {
+      expect(filterStateToPredicate({}, identity)).toBeUndefined();
+      expect(
+        filterStateToPredicate(
+          { colA: { included: new Set(), excluded: new Set() } },
+          identity,
+        ),
+      ).toBeUndefined();
+    });
+
+    it('wraps a single condition in parentheses', () => {
+      expect(
+        filterStateToPredicate(
+          { colA: { included: new Set(['x']), excluded: new Set() } },
+          identity,
+        ),
+      ).toBe("(colA IN ('x'))");
+    });
+
+    it('AND-joins conditions across keys and across include/exclude', () => {
+      const predicate = filterStateToPredicate(
+        {
+          colA: { included: new Set(['x']), excluded: new Set(['y']) },
+          colB: { included: new Set(['z']), excluded: new Set() },
+        },
+        identity,
+      );
+      expect(predicate).toBe(
+        "(colA IN ('x')) AND (colA NOT IN ('y')) AND (colB IN ('z'))",
+      );
+    });
+
+    it('addresses each key through renderKey', () => {
+      // The whole point of the callback: a JSON column is aggregated as a
+      // typed subcolumn, so the predicate has to name it the same way.
+      expect(
+        filterStateToPredicate(
+          {
+            "Attributes['cluster']": {
+              included: new Set(['prod']),
+              excluded: new Set(),
+            },
+          },
+          () => '`Attributes`.`cluster`.:String',
+        ),
+      ).toBe("(`Attributes`.`cluster`.:String IN ('prod'))");
+    });
+  });
+
+  describe('serializeFilterState', () => {
+    it('distinguishes different selections', () => {
+      const a: FilterState = {
+        colA: { included: new Set(['x']), excluded: new Set() },
+      };
+      const b: FilterState = {
+        colA: { included: new Set(['y']), excluded: new Set() },
+      };
+      expect(serializeFilterState(a)).not.toBe(serializeFilterState(b));
+      // JSON.stringify alone would flatten both Sets to {} and collide, which
+      // is exactly what this helper exists to prevent in react-query keys.
+      expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    });
+
+    it('distinguishes an included value from an excluded one', () => {
+      expect(
+        serializeFilterState({
+          colA: { included: new Set(['x']), excluded: new Set() },
+        }),
+      ).not.toBe(
+        serializeFilterState({
+          colA: { included: new Set(), excluded: new Set(['x']) },
+        }),
+      );
+    });
+
+    it('is stable across key and member insertion order', () => {
+      expect(
+        serializeFilterState({
+          colA: { included: new Set(['x', 'y']), excluded: new Set() },
+          colB: { included: new Set(['z']), excluded: new Set() },
+        }),
+      ).toBe(
+        serializeFilterState({
+          colB: { included: new Set(['z']), excluded: new Set() },
+          colA: { included: new Set(['y', 'x']), excluded: new Set() },
+        }),
+      );
+    });
+
+    it('includes the range bound', () => {
+      expect(
+        serializeFilterState({
+          colA: {
+            included: new Set(),
+            excluded: new Set(),
+            range: { min: 1, max: 2 },
+          },
+        }),
+      ).not.toBe(
+        serializeFilterState({
+          colA: {
+            included: new Set(),
+            excluded: new Set(),
+            range: { min: 1, max: 3 },
+          },
+        }),
+      );
+    });
+  });
+
   describe('validateSavedFilterValues', () => {
     it('returns no issues for an empty array', () => {
       expect(validateSavedFilterValues([])).toEqual([]);
@@ -604,6 +722,113 @@ describe('filters', () => {
           where: 'Bad:((("',
         },
       ]);
+    });
+  });
+
+  describe('parseQuery BETWEEN bounds', () => {
+    it('parses a numeric BETWEEN into a range', () => {
+      expect(
+        parseQuery([
+          { type: 'sql', condition: 'Duration BETWEEN 100 AND 5000' },
+        ]).filters,
+      ).toEqual({
+        Duration: {
+          included: new Set(),
+          excluded: new Set(),
+          range: { min: 100, max: 5000 },
+        },
+      });
+    });
+
+    it('drops a BETWEEN with quoted / non-numeric bounds instead of emitting NaN', () => {
+      expect(
+        parseQuery([
+          {
+            type: 'sql',
+            condition: "ts BETWEEN '2024-01-01' AND '2024-02-01'",
+          },
+        ]).filters,
+      ).toEqual({});
+    });
+
+    it('drops a compound BETWEEN whose trailing clause the regex would swallow', () => {
+      // The greedy regex would capture `2 AND other IN ('x')` as the upper
+      // bound; `Number` rejects it as non-numeric so nothing is emitted.
+      expect(
+        parseQuery([
+          {
+            type: 'sql',
+            condition: "col BETWEEN 1 AND 2 AND other IN ('x')",
+          },
+        ]).filters,
+      ).toEqual({});
+    });
+  });
+
+  describe('isRenderablePinnedFilter', () => {
+    const sql = (condition: string): Filter => ({ type: 'sql', condition });
+
+    it.each([
+      ["ServiceName IN ('checkout', 'payments')", 'IN'],
+      ["SeverityText NOT IN ('debug', 'trace')", 'NOT IN'],
+      ['Duration BETWEEN 100 AND 5000', 'BETWEEN (numeric)'],
+      ["LogAttributes['x'] IN ('y')", 'map-access column'],
+      ["Body IN ('a AND b')", 'value containing AND'],
+    ])('accepts a single renderable predicate: %s (%s)', condition => {
+      expect(isRenderablePinnedFilter(sql(condition))).toBe(true);
+    });
+
+    it.each([
+      ["ServiceName = 'checkout'", 'plain equality (never renders)'],
+      [
+        "ServiceName IN ('x') AND foo = 1",
+        'IN + dropped conjunct (divergence)',
+      ],
+      ["A IN ('x') AND B IN ('y')", 'compound over two columns'],
+      ["ts BETWEEN '2024-01-01' AND '2024-02-01'", 'non-numeric BETWEEN'],
+      ["col BETWEEN 1 AND 2 AND other IN ('x')", 'BETWEEN swallowing a clause'],
+      [
+        'ServiceName NOT BETWEEN 1 AND 2',
+        'NOT folded into the key (renders inverted)',
+      ],
+      ["NOT (ServiceName IN ('x'))", 'leading NOT folded into the key'],
+      ['', 'empty condition'],
+    ])('rejects %s (%s)', condition => {
+      expect(isRenderablePinnedFilter(sql(condition))).toBe(false);
+    });
+
+    it('rejects non-sql filter shapes (lucene, sql_ast)', () => {
+      expect(
+        isRenderablePinnedFilter({ type: 'lucene', condition: 'app:*' }),
+      ).toBe(false);
+      expect(
+        isRenderablePinnedFilter({
+          type: 'sql_ast',
+          operator: '=',
+          left: 'ServiceName',
+          right: "'x'",
+        }),
+      ).toBe(false);
+    });
+
+    it('accepts exactly what filtersToQuery emits (round-trip)', () => {
+      // Every clause filtersToQuery produces must be individually renderable,
+      // guaranteeing the API accepts anything the UI itself would persist.
+      const emitted = filtersToQuery({
+        ServiceName: {
+          included: new Set(['checkout']),
+          excluded: new Set(['debug']),
+        },
+        Duration: {
+          included: new Set(),
+          excluded: new Set(),
+          range: { min: 1, max: 2 },
+        },
+      });
+      expect(emitted.length).toBeGreaterThan(0);
+      for (const f of emitted) {
+        expect(isRenderablePinnedFilter(f)).toBe(true);
+      }
     });
   });
 });

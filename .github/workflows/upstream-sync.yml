@@ -118,10 +118,10 @@ jobs:
         id: branch
         env:
           BASE_REF_INPUT: ${{ inputs.base_ref }}
+          SHORT: ${{ steps.ref.outputs.short }}
         run: |
-          short='${{ steps.ref.outputs.short }}'
           base="${BASE_REF_INPUT:-origin/main}"
-          branch="chore/upstream-sync-${short}"
+          branch="chore/upstream-sync-${SHORT}"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
           echo "Cutting $branch from $base"
           git checkout -B "$branch" "$base"
@@ -131,14 +131,35 @@ jobs:
       # delta in package.json's resolutions block or in a patched upstream file
       # - a delta there conflicts every cycle and rerere cannot help, because
       # the block's contents change each time so no preimage ever recurs.
+      # AND COMMIT IT. `git merge` merges COMMITTED trees - an uncommitted strip
+      # is invisible to the 3-way merge, so the resolutions block conflicts
+      # exactly as if the strip never ran. Worse, git refuses to start at all
+      # ("local changes would be overwritten by merge"), and the failure handler
+      # below then finds no unresolved files, runs `git commit --no-edit`, gets
+      # a non-zero exit, and dies under `bash -e` before writing `status` - so
+      # every later step is skipped and the weekly run produces nothing at all.
+      #
+      # Latent while the register is empty, because --unapply is then a no-op
+      # and the tree stays clean. It breaks the first time someone registers a
+      # pin, which is the only time any of this matters.
       - name: Strip the temporary security layer
-        run: scripts/security-override.py --unapply
+        run: |
+          scripts/security-override.py --unapply
+          git add -A
+          git diff --cached --quiet || git commit -m 'chore: strip the fork security layer before the upstream merge'
 
+      # Every one of these goes through `env:`. The dispatch input is free text
+      # and reaches `ref` unchanged, so interpolating it into `run:` executes
+      # it - which is the thing the comment above the resolve step promises we
+      # never do, and did.
       - name: Merge upstream (rerere replays)
         id: merge
+        env:
+          REF: ${{ steps.ref.outputs.ref }}
+          BRANCH: ${{ steps.branch.outputs.branch }}
         run: |
-          ref='${{ steps.ref.outputs.ref }}'
-          branch='${{ steps.branch.outputs.branch }}'
+          ref="$REF"
+          branch="$BRANCH"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
           if git merge --no-edit "$ref"; then
             echo "status=clean" >> "$GITHUB_OUTPUT"
@@ -174,9 +195,25 @@ jobs:
           steps.merge.outputs.status == 'clean' || steps.merge.outputs.status ==
           'replayed'
         continue-on-error: true # a stale patch must surface in the PR, not kill the run
+        env:
+          REF: ${{ steps.ref.outputs.ref }}
         run: |
-          scripts/security-override.py --apply | tee relayer.txt
-          scripts/upstream-pin.py --set '${{ steps.ref.outputs.ref }}'
+          # NOT `--apply | tee`. A pipeline reports tee's status, which is
+          # always 0, so `steps.relayer.outcome` was always 'success' and the
+          # "did NOT re-apply cleanly" branch below was dead code. tee also
+          # only sees stdout, and the stuck-patch report goes to stderr - so
+          # the PR body carried the good news and dropped the warning.
+          #
+          # Outside the work tree, because the next step is `git add -A` and
+          # this is scratch, not something to commit.
+          status=0
+          scripts/security-override.py --apply > "$RUNNER_TEMP/relayer.txt" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/relayer.txt"
+          # The pin moves even when the layer did not settle. A merge that
+          # moved the upstream base but not the pin makes every later "which
+          # upstream is this built on?" guesswork.
+          scripts/upstream-pin.py --set "$REF" || status=1
+          exit $status
 
       - name: Commit the regenerated layer
         if:
@@ -220,6 +257,15 @@ jobs:
           # config that no runner has. It exits 9 before compiling anything, so
           # the gate reported failure without ever running a test.
           yarn build:common-utils
+          # TYPECHECK BEFORE TESTS. `yarn test` is jest, which transpiles rather
+          # than typechecks, so a merge that leaves a file referencing names
+          # nothing imports still runs green here. That is not hypothetical: the
+          # 2.33.0 merge produced exactly that in OnboardingModal.tsx - our
+          # import block over upstream's body - and this gate passed it, six
+          # times, because nothing between the merge and the PR ever ran tsc.
+          # `ci:lint` per package is eslint + tsc --noEmit, which is the check
+          # that was missing.
+          yarn lint
           yarn test
 
       - name: Commit the re-derived lockfile
@@ -272,9 +318,14 @@ jobs:
           cat triage.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Open sync PR
+        # `inputs` is EMPTY on a schedule, so `inputs.open_pr` is null, and
+        # GitHub coerces null and false alike to 0 - `inputs.open_pr != false`
+        # is therefore FALSE on every cron run, which silently turned the weekly
+        # sync into a merge-and-push with nobody told. Gate on the event first.
         if:
           (steps.merge.outputs.status == 'clean' || steps.merge.outputs.status
-          == 'replayed') && inputs.open_pr != false
+          == 'replayed') && (github.event_name != 'workflow_dispatch' ||
+          inputs.open_pr)
         env:
           GH_TOKEN: ${{ github.token }}
           TEST: ${{ steps.test.outcome }}
@@ -291,7 +342,7 @@ jobs:
             draft="--draft"
             note="$note
 
-          The security layer did NOT re-apply cleanly -- a carried patch no longer fits the new upstream. That is the signal, not a fault: either upstream fixed it their own way (delete the patch) or the code moved (re-derive it). The drafted verdict is in the run summary."
+          The security layer did NOT re-apply cleanly. Read the block below for which patch and why -- it is one of two very different things. STALE (neither direction applies) is the signal, not a fault: either upstream fixed it their own way (delete the patch) or the code moved (re-derive it), and the drafted verdict is in the run summary. AMBIGUOUS is a hazard: the patch applies in BOTH directions, so it names more than one site and the tooling refused to guess which. Re-derive it against the current tree before merging."
           fi
           {
             echo "Automated upstream drift sync (rerere replay: ${{ steps.merge.outputs.status }})."
@@ -301,7 +352,7 @@ jobs:
             echo '## Security layer'
             echo
             echo '```'
-            cat relayer.txt 2>/dev/null || echo '(not reached)'
+            cat "$RUNNER_TEMP/relayer.txt" 2>/dev/null || echo '(not reached)'
             echo '```'
             echo
             echo 'Full advisory triage is in the run summary. Reachability is a HUMAN verdict -- nothing in it has been applied.'
@@ -319,9 +370,24 @@ jobs:
         if: steps.merge.outputs.status == 'conflict'
         env:
           GH_TOKEN: ${{ github.token }}
+          # UPSTREAM controls these filenames. A path containing a single quote
+          # broke out of the printf argument and ran, so the conflict list goes
+          # through env and into a file - never through a shell word.
+          SHORT: ${{ steps.ref.outputs.short }}
+          FILES: ${{ steps.merge.outputs.files }}
         run: |
+          {
+            echo 'rerere could not replay all conflicts. Resolve manually per'
+            echo 'docs/fork/sync-cycle.md, which records the resolution into'
+            echo 'rr-cache so future runs replay it.'
+            echo
+            echo 'Unresolved files:'
+            echo '```'
+            printf '%s\n' "$FILES"
+            echo '```'
+          } > issue-body.md
           gh issue create \
-            --title 'upstream-sync: manual merge needed for hyperdxio/hyperdx@${{ steps.ref.outputs.short }}' \
+            --title "upstream-sync: manual merge needed for hyperdxio/hyperdx@${SHORT}" \
             --label 'upstream-sync' \
-            --body "$(printf 'rerere could not replay all conflicts. Resolve manually per FORK.md (Syncing with upstream), which records the resolution into rr-cache so future runs replay it.\n\nUnresolved files:\n```\n%s\n```\n' '${{ steps.merge.outputs.files }}')" \
+            --body-file issue-body.md \
             || echo "Issue may already exist."

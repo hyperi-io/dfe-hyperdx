@@ -13,7 +13,7 @@
  * source text - a blunt instrument, but it fails loudly at the moment the
  * wiring disappears instead of months later in production.
  *
- * Each path here is catalogued in `.fork-surface` and described in FORK.md.
+ * Each path here is catalogued in `.fork-surface` and described in docs/fork/what-we-changed.md.
  * The live behaviour is separately asserted post-deploy by dfe-infra's
  * hyperdx-embed smoke check.
  */

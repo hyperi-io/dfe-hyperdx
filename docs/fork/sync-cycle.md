@@ -112,6 +112,23 @@ rerere replays previously-recorded resolutions for our PERMANENT deltas.
 copy outright. Anything left conflicting is a genuine three-way conflict on a
 catalogued file.
 
+**A replayed resolution is not a correct one.** rerere reproduces the edit that
+resolved a conflict whose preimage matched; it has no idea whether the result
+still means anything. The failure it produces is specific and worth recognising:
+our side of a hunk lands over upstream's side of the surrounding code, so the
+file references names nothing imports, or declares parameters nobody passes.
+
+2.33.0 did exactly this to `OnboardingModal.tsx` - our import block, upstream's
+body, seven type errors. It survived six green workflow runs, because the gate
+built common-utils and ran jest, and jest transpiles rather than typechecks. The
+gate now runs `yarn lint` (per package: eslint + `tsc --noEmit`) BEFORE the
+tests, which is the check that was missing.
+
+The general form is worth keeping in mind, because it bit twice in one week: a
+gate that does not exercise the thing it claims to cover reports success from an
+empty run. The other instance was `--unapply` against an empty register - real
+workflow runs, genuinely green, proving only that nothing happened.
+
 ### 3. Rebuild, and find out what upstream took off our hands
 
 `--apply` layers the register back over the NEW upstream block, and applies each
@@ -142,13 +159,33 @@ Checked here and again on every PR by `fork-surface.yml`:
 package.json resolutions == upstream's block at our base
                             + the register, applied only where it raises the floor
 
-every security/patches/*.patch applies cleanly
+every security/patches/*.patch applies cleanly, in ONE direction only
 
 .upstream-version == git merge-base HEAD upstream/main
 ```
 
 Generated state drifts silently the moment somebody hand-edits the block, and a
 sync is the worst possible moment to discover it.
+
+"In one direction only" is not pedantry. `git apply` searches outward from the
+hunk header, so a patch whose post-image already sits elsewhere in the file -- a
+second call site upstream ships in the safe shape -- reverse-applies THERE while
+the real target sits untouched. Such a patch reads as applied while the fix is
+absent, and stripping it before a merge rewrites upstream's correct code into
+the vulnerable shape. The tools call that `ambiguous` and refuse it; the fix is
+to re-derive the patch against the current tree so it names one site.
+
+The same workflow runs the tooling's own test suites before any of the above:
+
+```bash
+python3 -m unittest discover -s scripts/__tests__ -v
+```
+
+They belong in front of the invariants rather than beside them, because every
+line above is a reading taken with those tools. A green check from a broken
+guard proves nothing, and these particular tools decide what fails the build and
+what gets stripped before a merge -- so a regression in them surfaces during a
+sync rather than on the PR that caused it.
 
 ---
 
@@ -355,6 +392,29 @@ remembering:
 - `packages/app/src/layout.tsx` - upstream added a kiosk mode that also hides
   the nav. Both conditions now sit side by side, and that convergence is the
   first real evidence for the de-fork path.
+
+### Expect `Build All-in-One Image` to fail on a sync PR
+
+It is upstream's workflow, and it dies with `no space left on device` partway
+through the collector's Go build. Not a regression, and not something to fix by
+editing upstream's workflow.
+
+The job builds the whole Node app AND the Go collector into one image on a
+hosted runner, with no disk-reclaim step. The collector alone pulls the full
+prometheus and cloud-SDK dependency set. On an ordinary upstream PR the path
+filters keep it dormant; a sync touches those paths, so it runs, and it does not
+fit.
+
+It is worth knowing this is capacity and nothing else, because the error looks
+alarming. Our only deltas anywhere near it are config and entry-script -
+`docker/otel-collector/*.yaml`, `docker/hyperdx/entry.prod.sh` - so the Go
+compile that runs out of room is byte-identical to upstream's. Built on adequate
+hardware (12 cores, 540G free), the same commit produces a 2.62GB
+`all-in-one-auth` image with zero disk errors. Verified for 2.33.0; do that
+again rather than trusting this paragraph if the failure ever looks different.
+
+The standing options are a self-hosted runner, a disk-reclaim step (upstream
+surface, so no), or accepting the red check on sync PRs. Currently the last.
 
 ---
 

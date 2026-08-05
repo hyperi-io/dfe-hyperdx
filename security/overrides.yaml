@@ -29,7 +29,7 @@
 #   1. Add the entry below with every field filled in. `vector` is prose, not a
 #      CVSS string - describe the path.
 #   2. Add the matching entry to `resolutions` in the root package.json, and
-#      note it in FORK.md's change catalogue (package.json is catalogued
+#      note it in docs/fork/what-we-changed.md's change catalogue (package.json is catalogued
 #      surface, so the edit is an exception that must be documented).
 #   3. Raise it upstream and put the link in `upstream`. Ours is a stopgap;
 #      theirs is the fix.

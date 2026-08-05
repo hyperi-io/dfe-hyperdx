@@ -56,7 +56,6 @@ packages/api/package.json
 packages/api/src/api-app.ts
 packages/api/src/routers/api/root.ts
 packages/api/src/utils/logger.ts
-packages/api/tsconfig.build.json
 packages/app/.env.development
 packages/app/.storybook/public/mockServiceWorker.js
 packages/app/CHANGELOG.md

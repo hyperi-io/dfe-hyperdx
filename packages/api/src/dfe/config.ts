@@ -13,10 +13,16 @@ const env = process.env;
 //                    _GROUPS without cryptographic verification, so local
 //                    dev works without a running engine. Never for prod.
 //   - undefined    : DFE middleware disabled; upstream HyperDX behaviour.
-export const DFE_AUTH_MODE = env.DFE_AUTH_MODE as
-  | 'oidc-proxy'
-  | 'header-dev'
-  | undefined;
+const DFE_AUTH_MODES = ['oidc-proxy', 'header-dev'] as const;
+export type DfeAuthMode = (typeof DFE_AUTH_MODES)[number];
+
+// Narrowed by CHECKING the value, not by asserting it. A cast told the compiler
+// this was one of the two modes without looking, so a typo (`oidc_proxy`) typed
+// as valid and then matched neither branch - disabling the PEP with no warning.
+// It still ends up disabled, but now that is a value we actually read as unset.
+export const DFE_AUTH_MODE: DfeAuthMode | undefined = DFE_AUTH_MODES.find(
+  mode => mode === env.DFE_AUTH_MODE,
+);
 
 export const DFE_AUTH_HEADER_EMAIL =
   env.DFE_AUTH_HEADER_EMAIL || 'x-forwarded-email';

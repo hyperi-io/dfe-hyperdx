@@ -1,11 +1,9 @@
 # Backend
 
-> **Documentation status.** This page was carried over from the original
-> embedding design and still reads in places as a PLAN ("changes required",
-> "files to modify") rather than a description of what the code does today. The
-> structure and diagrams have been corrected; the prose has not yet been
-> re-verified against the code line by line. Treat a specific claim here as
-> needing a check until this note is removed.
+> **Scope.** This describes UPSTREAM HyperDX's architecture, which we do not
+> modify. It is here so the fork's own docs are readable on their own;
+> upstream's [`agent_docs/`](../../agent_docs/) is the authority, and anything
+> specific to DFE is called out as such.
 
 ```mermaid
 flowchart TB

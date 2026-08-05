@@ -50,6 +50,16 @@ jobs:
           git remote add upstream "$UPSTREAM_URL" 2>/dev/null || true
           git fetch --no-tags upstream
 
+      # FIRST, because everything below is a reading taken with these tools. A
+      # green surface check from a broken guard proves nothing, and the tools
+      # decide what fails the build and what gets stripped before a merge - so
+      # a regression in them is silent and lands in the sync, not here.
+      #
+      # The suites drive the real scripts against real throwaway git repos, so
+      # they need git and stdlib python and nothing else.
+      - name: Test the fork tooling
+        run: python3 -m unittest discover -s scripts/__tests__ -v
+
       # github context goes through `env:`, never straight into the shell. A
       # branch name is attacker-controllable on a fork PR, and interpolating it
       # into `run:` executes it. Caught by scripts/attribute-findings.py.
