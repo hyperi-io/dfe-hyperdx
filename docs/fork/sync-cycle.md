@@ -142,13 +142,33 @@ Checked here and again on every PR by `fork-surface.yml`:
 package.json resolutions == upstream's block at our base
                             + the register, applied only where it raises the floor
 
-every security/patches/*.patch applies cleanly
+every security/patches/*.patch applies cleanly, in ONE direction only
 
 .upstream-version == git merge-base HEAD upstream/main
 ```
 
 Generated state drifts silently the moment somebody hand-edits the block, and a
 sync is the worst possible moment to discover it.
+
+"In one direction only" is not pedantry. `git apply` searches outward from the
+hunk header, so a patch whose post-image already sits elsewhere in the file --
+a second call site upstream ships in the safe shape -- reverse-applies THERE
+while the real target sits untouched. Such a patch reads as applied while the
+fix is absent, and stripping it before a merge rewrites upstream's correct code
+into the vulnerable shape. The tools call that `ambiguous` and refuse it; the
+fix is to re-derive the patch against the current tree so it names one site.
+
+The same workflow runs the tooling's own test suites before any of the above:
+
+```bash
+python3 -m unittest discover -s scripts/__tests__ -v
+```
+
+They belong in front of the invariants rather than beside them, because every
+line above is a reading taken with those tools. A green check from a broken
+guard proves nothing, and these particular tools decide what fails the build
+and what gets stripped before a merge -- so a regression in them surfaces
+during a sync rather than on the PR that caused it.
 
 ---
 
