@@ -11,6 +11,12 @@
  * `jwtVerify`. Only the network fetch of the engine's JWKS is stubbed, by
  * pointing `createRemoteJWKSet` at the local public key.
  */
+/* eslint-disable @typescript-eslint/no-unsafe-type-assertion --
+ * Building an express Request/Response double and reading jest.Mock off a
+ * mocked module both mean asserting a narrower type than the real one, which
+ * is exactly what this rule flags. Scoped to this file rather than relaxed in
+ * packages/api/eslint.config.mjs, which is upstream's and stays untouched.
+ */
 import type { NextFunction, Request, Response } from 'express';
 import { importJWK, SignJWT } from 'jose';
 

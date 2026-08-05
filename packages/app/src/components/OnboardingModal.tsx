@@ -1,9 +1,13 @@
 import { memo, useCallback, useEffect, useState } from 'react';
 import {
+  isLogSource,
+  isTraceSource,
   MetricsDataType,
   MetricTable,
   SourceKind,
+  TLogSource,
   TSource,
+  TTraceSource,
 } from '@hyperdx/common-utils/dist/types';
 import { Button, Modal, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
@@ -24,7 +28,12 @@ import { TableSourceForm } from './Sources/SourceForm';
 const DFE_SHOW_SOURCE_ADD =
   process.env.NEXT_PUBLIC_DFE_SHOW_SOURCE_ADD === 'true';
 
-async function addOtelDemoSources({
+// Upstream calls this from the auto-detect and demo-source flow, which this
+// fork does not ship. KEPT rather than deleted, and renamed to the config's
+// deliberately-unused `_` convention: dropping ~180 lines would widen our diff
+// against a file upstream still edits, so every future sync would conflict here
+// instead of merging clean.
+async function _addOtelDemoSources({
   connectionId,
   createSourceMutation,
   updateSourceMutation,
@@ -48,9 +57,7 @@ async function addOtelDemoSources({
 }: {
   connectionId: string;
   createSourceMutation: ReturnType<typeof useCreateSource>;
-  createConnectionMutation: ReturnType<typeof useCreateConnection>;
   updateSourceMutation: ReturnType<typeof useUpdateSource>;
-  deleteSourceMutation: ReturnType<typeof useDeleteSource>;
 
   logSourceDatabaseName?: string;
   logSourceName?: string;
