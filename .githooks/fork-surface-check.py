@@ -93,8 +93,12 @@ def merge_in_progress() -> bool:
 
     The conflict surface is what WE changed, and that is checked on the PR
     afterwards against the merge base. Here the honest answer is to stand down.
+
+    Ask git, not the filesystem: in a linked worktree `.git` is a FILE, so a
+    path probe is always false and the guard blocks the very sync merge it was
+    changed to allow. This repo advertises multi-worktree development.
     """
-    return (REPO_ROOT / ".git" / "MERGE_HEAD").exists()
+    return bool(_git("rev-parse", "--verify", "--quiet", "MERGE_HEAD"))
 
 
 def changed_files(base: str | None) -> list[str]:

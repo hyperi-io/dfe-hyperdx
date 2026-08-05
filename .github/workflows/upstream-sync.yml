@@ -131,8 +131,22 @@ jobs:
       # delta in package.json's resolutions block or in a patched upstream file
       # - a delta there conflicts every cycle and rerere cannot help, because
       # the block's contents change each time so no preimage ever recurs.
+      # AND COMMIT IT. `git merge` merges COMMITTED trees - an uncommitted strip
+      # is invisible to the 3-way merge, so the resolutions block conflicts
+      # exactly as if the strip never ran. Worse, git refuses to start at all
+      # ("local changes would be overwritten by merge"), and the failure handler
+      # below then finds no unresolved files, runs `git commit --no-edit`, gets
+      # a non-zero exit, and dies under `bash -e` before writing `status` - so
+      # every later step is skipped and the weekly run produces nothing at all.
+      #
+      # Latent while the register is empty, because --unapply is then a no-op
+      # and the tree stays clean. It breaks the first time someone registers a
+      # pin, which is the only time any of this matters.
       - name: Strip the temporary security layer
-        run: scripts/security-override.py --unapply
+        run: |
+          scripts/security-override.py --unapply
+          git add -A
+          git diff --cached --quiet || git commit -m 'chore: strip the fork security layer before the upstream merge'
 
       # Every one of these goes through `env:`. The dispatch input is free text
       # and reaches `ref` unchanged, so interpolating it into `run:` executes
@@ -281,9 +295,14 @@ jobs:
           cat triage.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Open sync PR
+        # `inputs` is EMPTY on a schedule, so `inputs.open_pr` is null, and
+        # GitHub coerces null and false alike to 0 - `inputs.open_pr != false`
+        # is therefore FALSE on every cron run, which silently turned the weekly
+        # sync into a merge-and-push with nobody told. Gate on the event first.
         if:
           (steps.merge.outputs.status == 'clean' || steps.merge.outputs.status
-          == 'replayed') && inputs.open_pr != false
+          == 'replayed') && (github.event_name != 'workflow_dispatch' ||
+          inputs.open_pr)
         env:
           GH_TOKEN: ${{ github.token }}
           TEST: ${{ steps.test.outcome }}
