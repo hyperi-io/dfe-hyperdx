@@ -184,10 +184,21 @@ def _minimum_of(range_spec: str) -> tuple[int, ...] | None:
     stray `v` prefix does the same.
 
     None means "do not compare" - callers keep the pin and say why.
+
+    EVERY comparator is read, not just the first. `^0.7.2 || ^1.0.0` - the
+    standard "fixed in 0.7.2 and in 1.0.0" advisory shape - stopped at the
+    space and floored at (0, 7), which sorts BELOW upstream's own (0, 7, 0),
+    so a live pin was dropped as superseded. Taking the minimum across the
+    comparators is right for a disjunction by definition, and right for a
+    conjunction too, because a sane range's upper bound never sits below its
+    lower one.
     """
-    cleaned = range_spec.strip().lstrip("^~>=< ").strip()
-    parsed = _parse_version(cleaned)
-    return parsed or None
+    floors = [
+        parsed
+        for token in range_spec.replace("||", " ").split()
+        if (parsed := _parse_version(token.lstrip("^~>=< ").strip()))
+    ]
+    return min(floors) if floors else None
 
 
 def _git(*args: str) -> str:
@@ -452,17 +463,38 @@ def _patches() -> list[Path]:
     return sorted(PATCHES.glob("*.patch"))
 
 
-def _patch_state(patch: Path) -> str:
-    """One of 'applied', 'unapplied', 'stale'.
+STUCK_REASON = {
+    "stale": "the tree has moved under it",
+    "ambiguous": "applies in BOTH directions - refusing to guess which site is real",
+    "failed": "git refused the apply",
+}
 
-    'stale' is the interesting one: neither direction applies, so upstream has
+
+def _patch_state(patch: Path) -> str:
+    """One of 'applied', 'unapplied', 'ambiguous', 'stale'.
+
+    'stale' is the informative one: neither direction applies, so upstream has
     moved the code under the patch. That is a SIGNAL - either upstream fixed it
     their own way (delete the patch) or the fix needs re-deriving onto the new
     shape - and it is what scripts/security-triage.py is asked to judge.
+
+    'ambiguous' is the dangerous one. git apply searches outward from the hunk
+    header, so a patch whose own POST-image occurs elsewhere in the file - an
+    identical call site upstream already has in the safe shape - reverse-applies
+    there cleanly while the real target is untouched. Both directions succeed.
+    Resolving that by whichever check runs first reads the fix as present while
+    it is ABSENT, and reversing on that belief rewrites upstream's correct site
+    INTO the vulnerable shape, turning one vulnerable call site into two on the
+    step immediately before the merge. Both checks run, and a patch that answers
+    to both is reported rather than resolved.
     """
-    if _git_ok("apply", "--check", "-R", str(patch)):
+    reverses = _git_ok("apply", "--check", "-R", str(patch))
+    forwards = _git_ok("apply", "--check", str(patch))
+    if reverses and forwards:
+        return "ambiguous"
+    if reverses:
         return "applied"
-    if _git_ok("apply", "--check", str(patch)):
+    if forwards:
         return "unapplied"
     return "stale"
 
@@ -481,11 +513,16 @@ def _git_ok(*args: str) -> bool:
     return result.returncode == 0
 
 
-def _run_patches(reverse: bool) -> tuple[list[Path], list[Path]]:
-    """Apply (or reverse) the series, returning (moved, stuck).
+def _run_patches(reverse: bool) -> tuple[list[Path], list[tuple[Path, str]]]:
+    """Apply (or reverse) the series, returning (moved, stuck-with-reason).
 
     Already being in the target state is success, not an error: unapply must be
     safe to run twice, because the sync workflow may retry.
+
+    Anything the state machine cannot settle - stale or ambiguous - is carried
+    out with the reason that made it stuck, so the report says which. It is left
+    ALONE either way: acting on a patch we cannot place is how a security fix
+    lands on the wrong lines.
     """
     series = _patches()
     if reverse:
@@ -493,19 +530,19 @@ def _run_patches(reverse: bool) -> tuple[list[Path], list[Path]]:
     want = "unapplied" if reverse else "applied"
 
     moved: list[Path] = []
-    stuck: list[Path] = []
+    stuck: list[tuple[Path, str]] = []
     for patch in series:
         state = _patch_state(patch)
         if state == want:
             continue
-        if state == "stale":
-            stuck.append(patch)
+        if state in ("stale", "ambiguous"):
+            stuck.append((patch, state))
             continue
         args = ["apply", "-R", str(patch)] if reverse else ["apply", str(patch)]
         if _git_ok(*args):
             moved.append(patch)
         else:
-            stuck.append(patch)
+            stuck.append((patch, "failed"))
     return moved, stuck
 
 
@@ -576,7 +613,12 @@ def _verify() -> int:
             failed = True
             print(f"\n{len(not_applied)} security patch(es) are NOT applied:", file=sys.stderr)
             for patch in not_applied:
-                print(f"  {_patch_state(patch):<10} {patch.name}", file=sys.stderr)
+                state = _patch_state(patch)
+                reason = STUCK_REASON.get(state, "")
+                print(
+                    f"  {state:<10} {patch.name}{' - ' + reason if reason else ''}",
+                    file=sys.stderr,
+                )
         else:
             print(f"all {len(series)} security patch(es) applied.")
 
@@ -603,8 +645,8 @@ def _unapply() -> int:
     reverted, stuck = _run_patches(reverse=True)
     for patch in reverted:
         print(f"  reverted  {patch.name}")
-    for patch in stuck:
-        print(f"  STUCK     {patch.name} - will not reverse; the tree has moved", file=sys.stderr)
+    for patch, state in stuck:
+        print(f"  STUCK     {patch.name} - {STUCK_REASON[state]}", file=sys.stderr)
 
     entries = _load_register()
     if not _write_resolutions(base):
@@ -666,14 +708,16 @@ def _apply() -> int:
         print("Left inert rather than applied. Delete them from the register.")
 
     if stuck:
-        print(f"\n{len(stuck)} patch(es) NO LONGER APPLY:", file=sys.stderr)
-        for patch in stuck:
-            print(f"  {patch.name}", file=sys.stderr)
+        print(f"\n{len(stuck)} patch(es) NEED A HUMAN:", file=sys.stderr)
+        for patch, state in stuck:
+            print(f"  {patch.name} - {STUCK_REASON[state]}", file=sys.stderr)
         print(
-            "\nThis is the signal, not a failure. Either upstream fixed it their\n"
-            "own way (delete the patch) or the code moved and the fix needs\n"
-            "re-deriving. To get a drafted verdict on which:\n"
-            "  scripts/security-triage.py --patches",
+            "\nFor a stale patch this is the signal, not a failure: either upstream\n"
+            "fixed it their own way (delete the patch) or the code moved and the fix\n"
+            "needs re-deriving. To get a drafted verdict on which:\n"
+            "  scripts/security-triage.py --patches\n"
+            "An AMBIGUOUS patch is different - re-derive it against the current tree\n"
+            "so it names one site only. Do not force it.",
             file=sys.stderr,
         )
 
