@@ -112,6 +112,23 @@ rerere replays previously-recorded resolutions for our PERMANENT deltas.
 copy outright. Anything left conflicting is a genuine three-way conflict on a
 catalogued file.
 
+**A replayed resolution is not a correct one.** rerere reproduces the edit that
+resolved a conflict whose preimage matched; it has no idea whether the result
+still means anything. The failure it produces is specific and worth recognising:
+our side of a hunk lands over upstream's side of the surrounding code, so the
+file references names nothing imports, or declares parameters nobody passes.
+
+2.33.0 did exactly this to `OnboardingModal.tsx` - our import block, upstream's
+body, seven type errors. It survived six green workflow runs, because the gate
+built common-utils and ran jest, and jest transpiles rather than typechecks.
+The gate now runs `yarn lint` (per package: eslint + `tsc --noEmit`) BEFORE the
+tests, which is the check that was missing.
+
+The general form is worth keeping in mind, because it bit twice in one week: a
+gate that does not exercise the thing it claims to cover reports success from an
+empty run. The other instance was `--unapply` against an empty register - real
+workflow runs, genuinely green, proving only that nothing happened.
+
 ### 3. Rebuild, and find out what upstream took off our hands
 
 `--apply` layers the register back over the NEW upstream block, and applies each

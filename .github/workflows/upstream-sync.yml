@@ -257,6 +257,15 @@ jobs:
           # config that no runner has. It exits 9 before compiling anything, so
           # the gate reported failure without ever running a test.
           yarn build:common-utils
+          # TYPECHECK BEFORE TESTS. `yarn test` is jest, which transpiles rather
+          # than typechecks, so a merge that leaves a file referencing names
+          # nothing imports still runs green here. That is not hypothetical: the
+          # 2.33.0 merge produced exactly that in OnboardingModal.tsx - our
+          # import block over upstream's body - and this gate passed it, six
+          # times, because nothing between the merge and the PR ever ran tsc.
+          # `ci:lint` per package is eslint + tsc --noEmit, which is the check
+          # that was missing.
+          yarn lint
           yarn test
 
       - name: Commit the re-derived lockfile
