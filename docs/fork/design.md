@@ -138,9 +138,9 @@ for **syncing upstream now**, not for hand-patching a dependency we do not own.
 
 ### The exception: a reachable HIGH or CRITICAL
 
-**Ask what the pending sync already clears, before triaging anything.** Alerts are
-raised against the default branch, so an unmerged sync branch is invisible to
-them. In August 2026, 51 of 136 open alerts were already answered by a sync
+**Ask what the pending sync already clears, before triaging anything.** Alerts
+are raised against the default branch, so an unmerged sync branch is invisible
+to them. In August 2026, 51 of 136 open alerts were already answered by a sync
 sitting in a PR -- including every `next` advisory, because 2.33.0 moved it from
 16.1.7 to 16.2.11. Triaging that list first would have been most of a day spent
 on items the merge closes, and any pin written for one is surface held forever
@@ -161,41 +161,43 @@ cannot write down how an attacker gets there, there is nothing to patch.
 ### Standing verdicts
 
 Triaged 2026-08-05 against 136 open alerts. Kept by PACKAGE rather than by alert
-number, because the numbers churn and the reasoning does not. Re-check a row only
-when what pulls the package changes.
+number, because the numbers churn and the reasoning does not. Re-check a row
+only when what pulls the package changes.
 
-| package | pulled by | verdict |
-| --- | --- | --- |
-| `tar` | `node-gyp`, `cacache` | Install-time toolchain. Not in the shipped image, no request path. |
-| `protobufjs` 6.x | `@hyperdx/otel-web-session-recorder` (`~6.11.2`) | Browser recorder, upstream's own package. A force to >=7.5.5 is a major bump across a pinned range. Upstream's to fix. |
-| `systeminformation` | `@opentelemetry/host-metrics` | Command injection needs the attacker to already control host network config. Root range `^5.24.0` admits the fix, so any refresh clears it. |
-| `@opentelemetry/*` | upstream's telemetry stack | 0.57 -> 0.217 is the otel-js renumbering. Forcing it breaks the stack; upstream carries it. |
-| `ws` | `ink`, `jsdom`, `storybook` | Dev, test and CLI. Not the server's socket path. |
-| `lodash` 4.17.x | `@stoplight/*`, `html-webpack-plugin` | Lint and build only. The workspaces themselves are already on 4.18.x. |
-| `sharp` | `next` (`^0.34.5`) | Next's image optimiser, pinned by Next. Moves when Next moves. |
-| `rollup`, `postcss`, `serialize-javascript`, `semver`, `minimatch`, `brace-expansion` | build toolchain | Build-time, processing our own sources. Nothing attacker-supplied reaches them. |
-| `path-to-regexp` | `express` (`~0.1.12`) | The ReDoS needs attacker-controlled ROUTE DEFINITIONS. Ours are static. |
-| `fast-uri` | `ajv` | Used for `$id`/`$ref` resolution. The schemas are ours, not user input. |
-| `validator` | `z-schema` | Schema tooling, not request validation. |
+| package                                                                               | pulled by                                        | verdict                                                                                                                                     |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tar`                                                                                 | `node-gyp`, `cacache`                            | Install-time toolchain. Not in the shipped image, no request path.                                                                          |
+| `protobufjs` 6.x                                                                      | `@hyperdx/otel-web-session-recorder` (`~6.11.2`) | Browser recorder, upstream's own package. A force to >=7.5.5 is a major bump across a pinned range. Upstream's to fix.                      |
+| `systeminformation`                                                                   | `@opentelemetry/host-metrics`                    | Command injection needs the attacker to already control host network config. Root range `^5.24.0` admits the fix, so any refresh clears it. |
+| `@opentelemetry/*`                                                                    | upstream's telemetry stack                       | 0.57 -> 0.217 is the otel-js renumbering. Forcing it breaks the stack; upstream carries it.                                                 |
+| `ws`                                                                                  | `ink`, `jsdom`, `storybook`                      | Dev, test and CLI. Not the server's socket path.                                                                                            |
+| `lodash` 4.17.x                                                                       | `@stoplight/*`, `html-webpack-plugin`            | Lint and build only. The workspaces themselves are already on 4.18.x.                                                                       |
+| `sharp`                                                                               | `next` (`^0.34.5`)                               | Next's image optimiser, pinned by Next. Moves when Next moves.                                                                              |
+| `rollup`, `postcss`, `serialize-javascript`, `semver`, `minimatch`, `brace-expansion` | build toolchain                                  | Build-time, processing our own sources. Nothing attacker-supplied reaches them.                                                             |
+| `path-to-regexp`                                                                      | `express` (`~0.1.12`)                            | The ReDoS needs attacker-controlled ROUTE DEFINITIONS. Ours are static.                                                                     |
+| `fast-uri`                                                                            | `ajv`                                            | Used for `$id`/`$ref` resolution. The schemas are ours, not user input.                                                                     |
+| `validator`                                                                           | `z-schema`                                       | Schema tooling, not request validation.                                                                                                     |
 
 **`ip-address` is the one worth reading.** It looks like the strongest candidate
-on paper: `packages/api/src/utils/validators.ts` uses it to build `isPrivateIp()`,
-the SSRF guard on user-configured webhook URLs, and the advisory is *precisely* an
-SSRF bypass -- leading-zero octets decoded as decimal while the resolver decodes
-them as octal. Advisory plus call site reads as an open-and-shut hit.
+on paper: `packages/api/src/utils/validators.ts` uses it to build
+`isPrivateIp()`, the SSRF guard on user-configured webhook URLs, and the
+advisory is _precisely_ an SSRF bypass -- leading-zero octets decoded as decimal
+while the resolver decodes them as octal. Advisory plus call site reads as an
+open-and-shut hit.
 
 It is not reachable, and only a probe shows why. Both call sites pass
 `new URL(host).hostname`, and the WHATWG URL parser normalises IPv4 hosts before
 the guard sees them: `0177.0.0.1`, `0x7f.0.0.1` and `2130706433` all arrive as
-`127.0.0.1` and are blocked, which is also what the socket layer does on connect.
-The vulnerable decode never runs on a string an attacker chose the encoding of.
+`127.0.0.1` and are blocked, which is also what the socket layer does on
+connect. The vulnerable decode never runs on a string an attacker chose the
+encoding of.
 
-Two things follow. Reading the advisory against the call site would have produced
-a pin that bought nothing and cost a check every sync -- **run the path before
-believing it**. And if a caller is ever added that passes a raw string instead of
-a parsed hostname, this row flips: `isPrivateIp` returns `false` for anything
-`ip-address` cannot parse, so the fall-through is the thing to watch, not the
-octet decoding.
+Two things follow. Reading the advisory against the call site would have
+produced a pin that bought nothing and cost a check every sync -- **run the path
+before believing it**. And if a caller is ever added that passes a raw string
+instead of a parsed hostname, this row flips: `isPrivateIp` returns `false` for
+anything `ip-address` cannot parse, so the fall-through is the thing to watch,
+not the octet decoding.
 
 ### Code scanning: keep it all, sort it by who wrote the line
 

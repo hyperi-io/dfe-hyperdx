@@ -120,8 +120,8 @@ file references names nothing imports, or declares parameters nobody passes.
 
 2.33.0 did exactly this to `OnboardingModal.tsx` - our import block, upstream's
 body, seven type errors. It survived six green workflow runs, because the gate
-built common-utils and ran jest, and jest transpiles rather than typechecks.
-The gate now runs `yarn lint` (per package: eslint + `tsc --noEmit`) BEFORE the
+built common-utils and ran jest, and jest transpiles rather than typechecks. The
+gate now runs `yarn lint` (per package: eslint + `tsc --noEmit`) BEFORE the
 tests, which is the check that was missing.
 
 The general form is worth keeping in mind, because it bit twice in one week: a
@@ -168,12 +168,12 @@ Generated state drifts silently the moment somebody hand-edits the block, and a
 sync is the worst possible moment to discover it.
 
 "In one direction only" is not pedantry. `git apply` searches outward from the
-hunk header, so a patch whose post-image already sits elsewhere in the file --
-a second call site upstream ships in the safe shape -- reverse-applies THERE
-while the real target sits untouched. Such a patch reads as applied while the
-fix is absent, and stripping it before a merge rewrites upstream's correct code
-into the vulnerable shape. The tools call that `ambiguous` and refuse it; the
-fix is to re-derive the patch against the current tree so it names one site.
+hunk header, so a patch whose post-image already sits elsewhere in the file -- a
+second call site upstream ships in the safe shape -- reverse-applies THERE while
+the real target sits untouched. Such a patch reads as applied while the fix is
+absent, and stripping it before a merge rewrites upstream's correct code into
+the vulnerable shape. The tools call that `ambiguous` and refuse it; the fix is
+to re-derive the patch against the current tree so it names one site.
 
 The same workflow runs the tooling's own test suites before any of the above:
 
@@ -183,9 +183,9 @@ python3 -m unittest discover -s scripts/__tests__ -v
 
 They belong in front of the invariants rather than beside them, because every
 line above is a reading taken with those tools. A green check from a broken
-guard proves nothing, and these particular tools decide what fails the build
-and what gets stripped before a merge -- so a regression in them surfaces
-during a sync rather than on the PR that caused it.
+guard proves nothing, and these particular tools decide what fails the build and
+what gets stripped before a merge -- so a regression in them surfaces during a
+sync rather than on the PR that caused it.
 
 ---
 
