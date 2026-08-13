@@ -43,7 +43,12 @@ function ensureUpstream() {
   // A shallow clone has no merge-base; fetch enough history to find one.
   execFileSync(
     'git',
-    ['fetch', '--quiet', 'upstream', '+refs/heads/main:refs/remotes/upstream/main'],
+    [
+      'fetch',
+      '--quiet',
+      'upstream',
+      '+refs/heads/main:refs/remotes/upstream/main',
+    ],
     { stdio: 'inherit' },
   );
 }
@@ -97,12 +102,18 @@ if (tool === 'prettier') {
     byPkg.get(pkg).push(path.relative(pkg, f));
   }
   if (byPkg.size === 0) {
-    console.log('dfe-lint-ours: no changed files under an eslint-configured package — pass');
+    console.log(
+      'dfe-lint-ours: no changed files under an eslint-configured package — pass',
+    );
     process.exit(0);
   }
   for (const [pkg, pkgFiles] of byPkg) {
     console.log(`dfe-lint-ours: eslint ${pkgFiles.length} files in ${pkg}`);
-    const st = run('yarn', ['exec', 'eslint', '--no-warn-ignored', ...pkgFiles], pkg);
+    const st = run(
+      'yarn',
+      ['exec', 'eslint', '--no-warn-ignored', ...pkgFiles],
+      pkg,
+    );
     if (st !== 0) status = st;
   }
 }
