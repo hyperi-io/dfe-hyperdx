@@ -26,5 +26,10 @@ publish:
   container:
     enabled: true
     dockerfile: Dockerfile
+    # amd64 only: the arm64 half runs under qemu and Next.js's build-time
+    # font fetch (next/font) times out inside the emulator. Revisit with an
+    # arm runner or fonts vendored offline.
+    platforms:
+      - linux/amd64
 typescript:
   package_manager: yarn
