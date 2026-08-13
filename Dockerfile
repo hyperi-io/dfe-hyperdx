@@ -95,6 +95,7 @@ USER node
 WORKDIR /app
 COPY --chown=node:node --from=builder /app/node_modules ./node_modules
 COPY --chown=node:node --from=builder /app/packages/api/build ./packages/api/build
+COPY --chown=node:node ./packages/api/bin ./packages/api/bin
 COPY --chown=node:node --from=builder /app/packages/common-utils/dist ./packages/common-utils/dist
 COPY --chown=node:node --from=node_base /app/packages/common-utils/node_modules ./packages/common-utils/node_modules
 COPY --chown=node:node --from=builder /app/packages/app/.next/standalone ./packages/app
@@ -102,6 +103,7 @@ COPY --chown=node:node --from=builder /app/packages/app/.next/static ./packages/
 COPY --chown=node:node --from=builder /app/packages/app/public ./packages/app/packages/app/public
 
 # Set up start script
+COPY --chown=node:node ./docker/hyperdx/refresh-env.js /etc/local/refresh-env.js
 COPY --chown=node:node ./docker/hyperdx/entry.prod.sh /etc/local/entry.sh
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
