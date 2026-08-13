@@ -40,7 +40,6 @@ function ensureUpstream() {
   } catch {
     git('remote', 'add', 'upstream', UPSTREAM_URL);
   }
-  // A shallow clone has no merge-base; fetch enough history to find one.
   execFileSync(
     'git',
     [
@@ -53,9 +52,24 @@ function ensureUpstream() {
   );
 }
 
+function mergeBase() {
+  // A shallow checkout (release-path CI) has no common ancestor within its
+  // horizon and merge-base exits 1 with no message; deepen once and retry.
+  try {
+    return git('merge-base', 'HEAD', 'upstream/main');
+  } catch {
+    if (git('rev-parse', '--is-shallow-repository') === 'true') {
+      execFileSync('git', ['fetch', '--quiet', '--unshallow', 'origin'], {
+        stdio: 'inherit',
+      });
+    }
+    return git('merge-base', 'HEAD', 'upstream/main');
+  }
+}
+
 function changedFiles() {
   ensureUpstream();
-  const base = git('merge-base', 'HEAD', 'upstream/main');
+  const base = mergeBase();
   const out = git('diff', '--name-only', '--diff-filter=d', `${base}...HEAD`);
   return out ? out.split('\n') : [];
 }
