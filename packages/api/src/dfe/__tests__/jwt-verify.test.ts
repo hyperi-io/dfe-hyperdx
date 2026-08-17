@@ -83,13 +83,20 @@ const sign = async (
     .setExpirationTime('5m')
     .sign(opts.key ?? privateKey);
 
-const makeReq = (headers: Record<string, string> = {}): Request =>
+const makeReq = (
+  headers: Record<string, string> = {},
+  path = '/search',
+): Request =>
   ({
     headers,
+    path,
     login: jest.fn((_user: unknown, _opts: unknown, cb: (e?: Error) => void) =>
       cb(),
     ),
   }) as unknown as Request;
+
+const makeRes = (): Response =>
+  ({ sendStatus: jest.fn() }) as unknown as Response;
 
 const res = {} as Response;
 
@@ -343,6 +350,121 @@ describe('engineJwtMiddleware', () => {
     );
 
     expect(next).toHaveBeenCalledWith(expect.any(Error));
+  });
+
+  describe('service tokens (svc:dfe-engine, dfe-engine#149)', () => {
+    const svcClaims = { sub: 'svc:dfe-engine', aud: 'dfe-hyperdx' };
+
+    beforeEach(() => {
+      (dfeConfig as any).DFE_AUTH_DEFAULT_TEAM = 'dfe';
+    });
+
+    it.each(['/team', '/sources', '/connections/abc123'])(
+      'allows %s as the internal service principal on the default team',
+      async path => {
+        const token = await sign(svcClaims);
+        const req = makeReq({ authorization: `Bearer ${token}` }, path);
+        const next = jest.fn() as NextFunction;
+
+        await engineJwtMiddleware(req, makeRes(), next);
+
+        expect(findOrCreateTeamByName).toHaveBeenCalledWith('dfe');
+        expect(findOrCreateUserFromOIDC).toHaveBeenCalledWith(
+          'svc-dfe-engine@dfe.internal',
+          TEAM._id,
+          'DFE Engine (service)',
+        );
+        expect(req.login).toHaveBeenCalledWith(
+          USER,
+          { session: false },
+          expect.any(Function),
+        );
+        expect(next).toHaveBeenCalledWith();
+      },
+    );
+
+    it("JIT-creates the 'default' team when DFE_AUTH_DEFAULT_TEAM is unset", async () => {
+      (dfeConfig as any).DFE_AUTH_DEFAULT_TEAM = undefined;
+      const token = await sign(svcClaims);
+      const req = makeReq({ authorization: `Bearer ${token}` }, '/team');
+
+      await engineJwtMiddleware(req, makeRes(), jest.fn() as NextFunction);
+
+      expect(findOrCreateTeamByName).toHaveBeenCalledWith('default');
+    });
+
+    it('accepts an audience ARRAY containing dfe-hyperdx', async () => {
+      const token = await sign({
+        sub: 'svc:dfe-engine',
+        aud: ['other', 'dfe-hyperdx'],
+      });
+      const req = makeReq({ authorization: `Bearer ${token}` }, '/sources');
+
+      await engineJwtMiddleware(req, makeRes(), jest.fn() as NextFunction);
+
+      expect(req.login).toHaveBeenCalled();
+    });
+
+    it('rejects a service token outside the control surface with 403', async () => {
+      const token = await sign(svcClaims);
+      const req = makeReq({ authorization: `Bearer ${token}` }, '/dashboards');
+      const svcRes = makeRes();
+      const next = jest.fn();
+
+      await engineJwtMiddleware(req, svcRes, next as NextFunction);
+
+      expect(svcRes.sendStatus).toHaveBeenCalledWith(403);
+      expect(req.login).not.toHaveBeenCalled();
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it('does not treat a prefix collision as control surface', async () => {
+      // '/teammates' must not ride on the '/team' prefix.
+      const token = await sign(svcClaims);
+      const req = makeReq({ authorization: `Bearer ${token}` }, '/teammates');
+      const svcRes = makeRes();
+
+      await engineJwtMiddleware(req, svcRes, jest.fn() as NextFunction);
+
+      expect(svcRes.sendStatus).toHaveBeenCalledWith(403);
+      expect(req.login).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['wrong audience', { sub: 'svc:dfe-engine', aud: 'somewhere-else' }],
+      ['missing audience', { sub: 'svc:dfe-engine' }],
+    ])(
+      'falls through (no login, no 403) on a service token with %s',
+      async (_label, claims) => {
+        const token = await sign(claims);
+        const req = makeReq({ authorization: `Bearer ${token}` }, '/team');
+        const svcRes = makeRes();
+        const next = jest.fn();
+
+        await engineJwtMiddleware(req, svcRes, next as NextFunction);
+
+        expect(next).toHaveBeenCalledWith();
+        expect(req.login).not.toHaveBeenCalled();
+        expect(svcRes.sendStatus).not.toHaveBeenCalled();
+        expect(findOrCreateTeamByName).not.toHaveBeenCalled();
+      },
+    );
+
+    it('propagates a service identity-resolution failure to the error handler', async () => {
+      (findOrCreateTeamByName as jest.Mock).mockRejectedValue(
+        new Error('mongo down'),
+      );
+      const token = await sign(svcClaims);
+      const next = jest.fn();
+
+      await engineJwtMiddleware(
+        makeReq({ authorization: `Bearer ${token}` }, '/team'),
+        makeRes(),
+        next as NextFunction,
+      );
+
+      expect(next).toHaveBeenCalledWith(expect.any(Error));
+    });
   });
 });
 

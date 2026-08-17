@@ -83,6 +83,78 @@ function extractGroups(payload: JWTPayload): string[] {
   return [];
 }
 
+// Engine machine identity (dfe-engine#149): the engine self-signs short-lived
+// service JWTs over the same JWKS trust, so no stored inter-service credential.
+const SERVICE_SUBJECT = 'svc:dfe-engine';
+const SERVICE_AUDIENCE = 'dfe-hyperdx';
+// Synthetic principal the service identity acts as; unique-email safe.
+const SERVICE_PRINCIPAL_EMAIL = 'svc-dfe-engine@dfe.internal';
+// The only surface a service token may touch: team/source/connection control.
+const SERVICE_CONTROL_PREFIXES = ['/team', '/sources', '/connections'];
+
+function hasServiceAudience(payload: JWTPayload): boolean {
+  const aud = payload.aud;
+  return Array.isArray(aud)
+    ? aud.includes(SERVICE_AUDIENCE)
+    : aud === SERVICE_AUDIENCE;
+}
+
+function isControlPath(path: string): boolean {
+  return SERVICE_CONTROL_PREFIXES.some(
+    prefix => path === prefix || path.startsWith(`${prefix}/`),
+  );
+}
+
+/**
+ * Resolve a verified service token to the internal admin principal on the
+ * default team, JIT-creating that team so first-boot seeding works before any
+ * human user exists. Non-control endpoints reject the service identity.
+ */
+async function handleServiceToken(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+  payload: JWTPayload,
+) {
+  if (!hasServiceAudience(payload)) {
+    // Wrong/missing audience is an invalid token: fall through like the rest.
+    logger.warn(
+      { aud: payload.aud },
+      'DFE: service token missing dfe-hyperdx audience',
+    );
+    return next();
+  }
+
+  if (!isControlPath(req.path)) {
+    logger.warn(
+      { path: req.path },
+      'DFE: service token rejected outside the control surface',
+    );
+    return res.sendStatus(403);
+  }
+
+  try {
+    const teamName = dfeConfig.DFE_AUTH_DEFAULT_TEAM || 'default';
+    const { team } = await findOrCreateTeamByName(teamName);
+    const { user } = await findOrCreateUserFromOIDC(
+      SERVICE_PRINCIPAL_EMAIL,
+      team._id,
+      'DFE Engine (service)',
+    );
+
+    req.login(user, { session: false }, err => {
+      if (err) {
+        logger.error({ err }, 'DFE: service req.login failed');
+        return next(err);
+      }
+      next();
+    });
+  } catch (err) {
+    logger.error({ err }, 'DFE: service identity resolution failed');
+    next(err);
+  }
+}
+
 /**
  * Express middleware that verifies the engine's ES384 JWT and resolves the
  * user + team from its claims. Falls through on missing/invalid tokens.
@@ -113,6 +185,10 @@ export async function engineJwtMiddleware(
       'DFE: engine JWT verification failed',
     );
     return next();
+  }
+
+  if (payload.sub === SERVICE_SUBJECT) {
+    return handleServiceToken(req, res, next, payload);
   }
 
   const email = typeof payload.sub === 'string' ? payload.sub : undefined;
