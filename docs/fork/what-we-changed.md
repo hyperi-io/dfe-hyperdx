@@ -150,12 +150,12 @@ Rationale:
   UserActionsButton, LandingPage
 - Search language defaults to SQL, not upstream's Lucene (an explicit user
   selection still wins). One seam: `getStoredLanguage()` in
-  `components/SearchInput/SearchWhereInput.tsx` returns `'sql'` instead of
-  null when nothing is stored, which flips every `?? 'lucene'` fallback at
-  once; the three sites that bypassed the seam (`DBSearchPage.tsx` saved-search
-  default, `DBDashboardPage.tsx` URL-parser default, `ContextSidePanel.tsx`
-  destructure default) now consult it. Callers' dead `?? 'lucene'` tails are
-  deliberately left to minimise the upstream diff. Pinned by
+  `components/SearchInput/SearchWhereInput.tsx` returns `'sql'` instead of null
+  when nothing is stored, which flips every `?? 'lucene'` fallback at once; the
+  three sites that bypassed the seam (`DBSearchPage.tsx` saved-search default,
+  `DBDashboardPage.tsx` URL-parser default, `ContextSidePanel.tsx` destructure
+  default) now consult it. Callers' dead `?? 'lucene'` tails are deliberately
+  left to minimise the upstream diff. Pinned by
   `dfe/__tests__/searchLanguageDefault.test.ts`.
 
 ## Build, CI and tooling
