@@ -1144,7 +1144,7 @@ export function DBSearchPage() {
           ? searchedSource.defaultTableSelectExpression
           : undefined),
       where: _savedSearch?.where ?? '',
-      whereLanguage: _savedSearch?.whereLanguage ?? 'lucene',
+      whereLanguage: _savedSearch?.whereLanguage ?? getStoredLanguage(),
       source: _savedSearch?.source,
       filters: _savedSearch?.filters ?? [],
       orderBy: _savedSearch?.orderBy || defaultOrderBy,

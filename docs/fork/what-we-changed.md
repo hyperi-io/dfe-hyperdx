@@ -144,9 +144,19 @@ Rationale:
 ## Branding and frontend
 
 - `packages/app/src/theme/themes/dfe/**` - tokens, Mantine theme, logomark and
-  wordmark assets
+  wordmark assets. Typography is Inter + IBM Plex Mono - see ADR
+  [0005](../decisions/0005-console-typography.md).
 - `packages/app/src/dfe/components/**` - AppNav, SidebarMenu, ThemeToggle,
   UserActionsButton, LandingPage
+- Search language defaults to SQL, not upstream's Lucene (an explicit user
+  selection still wins). One seam: `getStoredLanguage()` in
+  `components/SearchInput/SearchWhereInput.tsx` returns `'sql'` instead of null
+  when nothing is stored, which flips every `?? 'lucene'` fallback at once; the
+  three sites that bypassed the seam (`DBSearchPage.tsx` saved-search default,
+  `DBDashboardPage.tsx` URL-parser default, `ContextSidePanel.tsx` destructure
+  default) now consult it. Callers' dead `?? 'lucene'` tails are deliberately
+  left to minimise the upstream diff. Pinned by
+  `dfe/__tests__/searchLanguageDefault.test.ts`.
 
 ## Build, CI and tooling
 
