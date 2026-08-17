@@ -142,6 +142,8 @@ async function handleServiceToken(
       team._id,
       'DFE Engine (service)',
     );
+    // The one principal allowed on the admin surface (see dfe/middleware/admin-lockdown).
+    req.dfeIsServicePrincipal = true;
 
     req.login(user, { session: false }, err => {
       if (err) {
