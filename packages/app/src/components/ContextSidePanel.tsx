@@ -55,7 +55,7 @@ export default function ContextSubpanel({
 }: ContextSubpanelProps) {
   const QUERY_KEY_PREFIX = 'context';
   const origTimestamp = rowData[ROW_DATA_ALIASES.TIMESTAMP];
-  const { whereLanguage: originalLanguage = 'lucene' } =
+  const { whereLanguage: originalLanguage = getStoredLanguage() } =
     dbSqlRowTableConfig ?? {};
   const [range, setRange] = useState<number>(ms('30s'));
   const [contextBy, setContextBy] = useState<ContextBy>(ContextBy.All);

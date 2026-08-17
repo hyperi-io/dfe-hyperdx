@@ -361,9 +361,7 @@ const tileToLayoutItem = (chart: Tile): RGL.Layout => ({
 // TODO: This is a hack to set the default time range
 const defaultTimeRange = parseTimeQuery('Past 1h', false) as [Date, Date];
 
-const whereLanguageParser = parseAsString.withDefault(
-  typeof window !== 'undefined' ? (getStoredLanguage() ?? 'lucene') : 'lucene',
-);
+const whereLanguageParser = parseAsString.withDefault(getStoredLanguage());
 
 const Tile = forwardRef(
   (

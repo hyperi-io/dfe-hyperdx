@@ -9,7 +9,8 @@
  */
 
 @mixin base-tokens {
-  --color-brand-dark: #010847;
+  /* hyperi-graphics brand SSoT navy (hyperi.tokens.json); matches the logo SVGs */
+  --color-brand-dark: #000647;
   --color-brand-primary: #10398f;
   --color-brand-primary-hover: #3964c0;
   --color-brand-secondary: #2ea4f6;

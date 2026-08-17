@@ -66,6 +66,7 @@ packages/app/pages/register.tsx
 packages/app/public/pyodide/pyodide.asm.js
 packages/app/public/pyodide/pyodide.js
 packages/app/src/DBChartPage.tsx
+packages/app/src/DBDashboardPage.tsx
 packages/app/src/DBSearchPage.tsx
 packages/app/src/LandingPage.tsx
 packages/app/src/Spotlights.tsx
@@ -73,10 +74,12 @@ packages/app/src/UserPreferencesModal.tsx
 packages/app/src/__tests__/ChartUtils.test.ts
 packages/app/src/__tests__/utils.test.ts
 packages/app/src/components/AppNav/AppNav.tsx
+packages/app/src/components/ContextSidePanel.tsx
 packages/app/src/components/DBRowDataPanel.tsx
 packages/app/src/components/DBRowJsonViewer.tsx
 packages/app/src/components/DBRowTable.tsx
 packages/app/src/components/OnboardingModal.tsx
+packages/app/src/components/SearchInput/SearchWhereInput.tsx
 packages/app/src/components/__tests__/DBRowDataPanel.test.ts
 packages/app/src/config.ts
 packages/app/src/hooks/__tests__/useRowWhere.test.tsx

@@ -15,10 +15,11 @@ import styles from './SearchWhereInput.module.scss';
 const STORAGE_KEY = 'hdx-search-where-language';
 
 /**
- * Returns the user's stored WHERE language preference, or null if none or unavailable.
- * Use when building form/URL defaults so the same selection applies across pages and on navigation.
+ * Returns the user's stored WHERE language preference, else 'sql' (the DFE
+ * default; upstream defaults to Lucene). Callers' `?? 'lucene'` fallbacks are
+ * unreachable and kept as-is to minimise the upstream diff.
  */
-export function getStoredLanguage(): 'sql' | 'lucene' | null {
+export function getStoredLanguage(): 'sql' | 'lucene' {
   try {
     const stored =
       typeof window !== 'undefined'
@@ -28,7 +29,7 @@ export function getStoredLanguage(): 'sql' | 'lucene' | null {
   } catch {
     // localStorage may throw in private browsing
   }
-  return null;
+  return 'sql';
 }
 
 function setStoredLanguage(lang: 'sql' | 'lucene'): void {
@@ -177,7 +178,7 @@ export default function SearchWhereInput({
     name: languageName as FieldPath<any>,
   });
 
-  const language: 'sql' | 'lucene' = languageField.value ?? 'lucene';
+  const language: 'sql' | 'lucene' = languageField.value ?? getStoredLanguage();
   const isSql = language === 'sql';
 
   const handleLanguageChange = (lang: 'sql' | 'lucene') => {
