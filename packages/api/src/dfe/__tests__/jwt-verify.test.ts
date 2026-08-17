@@ -38,6 +38,10 @@ jest.mock('@/dfe/controllers/user-provisioning', () => ({
   findOrCreateUserFromOIDC: jest.fn(),
 }));
 
+jest.mock('@/dfe/controllers/org-connection', () => ({
+  ensureOrgConnection: jest.fn(),
+}));
+
 const actualJose = jest.requireActual('jose');
 let publicKey: CryptoKey;
 

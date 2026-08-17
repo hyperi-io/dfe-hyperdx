@@ -18,6 +18,7 @@ import type { JWTPayload, JWTVerifyGetKey } from 'jose';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 import * as dfeConfig from '@/dfe/config';
+import { ensureOrgConnection } from '@/dfe/controllers/org-connection';
 import { findOrCreateTeamByName } from '@/dfe/controllers/team-provisioning';
 import { findOrCreateUserFromOIDC } from '@/dfe/controllers/user-provisioning';
 import logger from '@/utils/logger';
@@ -203,6 +204,8 @@ export async function engineJwtMiddleware(
 
     const { team } = await findOrCreateTeamByName(teamName);
     const { user } = await findOrCreateUserFromOIDC(email, team._id);
+    // Seed the caller's OWN org connection on the team (non-fatal, self-gated).
+    await ensureOrgConnection(token, String(team._id));
 
     // req.login() populates req.user and makes req.isAuthenticated() true.
     req.login(user, { session: false }, err => {

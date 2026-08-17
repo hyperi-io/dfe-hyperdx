@@ -2,6 +2,7 @@
 // Find-or-create teams from OIDC group claims.
 // This is a NEW controller — it does not modify any upstream HyperDX files.
 
+import * as dfeConfig from '@/dfe/config';
 import Team from '@/models/team';
 import { setupTeamDefaults } from '@/setupDefaults';
 import logger from '@/utils/logger';
@@ -23,14 +24,19 @@ export async function findOrCreateTeamByName(name: string) {
 
   logger.info({ teamId: team._id, teamName: name }, 'DFE: created new team');
 
-  // Provision defaults (connections, sources) for the new team
-  try {
-    await setupTeamDefaults(team._id.toString());
-  } catch (err) {
-    logger.warn(
-      { teamId: team._id, err },
-      'DFE: failed to setup team defaults (non-fatal)',
-    );
+  // In oidc-proxy mode the team's connection is seeded per team by the identity
+  // middleware from the engine (one connection per team), so the global
+  // DEFAULT_CONNECTIONS blob is skipped here - seeding it would hand every team
+  // every org's connection. Header-dev and upstream keep the global seeding.
+  if (dfeConfig.DFE_AUTH_MODE !== 'oidc-proxy') {
+    try {
+      await setupTeamDefaults(team._id.toString());
+    } catch (err) {
+      logger.warn(
+        { teamId: team._id, err },
+        'DFE: failed to setup team defaults (non-fatal)',
+      );
+    }
   }
 
   return { team, created: true };

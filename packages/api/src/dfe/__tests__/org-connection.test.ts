@@ -1,0 +1,116 @@
+/**
+ * DFE per-org connection provisioning.
+ *
+ * The invariant: a team is seeded with ONLY its own org connection (fetched from
+ * the engine with the caller's token) and only when it has none, so a team never
+ * ends up holding another org's credentials and a login is never blocked on the
+ * engine being reachable.
+ */
+/* eslint-disable @typescript-eslint/no-unsafe-type-assertion --
+ * Reading jest.Mock off a mocked module asserts a narrower type than the real
+ * export; scoped here rather than relaxed in upstream's eslint config.
+ */
+
+jest.mock('@/utils/logger', () => ({
+  __esModule: true,
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
+jest.mock('@/controllers/connection', () => ({
+  getConnectionsByTeam: jest.fn(),
+  createConnection: jest.fn(),
+}));
+
+jest.mock('@/controllers/sources', () => ({
+  getSources: jest.fn(),
+  createSource: jest.fn(),
+}));
+
+jest.mock('@/dfe/config', () => ({
+  DFE_ENGINE_JWKS_URL: 'http://engine.test:8000/.well-known/jwks.json',
+}));
+
+import {
+  createConnection,
+  getConnectionsByTeam,
+} from '@/controllers/connection';
+import { createSource, getSources } from '@/controllers/sources';
+import { ensureOrgConnection } from '@/dfe/controllers/org-connection';
+
+const mockConns = getConnectionsByTeam as jest.Mock;
+const mockCreateConn = createConnection as jest.Mock;
+const mockSources = getSources as jest.Mock;
+const mockCreateSource = createSource as jest.Mock;
+
+const ORG_CONN = {
+  name: 'acme',
+  host: 'http://ch:8123',
+  username: 'dfe_org_acme',
+  password: 'pw',
+};
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  global.fetch = jest.fn();
+});
+
+function okFetch(body: unknown) {
+  (global.fetch as jest.Mock).mockResolvedValue({
+    ok: true,
+    json: async () => body,
+  });
+}
+
+describe('ensureOrgConnection', () => {
+  test('seeds the caller org connection + one source on an empty team', async () => {
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([]);
+    okFetch(ORG_CONN);
+
+    await ensureOrgConnection('tok', 'team-1');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://engine.test:8000/api/v1/hyperdx/connection',
+      expect.objectContaining({ headers: { Authorization: 'Bearer tok' } }),
+    );
+    expect(mockCreateConn).toHaveBeenCalledWith(
+      'team-1',
+      expect.objectContaining({ username: 'dfe_org_acme', name: 'acme' }),
+    );
+    expect(mockCreateSource).toHaveBeenCalledWith(
+      'team-1',
+      expect.objectContaining({ connection: 'conn-1', name: 'events' }),
+    );
+  });
+
+  test('is a no-op when the team already has a connection', async () => {
+    mockConns.mockResolvedValue([{ _id: 'existing' }]);
+
+    await ensureOrgConnection('tok', 'team-1');
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockCreateConn).not.toHaveBeenCalled();
+  });
+
+  test('creates nothing when the engine refuses (non-fatal)', async () => {
+    mockConns.mockResolvedValue([]);
+    (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 403 });
+
+    await ensureOrgConnection('tok', 'team-1');
+
+    expect(mockCreateConn).not.toHaveBeenCalled();
+    expect(mockCreateSource).not.toHaveBeenCalled();
+  });
+
+  test('swallows a thrown controller error so login is never blocked', async () => {
+    mockConns.mockRejectedValue(new Error('db down'));
+
+    await expect(ensureOrgConnection('tok', 'team-1')).resolves.toBeUndefined();
+  });
+});
