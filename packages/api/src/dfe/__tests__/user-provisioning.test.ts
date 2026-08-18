@@ -33,8 +33,8 @@ jest.mock('@/models/user', () => {
   return { __esModule: true, default: User };
 });
 
-import User from '@/models/user';
 import { findOrCreateUserFromOIDC } from '@/dfe/controllers/user-provisioning';
+import User from '@/models/user';
 
 const mockFindOne = (User as unknown as { findOne: jest.Mock }).findOne;
 const TEAM = 'team-1' as unknown as Parameters<

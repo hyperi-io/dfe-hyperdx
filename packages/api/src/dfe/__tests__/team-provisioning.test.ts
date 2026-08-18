@@ -41,8 +41,8 @@ jest.mock('@/models/team', () => {
   return { __esModule: true, default: Team };
 });
 
-import Team from '@/models/team';
 import { findOrCreateTeamByName } from '@/dfe/controllers/team-provisioning';
+import Team from '@/models/team';
 
 const mockFindOne = (Team as unknown as { findOne: jest.Mock }).findOne;
 
