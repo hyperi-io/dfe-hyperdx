@@ -5,6 +5,10 @@ import session from 'express-session';
 import onHeaders from 'on-headers';
 
 import * as config from './config';
+import {
+  blockClickhouseProxyTest,
+  requireServicePrincipal,
+} from './dfe/middleware/admin-lockdown';
 import queryExportRouter from './dfe/routers/query-export';
 import mcpRouter from './mcp/app';
 import { isUserAuthenticated } from './middleware/auth';
@@ -111,21 +115,56 @@ if (config.USAGE_STATS_ENABLED && !config.IS_CI) {
 app.use('/', routers.rootRouter);
 
 // SELF-AUTHENTICATED ROUTES (validated via access key, not session middleware)
-app.use('/mcp', mcpRouter);
+// DFE: MCP rides the personal access key and is an agent/admin surface, so it is
+// engine-only in DFE mode (requireServicePrincipal is a no-op otherwise).
+app.use('/mcp', requireServicePrincipal, mcpRouter);
 
 // PRIVATE ROUTES
 app.use('/ai', isUserAuthenticated, routers.aiRouter);
-app.use('/alerts', isUserAuthenticated, routers.alertsRouter);
+// DFE: admin surfaces (alerts, team, webhooks, connections, sources) are
+// engine-only. requireServicePrincipal is a no-op when DFE auth is off.
+app.use(
+  '/alerts',
+  isUserAuthenticated,
+  requireServicePrincipal,
+  routers.alertsRouter,
+);
 app.use('/dashboards', isUserAuthenticated, routers.dashboardRouter);
 app.use('/me', isUserAuthenticated, routers.meRouter);
-app.use('/team', isUserAuthenticated, routers.teamRouter);
-app.use('/webhooks', isUserAuthenticated, routers.webhooksRouter);
-app.use('/connections', isUserAuthenticated, connectionsRouter);
-app.use('/sources', isUserAuthenticated, sourcesRouter);
+app.use(
+  '/team',
+  isUserAuthenticated,
+  requireServicePrincipal,
+  routers.teamRouter,
+);
+app.use(
+  '/webhooks',
+  isUserAuthenticated,
+  requireServicePrincipal,
+  routers.webhooksRouter,
+);
+app.use(
+  '/connections',
+  isUserAuthenticated,
+  requireServicePrincipal,
+  connectionsRouter,
+);
+app.use(
+  '/sources',
+  isUserAuthenticated,
+  requireServicePrincipal,
+  sourcesRouter,
+);
 app.use('/saved-search', isUserAuthenticated, savedSearchRouter);
 app.use('/favorites', isUserAuthenticated, favoritesRouter);
 app.use('/pinned-filters', isUserAuthenticated, pinnedFiltersRouter);
-app.use('/clickhouse-proxy', isUserAuthenticated, clickhouseProxyRouter);
+// DFE: the connection tester sub-route is admin; the rest of the proxy stays open.
+app.use(
+  '/clickhouse-proxy',
+  isUserAuthenticated,
+  blockClickhouseProxyTest,
+  clickhouseProxyRouter,
+);
 if (config.IS_PROMQL_ENABLED) {
   app.use('/v1/prometheus', isUserAuthenticated, routers.prometheusRouter);
 }
@@ -153,7 +192,8 @@ if (
   logger.info('Swagger UI setup and available at /api/v2/docs');
 }
 
-app.use('/api/v2', externalRoutersV2);
+// DFE: the external API rides the personal access key; engine-only in DFE mode.
+app.use('/api/v2', requireServicePrincipal, externalRoutersV2);
 
 // error handling
 app.use(appErrorHandler);

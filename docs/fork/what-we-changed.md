@@ -113,6 +113,16 @@ injected at the edge.
 Rationale:
 [../decisions/0004-casbin-removed.md](../decisions/0004-casbin-removed.md).
 
+**Admin surfaces are engine-only (`dfe/middleware/admin-lockdown.ts`).** HyperDX
+is embedded-only, so a human uses it for search, saved searches, dashboards and
+charts - nothing else. `requireServicePrincipal` 403s any non-service principal
+on the admin surfaces wired in `api-app.ts` (`/team`, `/connections`,
+`/sources`, `/webhooks`, `/alerts`, the external `/api/v2`, and `/mcp`), and
+`blockClickhouseProxyTest` closes the connection-tester sub-route while leaving
+the query proxy open. Both are a no-op when `DFE_AUTH_MODE` is unset, so
+upstream behaviour and tests are unchanged. The service flag is set by
+`jwt-verify.ts` for the `svc:dfe-engine` identity.
+
 ## DFE integration features
 
 - `packages/api/src/dfe/routers/query-export.ts` - export a saved search or SQL
