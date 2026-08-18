@@ -14,6 +14,7 @@ import type { Request, Response } from 'express';
 jest.mock('@/dfe/config', () => ({ isDfeEnabled: true }));
 
 import {
+  allowReadElseServicePrincipal,
   blockClickhouseProxyTest,
   requireServicePrincipal,
 } from '@/dfe/middleware/admin-lockdown';
@@ -81,6 +82,43 @@ describe('blockClickhouseProxyTest (DFE mode on)', () => {
     const next = jest.fn();
     blockClickhouseProxyTest(
       { path: '/test', dfeIsServicePrincipal: true } as Request,
+      r,
+      next,
+    );
+    expect(next).toHaveBeenCalled();
+  });
+});
+
+describe('allowReadElseServicePrincipal (DFE mode on)', () => {
+  test('lets a human GET through (read is team-scoped downstream)', () => {
+    const r = res();
+    const next = jest.fn();
+    allowReadElseServicePrincipal(
+      { method: 'GET', dfeIsServicePrincipal: false } as Request,
+      r,
+      next,
+    );
+    expect(next).toHaveBeenCalled();
+    expect(r.status).not.toHaveBeenCalled();
+  });
+
+  test('403s a human WRITE', () => {
+    const r = res();
+    const next = jest.fn();
+    allowReadElseServicePrincipal(
+      { method: 'POST', dfeIsServicePrincipal: false } as Request,
+      r,
+      next,
+    );
+    expect(r.status).toHaveBeenCalledWith(403);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('lets the service principal WRITE', () => {
+    const r = res();
+    const next = jest.fn();
+    allowReadElseServicePrincipal(
+      { method: 'POST', dfeIsServicePrincipal: true } as Request,
       r,
       next,
     );

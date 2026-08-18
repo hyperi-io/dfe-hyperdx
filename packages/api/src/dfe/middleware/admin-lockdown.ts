@@ -44,6 +44,30 @@ export function requireServicePrincipal(
 }
 
 /**
+ * Let an authenticated human READ but not write: GET/HEAD pass, everything else
+ * needs the engine service identity (DFE mode only). Used for /sources -- the
+ * embedded search UI must list its own team's sources, and that read is fenced
+ * to req.user.team server-side and carries no secrets, so it is safe to open
+ * while source CRUD stays engine-only.
+ */
+export function allowReadElseServicePrincipal(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  if (!isDfeEnabled) {
+    return next();
+  }
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    return next();
+  }
+  if (req.dfeIsServicePrincipal) {
+    return next();
+  }
+  return res.status(403).json(FORBIDDEN);
+}
+
+/**
  * Block the ClickHouse connection-tester sub-route while leaving the query proxy
  * open. `POST /clickhouse-proxy/test` probes an arbitrary host/username/password,
  * an admin action, on a mount that must otherwise stay open for query execution.
