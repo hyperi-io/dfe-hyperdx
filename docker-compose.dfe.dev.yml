@@ -12,6 +12,23 @@ services:
     deploy:
       replicas: 0
 
+      # ClickHouse is built and run by the separate DFE repo (dfe-docker). The app
+  # reaches it via DEFAULT_CONNECTIONS in .env.dfe (http://localhost:8124).
+  ch-server:
+    deploy:
+      replicas: 0
+
+  # Both collectors exist only to write into ch-server, and depend_on it as
+  # service_healthy — with ClickHouse gone they would block the stack from
+  # coming up, so they are disabled here too. Ingest belongs to dfe-docker.
+  otel-collector:
+    deploy:
+      replicas: 0
+
+  otel-collector-json:
+    deploy:
+      replicas: 0
+
   postgres:
     image: ghcr.io/ferretdb/postgres-documentdb:17-0.107.0-ferretdb-2.7.0
     environment:

@@ -47,7 +47,7 @@
     "cli:dev": "yarn workspace @hyperdx/cli dev",
     "dev:down": "sh -c '. ./scripts/dev-env.sh && docker compose -p \"$HDX_DEV_PROJECT\" -f docker-compose.dev.yml down && sh ./scripts/dev-kill-ports.sh'",
     "dev:compose": "sh -c '. ./scripts/dev-env.sh && docker compose -p \"$HDX_DEV_PROJECT\" -f docker-compose.dev.yml'",
-    "dev:dfe": "yarn build:common-utils && dotenvx run --convention=nextjs -- docker compose --env-file .env.dfe -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml up -d && yarn app:dev:dfe && docker compose --env-file .env.dfe -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml down",
+    "dev:dfe": "yarn build:common-utils && dotenvx run --convention=nextjs -- docker compose --env-file .env.dfe -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml up -d && dotenvx run -f .env.dfe -f .env -- yarn app:dev:dfe && docker compose --env-file .env.dfe -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml down",
     "knip": "knip",
     "knip:ci": "knip --reporter json",
     "lint": "node scripts/dfe-lint-ours.mjs eslint",
