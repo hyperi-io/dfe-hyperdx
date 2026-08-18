@@ -12,7 +12,12 @@
 
 jest.mock('@/utils/logger', () => ({
   __esModule: true,
-  default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
 }));
 
 // oidc-proxy mode: setupTeamDefaults is skipped (the engine seeds per team).

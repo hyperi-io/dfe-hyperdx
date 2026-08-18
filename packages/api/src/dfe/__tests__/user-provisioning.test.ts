@@ -13,7 +13,12 @@
 
 jest.mock('@/utils/logger', () => ({
   __esModule: true,
-  default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
 }));
 
 const save = jest.fn();
@@ -32,7 +37,9 @@ import User from '@/models/user';
 import { findOrCreateUserFromOIDC } from '@/dfe/controllers/user-provisioning';
 
 const mockFindOne = (User as unknown as { findOne: jest.Mock }).findOne;
-const TEAM = 'team-1' as unknown as Parameters<typeof findOrCreateUserFromOIDC>[1];
+const TEAM = 'team-1' as unknown as Parameters<
+  typeof findOrCreateUserFromOIDC
+>[1];
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -75,7 +82,10 @@ describe('findOrCreateUserFromOIDC', () => {
       .mockResolvedValueOnce({ _id: 'winner', email: 'race@b.com' });
     save.mockRejectedValueOnce({ code: 11000 });
 
-    const { user, created } = await findOrCreateUserFromOIDC('race@b.com', TEAM);
+    const { user, created } = await findOrCreateUserFromOIDC(
+      'race@b.com',
+      TEAM,
+    );
 
     expect(created).toBe(false);
     expect(user).toEqual({ _id: 'winner', email: 'race@b.com' });

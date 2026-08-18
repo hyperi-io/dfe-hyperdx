@@ -204,7 +204,8 @@ export async function engineJwtMiddleware(
     const groups = extractGroups(payload);
     const teamName = groups[0] || dfeConfig.DFE_AUTH_DEFAULT_TEAM || 'default';
 
-    const { team, created: teamCreated } = await findOrCreateTeamByName(teamName);
+    const { team, created: teamCreated } =
+      await findOrCreateTeamByName(teamName);
     const { user } = await findOrCreateUserFromOIDC(email, team._id);
     // Seed the caller's OWN org connection only on the request that created the
     // team. First login fires team + sources + connections at once, so gating on
