@@ -9,6 +9,7 @@ import {
   blockClickhouseProxyTest,
   requireServicePrincipal,
 } from './dfe/middleware/admin-lockdown';
+import { mountObservability } from './dfe/observability';
 import queryExportRouter from './dfe/routers/query-export';
 import mcpRouter from './mcp/app';
 import { isUserAuthenticated } from './middleware/auth';
@@ -57,6 +58,12 @@ if (!config.IS_CI && config.FRONTEND_URL) {
 
 app.disable('x-powered-by');
 app.use(compression());
+
+// DFE scalo observability surface (/livez, /readyz, /metrics). Mounted here,
+// ahead of session/passport and the admin-lockdown middleware, because probes and
+// scrapes are unauthenticated -- they must not hit passport or isUserAuthenticated.
+mountObservability(app);
+
 app.use(express.json({ limit: '32mb' }));
 app.use(express.text({ limit: '32mb' }));
 app.use(express.urlencoded({ extended: false, limit: '32mb' }));
