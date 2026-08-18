@@ -151,10 +151,14 @@ app.use(
   requireServicePrincipal,
   routers.webhooksRouter,
 );
+// /connections is READ-open to a human (the embedded search UI lists its team's
+// connections to resolve a source's ClickHouse target) but WRITE-locked to the
+// engine. The read is team-scoped (find({ team }) from the session) and
+// secret-free -- the connection password is select:false, so it never serialises.
 app.use(
   '/connections',
   isUserAuthenticated,
-  requireServicePrincipal,
+  allowReadElseServicePrincipal,
   connectionsRouter,
 );
 // /sources is READ-open to a human (the embedded search UI lists its own team's
