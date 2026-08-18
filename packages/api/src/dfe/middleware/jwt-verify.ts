@@ -204,10 +204,15 @@ export async function engineJwtMiddleware(
     const groups = extractGroups(payload);
     const teamName = groups[0] || dfeConfig.DFE_AUTH_DEFAULT_TEAM || 'default';
 
-    const { team } = await findOrCreateTeamByName(teamName);
+    const { team, created: teamCreated } = await findOrCreateTeamByName(teamName);
     const { user } = await findOrCreateUserFromOIDC(email, team._id);
-    // Seed the caller's OWN org connection on the team (non-fatal, self-gated).
-    await ensureOrgConnection(token, String(team._id));
+    // Seed the caller's OWN org connection only on the request that created the
+    // team. First login fires team + sources + connections at once, so gating on
+    // the unique creator stops them racing duplicate connections onto one team.
+    // Non-fatal - a HyperDX login never blocks on the engine.
+    if (teamCreated) {
+      await ensureOrgConnection(token, String(team._id));
+    }
 
     // req.login() populates req.user and makes req.isAuthenticated() true.
     req.login(user, { session: false }, err => {
