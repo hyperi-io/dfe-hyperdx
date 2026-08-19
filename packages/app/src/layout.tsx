@@ -2,6 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { Button, Center, Group, Text } from '@mantine/core';
+import { useIsomorphicEffect } from '@mantine/hooks';
 import { IconX } from '@tabler/icons-react';
 
 // INTERIM (2.29 merge): use upstream's AppNav. The DFE nav (@/dfe/components/AppNav
@@ -34,9 +35,11 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
   React.useEffect(() => setHasMounted(true), []);
 
   // DFE embed (chromeless) mode: when embedded in dfe-ui (?embed=1) dfe-ui owns the
-  // nav, so hyperdx renders NO AppNav. Resolved after mount to avoid SSR mismatch.
+  // nav, so hyperdx renders NO AppNav. The flip runs in an isomorphic layout effect
+  // so it lands before paint - a plain useEffect flashed the AppNav for one frame.
+  // Both SSR and the first client render start false, so hydration still matches.
   const [isEmbed, setIsEmbed] = React.useState(false);
-  React.useEffect(() => setIsEmbed(isEmbedChrome()), []);
+  useIsomorphicEffect(() => setIsEmbed(isEmbedChrome()), []);
 
   const kioskQueryValue = router.query.kiosk;
   const isDashboardKioskMode =

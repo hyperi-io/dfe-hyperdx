@@ -73,11 +73,32 @@ async function fetchOrgConnection(
   }
 }
 
+// The engine returns this ClickHouse username for the PLATFORM/admin team - the
+// unrestricted reader that sees every org's rows. Any other username (the
+// per-org dfe_org_<org> readers) is a tenant, row-policy fenced to one org.
+const PLATFORM_READER_USERNAME = 'dfe_query_reader';
+
+// The OTel database. Renamed from `default` to `dfe`, so every otel_* table is
+// dfe.otel_*. Kept as one constant so the rename lands in a single place.
+const OTEL_DATABASE = 'dfe';
+
+// A team is the platform/admin team iff its connection reads as the unrestricted
+// platform reader. Anything else (including the dfe_org_<org> tenant readers, or
+// an unrecognised username) is treated as a tenant and gets ONLY `events` - otel
+// is unfenced operator telemetry and must never reach an org_viewer.
+function isPlatformReader(username: string): boolean {
+  return username === PLATFORM_READER_USERNAME;
+}
+
 // One generic log source over dfe.default, pointed at the team's single
-// connection - the per-team equivalent of the DEFAULT_SOURCES template.
-function eventsSource(connectionId: string) {
+// connection - the per-team equivalent of the DEFAULT_SOURCES template. EVERY
+// team gets this, platform and tenant alike. NAMED `default` to match the CH
+// table (dfe.default) and the receiver/engine `default_source: default`
+// convention - one name for the catch-all source across the whole suite. A
+// future suite-wide rename to `events` is a separate coordinated change.
+function defaultSource(connectionId: string) {
   return {
-    name: 'events',
+    name: 'default',
     kind: 'log',
     connection: connectionId,
     from: { databaseName: 'dfe', tableName: 'default' },
@@ -89,8 +110,111 @@ function eventsSource(connectionId: string) {
   };
 }
 
+// The hunt-detection source over dfe_hunts.detection (security-hunt matches).
+// Seeded on EVERY team like `default`, and org-fenced the same way: the tenant
+// row policy on dfe_hunts.detection scopes a tenant to its own _org_id while the
+// platform reader sees every org. Interim hard-coding per the source-manifest
+// TODO below - hunts is one of the DFE tables the engine will later own.
+function huntsSource(connectionId: string) {
+  return {
+    name: 'hunts',
+    kind: 'log',
+    connection: connectionId,
+    from: { databaseName: 'dfe_hunts', tableName: 'detection' },
+    timestampValueExpression: '_timestamp',
+    displayedTimestampValueExpression: '_timestamp',
+    implicitColumnExpression: 'rule_name',
+    bodyExpression: '_json',
+    defaultTableSelectExpression:
+      '_timestamp,_org_id,severity,hunt_name,rule_name,_source',
+  };
+}
+
+// PLATFORM-ONLY otel sources. The three below (log/trace/metric) are seeded ONLY
+// on the platform/admin team - operator telemetry the standard OTel collector
+// schema writes into dfe.otel_*. Expressions match the columns upstream infers
+// for an OTel schema (see app/src/source.ts getSourceConfig inference, and the
+// hdx-eval setup builders) so HyperDX's search/trace/metric UIs light up the
+// same as a native OTel deployment.
+//
+// Column expressions are the standard OTel ClickHouse exporter columns:
+// Timestamp/Body/ServiceName/SeverityText for logs; Duration/SpanId/TraceId for
+// traces; TimeUnix/ServiceName plus the five metricTables for metrics.
+function otelLogsSource(connectionId: string) {
+  return {
+    name: 'otel_logs',
+    kind: 'log',
+    connection: connectionId,
+    from: { databaseName: OTEL_DATABASE, tableName: 'otel_logs' },
+    timestampValueExpression: 'Timestamp',
+    displayedTimestampValueExpression: 'Timestamp',
+    defaultTableSelectExpression:
+      'Timestamp, ServiceName as service, SeverityText as level, Body',
+    serviceNameExpression: 'ServiceName',
+    severityTextExpression: 'SeverityText',
+    bodyExpression: 'Body',
+    traceIdExpression: 'TraceId',
+    spanIdExpression: 'SpanId',
+    implicitColumnExpression: 'Body',
+    eventAttributesExpression: 'LogAttributes',
+    resourceAttributesExpression: 'ResourceAttributes',
+  };
+}
+
+function otelTracesSource(connectionId: string) {
+  return {
+    name: 'otel_traces',
+    kind: 'trace',
+    connection: connectionId,
+    from: { databaseName: OTEL_DATABASE, tableName: 'otel_traces' },
+    timestampValueExpression: 'Timestamp',
+    displayedTimestampValueExpression: 'Timestamp',
+    defaultTableSelectExpression:
+      'Timestamp, ServiceName as service, StatusCode as level, round(Duration / 1e6) as duration, SpanName',
+    durationExpression: 'Duration',
+    durationPrecision: 9,
+    traceIdExpression: 'TraceId',
+    spanIdExpression: 'SpanId',
+    parentSpanIdExpression: 'ParentSpanId',
+    spanNameExpression: 'SpanName',
+    spanKindExpression: 'SpanKind',
+    statusCodeExpression: 'StatusCode',
+    statusMessageExpression: 'StatusMessage',
+    serviceNameExpression: 'ServiceName',
+    resourceAttributesExpression: 'ResourceAttributes',
+    eventAttributesExpression: 'SpanAttributes',
+    implicitColumnExpression: 'SpanName',
+  };
+}
+
+// The Metric kind bundles all five OTel metric tables in one source: from carries
+// the database and the metricTables map carries the per-kind BARE table names
+// (renderChartConfig overrides from.tableName per kind), so from.databaseName=dfe
+// resolves each to dfe.otel_metrics_*. Keys are the MetricsDataType enum string
+// values - note 'exponential histogram' has a space.
+function otelMetricsSource(connectionId: string) {
+  return {
+    name: 'otel_metrics',
+    kind: 'metric',
+    connection: connectionId,
+    from: { databaseName: OTEL_DATABASE, tableName: '' },
+    timestampValueExpression: 'TimeUnix',
+    serviceNameExpression: 'ServiceName',
+    resourceAttributesExpression: 'ResourceAttributes',
+    metricTables: {
+      gauge: 'otel_metrics_gauge',
+      sum: 'otel_metrics_sum',
+      histogram: 'otel_metrics_histogram',
+      'exponential histogram': 'otel_metrics_exponential_histogram',
+      summary: 'otel_metrics_summary',
+    },
+  };
+}
+
 /**
- * Ensure the caller's team holds ONLY its own org connection (plus one source).
+ * Ensure the caller's team holds ONLY its own org connection, plus its seed
+ * sources: `events` for every team, and the otel sources as well for the
+ * platform/admin team (see the source builders above for the RBAC split).
  *
  * Idempotent and non-fatal: a team that already has a connection is left alone
  * (the first user seeds it, the rest reuse), and any failure is logged and
@@ -120,10 +244,33 @@ export async function ensureOrgConnection(
 
     const sources = await getSources(teamId);
     if (sources.length === 0) {
-      await createSource(
-        teamId,
-        eventsSource(String(conn._id)) as Parameters<typeof createSource>[1],
-      );
+      const connectionId = String(conn._id);
+
+      // EVERY team gets `default` and `hunts` (both org-fenced by their tenant
+      // row policies). The platform/admin team ALSO gets the otel sources; tenant
+      // teams never do.
+      //
+      // TODO(dfe-engine): the seeded source SET is hard-coded here for now -
+      // default + hunts + the three otel kinds. The engine will later own the
+      // canonical reserved-source-name list (validation) AND the per-deployment
+      // source manifest (hunts/rules/other DFE tables, meta-schema ingest) as its
+      // SSoT; when that endpoint exists, fetch the list from the engine and seed
+      // from it rather than extending this array. This loop is the extension point.
+      const sourceSpecs: Record<string, unknown>[] = [
+        defaultSource(connectionId),
+        huntsSource(connectionId),
+      ];
+      if (isPlatformReader(material.username)) {
+        sourceSpecs.push(
+          otelLogsSource(connectionId),
+          otelTracesSource(connectionId),
+          otelMetricsSource(connectionId),
+        );
+      }
+
+      for (const spec of sourceSpecs) {
+        await createSource(teamId, spec as Parameters<typeof createSource>[1]);
+      }
     }
   } catch (err) {
     logger.warn(
