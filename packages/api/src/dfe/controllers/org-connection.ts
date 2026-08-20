@@ -18,6 +18,7 @@ import {
 } from '@/controllers/connection';
 import { createSource, getSources } from '@/controllers/sources';
 import * as dfeConfig from '@/dfe/config';
+import { seedTeamDashboards, SourceIdsByName } from '@/dfe/dashboards';
 import logger from '@/utils/logger';
 
 interface OrgConnection {
@@ -268,9 +269,28 @@ export async function ensureOrgConnection(
         );
       }
 
+      // Ids are captured as they are minted: a dashboard tile references its
+      // source by ObjectId, and this is the only point where the mapping from
+      // the seeded source NAME to that id exists.
+      const sourceIds: SourceIdsByName = new Map();
       for (const spec of sourceSpecs) {
-        await createSource(teamId, spec as Parameters<typeof createSource>[1]);
+        const created = await createSource(
+          teamId,
+          spec as Parameters<typeof createSource>[1],
+        );
+        // createSource resolves undefined for an unrecognised kind; an unmapped
+        // name then drops the dashboards that reference it rather than seeding a
+        // tile pointing at nothing.
+        if (created?._id) {
+          sourceIds.set(String(spec.name), String(created._id));
+        }
       }
+
+      await seedTeamDashboards(
+        teamId,
+        sourceIds,
+        isPlatformReader(material.username),
+      );
     }
   } catch (err) {
     logger.warn(
