@@ -22,18 +22,25 @@ const THEME_INIT_SCRIPT = `
 })();
 `;
 
-// Applied before React hydrates to prevent a flash of the full chrome sidebar
-// when embedded in dfe-ui (?embed=1). Mirrors the sessionStorage persistence of
-// isEmbedChrome() so internal embed navigation stays chromeless; the class hides
-// .dfe-appnav-slot via globals.css before first paint.
+// Applied before React hydrates when embedded in dfe-ui (?embed=1): adds
+// html.dfe-embed (globals.css hides .dfe-appnav-slot, no chrome-sidebar flash)
+// and primes data-mantine-color-scheme from ?theme (no dark-background flash
+// before the host's light/dark resolves). Both persist via sessionStorage so
+// internal embed navigation stays chromeless and correctly themed.
 const EMBED_INIT_SCRIPT = `
 (function () {
   try {
-    var embed = new URLSearchParams(window.location.search).get('embed') === '1'
+    var params = new URLSearchParams(window.location.search);
+    var embed = params.get('embed') === '1'
       || window.sessionStorage.getItem('dfeEmbed') === '1';
     if (embed) {
       window.sessionStorage.setItem('dfeEmbed', '1');
       document.documentElement.classList.add('dfe-embed');
+      var theme = params.get('theme') || window.sessionStorage.getItem('dfeEmbedTheme');
+      if (theme === 'light' || theme === 'dark') {
+        window.sessionStorage.setItem('dfeEmbedTheme', theme);
+        document.documentElement.setAttribute('data-mantine-color-scheme', theme);
+      }
     }
   } catch (e) {}
 })();
