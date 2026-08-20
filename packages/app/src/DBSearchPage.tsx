@@ -2275,7 +2275,6 @@ export function DBSearchPage() {
             <CreateRuleFromSearch
               savedSearchName={savedSearch?.name}
               chartConfig={chartConfig}
-              savedSearchId={savedSearchId}
             />
           </>
         </Flex>

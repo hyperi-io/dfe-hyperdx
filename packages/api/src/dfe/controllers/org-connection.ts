@@ -31,7 +31,9 @@ const ENGINE_TIMEOUT_MS = 5000;
 
 // The engine API shares an origin with its JWKS endpoint, so we derive the base
 // URL from DFE_ENGINE_JWKS_URL rather than carrying a second env var.
-function engineOrigin(): string | undefined {
+// Exported as the single definition of the engine origin so DFE routers reuse it
+// rather than re-deriving it from the JWKS URL.
+export function engineOrigin(): string | undefined {
   const jwks = dfeConfig.DFE_ENGINE_JWKS_URL;
   if (!jwks) {
     return undefined;

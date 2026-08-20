@@ -16,8 +16,7 @@ const parse = (t?: string | null): Scheme | null =>
  * already bounds who can frame this app at all, so this is defence in depth
  * rather than the only control. It is still worth having: an unchecked
  * `message` listener is a habit that gets copied to a handler where the
- * payload is NOT cosmetic. `CreateRuleFromSearch` validates origin the same
- * way for the same reason.
+ * payload is NOT cosmetic.
  *
  * Same-origin is accepted because the standard deploy serves dfe-ui and this
  * app behind one gateway origin, where DFE_UI_BASE_URL is typically unset.

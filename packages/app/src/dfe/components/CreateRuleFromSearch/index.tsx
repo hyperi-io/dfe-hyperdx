@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { HTTPError } from 'ky';
 import { ChartConfig } from '@hyperdx/common-utils/dist/types';
 import { Button } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
@@ -18,48 +19,20 @@ export type ExportedSql = {
   };
 };
 
-/**
- * Hand the exported SQL to the DFE UI's rule builder in a new tab.
- *
- * The tab is not listening the instant `window.open` returns, so repeat the
- * post until it acknowledges, then stop. The 15s ceiling bounds the retry for
- * the case where the user closes the tab or never loads it.
- */
-export function handOffToRuleBuilder(payload: Record<string, unknown>): void {
-  const target = window.open(`${DFE_UI_BASE_URL}/rules/create`, '_blank');
-  if (!target) return;
-
-  const message = { type: 'CREATE_RULE_FROM_SEARCH', payload };
-
-  const interval = setInterval(() => {
-    target.postMessage(message, DFE_UI_BASE_URL);
-  }, 300);
-
-  const cleanup = () => {
-    clearInterval(interval);
-    window.removeEventListener('message', onAck);
-  };
-
-  const onAck = (event: MessageEvent) => {
-    if (
-      event.origin === DFE_UI_BASE_URL &&
-      event.data?.type === 'CREATE_RULE_ACK'
-    ) {
-      cleanup();
-    }
-  };
-
-  window.addEventListener('message', onAck);
-  setTimeout(cleanup, 15_000);
-}
+// The engine's RuleFromHyperdxResponse, forwarded verbatim by /dfe/create-rule.
+type CreatedRule = {
+  id: string;
+  display_name: string;
+  sanitize_summary?: Record<string, unknown>;
+  warnings?: string[];
+  sql_errors?: unknown[];
+};
 
 export function CreateRuleFromSearch({
   chartConfig,
-  savedSearchId,
   savedSearchName,
 }: {
   chartConfig: ChartConfig | null;
-  savedSearchId?: string | null;
   savedSearchName?: string | null;
 }) {
   // Deliberately plain useState rather than react-query's useMutation. This
@@ -72,28 +45,45 @@ export function CreateRuleFromSearch({
   const onClick = useCallback(async () => {
     setIsPending(true);
     try {
-      const data = await hdxServer(`dfe/export-sql`, {
+      // Render the search to a concrete ClickHouse SELECT server-side; the
+      // engine's from-hyperdx endpoint takes the expanded raw SQL.
+      const { rawSql } = await hdxServer(`dfe/export-sql`, {
         method: 'POST',
         json: { chartConfig },
       }).json<ExportedSql>();
 
-      handOffToRuleBuilder({
-        ...data,
-        savedSearchId,
-        savedSearchName,
-        chartConfig,
-      });
+      // Create the rule through the engine (rule:write enforced there). The
+      // route forwards a 403 for org_viewer / missing permission.
+      const rule = await hdxServer(`dfe/create-rule`, {
+        method: 'POST',
+        json: {
+          rawSql,
+          savedSearchName: savedSearchName ?? undefined,
+        },
+      }).json<CreatedRule>();
+
+      // Open the created rule in the DFE UI.
+      window.open(`${DFE_UI_BASE_URL}/rules/${rule.id}`, '_blank');
     } catch (err) {
-      notifications.show({
-        color: 'red',
-        title: 'Failed to create rule',
-        message: err instanceof Error ? err.message : String(err),
-        autoClose: 5000,
-      });
+      if (err instanceof HTTPError && err.response.status === 403) {
+        notifications.show({
+          color: 'red',
+          title: 'Permission denied',
+          message: 'You do not have permission to create rules.',
+          autoClose: 5000,
+        });
+      } else {
+        notifications.show({
+          color: 'red',
+          title: 'Failed to create rule',
+          message: err instanceof Error ? err.message : String(err),
+          autoClose: 5000,
+        });
+      }
     } finally {
       setIsPending(false);
     }
-  }, [chartConfig, savedSearchId, savedSearchName]);
+  }, [chartConfig, savedSearchName]);
 
   return (
     <Button
