@@ -241,9 +241,14 @@ export function buildThroughputDashboard(
       name: 'Event-time skew distribution (s)',
       source: s,
       displayType: DisplayType.Heatmap,
+      // A non-aggregate valueExpression puts DBHeatmapChart on its direct branch:
+      // count() per widthBucket of the expression. countExpression is set
+      // explicitly for parity with what the chart editor writes, though the
+      // renderer defaults to the same thing.
       select: [
         {
           valueExpression: EVENT_SKEW_SECONDS,
+          countExpression: 'count()',
           aggCondition: '',
           aggConditionLanguage: 'lucene',
         },
