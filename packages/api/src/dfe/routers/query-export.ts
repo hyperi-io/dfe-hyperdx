@@ -19,6 +19,8 @@ import { validateRequest } from 'zod-express-middleware';
 
 import { getConnectionById } from '@/controllers/connection';
 import { getSource } from '@/controllers/sources';
+import { engineOrigin } from '@/dfe/controllers/org-connection';
+import { extractToken } from '@/dfe/middleware/jwt-verify';
 import { getNonNullUserWithTeam } from '@/middleware/auth';
 import { Api500Error } from '@/utils/errors';
 import logger from '@/utils/logger';
@@ -32,6 +34,22 @@ const exportSqlBodySchema = z.object({
   startTime: z.number().optional(),
   endTime: z.number().optional(),
 });
+
+// The expanded rule input the UI hands us — the same fields CreateRuleFromSearch
+// gathered for export-sql, i.e. the rendered rawSql plus the saved-search metadata.
+// Field names mirror what the UI holds (camelCase); we translate to the engine's
+// snake_case RuleFromHyperdxRequest below.
+const createRuleBodySchema = z.object({
+  rawSql: z.string().min(1),
+  savedSearchName: z.string().optional(),
+  severity: z.string().optional(),
+  hunt_name: z.string().optional(),
+  source: z.string().optional(),
+});
+
+// Bound the wait on the engine so a slow/unreachable control plane fails the
+// request instead of hanging the client. Matches org-connection's ceiling.
+const ENGINE_TIMEOUT_MS = 5000;
 
 /**
  * POST /dfe/export-sql
@@ -153,6 +171,84 @@ router.post(
       });
     } catch (err) {
       logger.error({ err }, 'DFE: export-sql failed');
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /dfe/create-rule
+ *
+ * Creates a DFE hunt rule from an expanded HyperDX saved search by forwarding to
+ * the engine's POST /api/v1/rules/from-hyperdx. The engine sanitises the SQL,
+ * creates the rule, and returns its id. The route is a thin authenticated proxy:
+ * it carries the caller's engine token so the engine's rule:write RBAC applies
+ * (org_viewer lacks the grant -> 403), and forwards the engine's status + body
+ * unchanged so that 403 (and any 4xx) surfaces to the client.
+ *
+ * Request body:
+ *   - rawSql: string (the expanded ClickHouse SELECT)
+ *   - savedSearchName?: string
+ *   - severity?: string (low|medium|high|critical; engine defaults to medium)
+ *   - hunt_name?: string
+ *   - source?: string
+ *
+ * Response: the engine's RuleFromHyperdxResponse JSON, including the new rule id.
+ */
+router.post(
+  '/create-rule',
+  validateRequest({ body: createRuleBodySchema }),
+  async (req, res, next) => {
+    try {
+      const token = extractToken(req);
+      if (!token) {
+        return res.status(401).json({ error: 'Missing engine token' });
+      }
+
+      const origin = engineOrigin();
+      if (!origin) {
+        throw new Api500Error('Engine origin is not configured');
+      }
+
+      const { rawSql, savedSearchName, severity, hunt_name, source } = req.body;
+
+      const engineResp = await fetch(`${origin}/api/v1/rules/from-hyperdx`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          raw_sql: rawSql,
+          saved_search_name: savedSearchName,
+          severity,
+          hunt_name,
+          source,
+        }),
+        signal: AbortSignal.timeout(ENGINE_TIMEOUT_MS),
+      });
+
+      // Forward the engine's status and JSON body verbatim so RBAC failures
+      // (403 for org_viewer / missing rule:write) and validation errors reach
+      // the client unchanged. A non-JSON body degrades to a plain error object.
+      const bodyText = await engineResp.text();
+      let payload: unknown;
+      try {
+        payload = bodyText ? JSON.parse(bodyText) : {};
+      } catch {
+        payload = { error: bodyText || 'Engine returned a non-JSON response' };
+      }
+
+      if (!engineResp.ok) {
+        logger.warn(
+          { status: engineResp.status },
+          'DFE: engine rule creation refused',
+        );
+      }
+
+      return res.status(engineResp.status).json(payload);
+    } catch (err) {
+      logger.error({ err }, 'DFE: create-rule failed');
       next(err);
     }
   },

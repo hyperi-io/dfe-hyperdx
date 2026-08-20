@@ -42,7 +42,9 @@ function getJwks(): JWTVerifyGetKey {
 
 // Token source: Authorization: Bearer header, else a dfe_token cookie.
 // We parse the raw Cookie header ourselves to avoid pulling in cookie-parser.
-function extractToken(req: Request): string | undefined {
+// Exported so DFE routers (e.g. create-rule) can forward the caller's engine
+// token upstream without re-implementing the header/cookie extraction.
+export function extractToken(req: Request): string | undefined {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.slice('Bearer '.length).trim();
