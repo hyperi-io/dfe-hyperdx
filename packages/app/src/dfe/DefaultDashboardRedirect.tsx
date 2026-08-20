@@ -7,8 +7,8 @@
 //
 // This is a NEW file - it does not modify any upstream HyperDX files.
 
-import { useRouter } from 'next/router';
 import { useEffect } from 'react';
+import { useRouter } from 'next/router';
 import { Center, Loader, Stack, Text } from '@mantine/core';
 
 import { useDashboards } from '@/dashboard';
@@ -26,9 +26,7 @@ export default function DefaultDashboardRedirect() {
       return;
     }
 
-    const target = dashboards.find(
-      d => d.name === DFE_DEFAULT_DASHBOARD_NAME,
-    );
+    const target = dashboards.find(d => d.name === DFE_DEFAULT_DASHBOARD_NAME);
 
     // Falling back to the dashboard list rather than 404ing: a deployment whose
     // seeding has not run yet should still land somewhere useful.
