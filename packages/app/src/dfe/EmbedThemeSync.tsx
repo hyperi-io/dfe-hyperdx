@@ -38,19 +38,21 @@ function isTrustedHost(origin: string): boolean {
  * embedded. Feed the result into ThemeWrapper's colorScheme.
  */
 export function useEmbedColorScheme(fallback: Scheme): Scheme {
-  const [embedScheme, setEmbedScheme] = useState<Scheme | null>(null);
+  // Resolve the embed scheme on the FIRST client render (lazy init), so the
+  // initial paint is already the host's light/dark instead of hyperdx's dark
+  // fallback - otherwise the background flashes black before the effect runs.
+  const [embedScheme, setEmbedScheme] = useState<Scheme | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      if (!isEmbedChrome()) return null;
+      return parse(new URLSearchParams(window.location.search).get('theme'));
+    } catch {
+      return null;
+    }
+  });
 
   useEffect(() => {
     if (!isEmbedChrome()) return;
-
-    try {
-      const initial = parse(
-        new URLSearchParams(window.location.search).get('theme'),
-      );
-      if (initial) setEmbedScheme(initial);
-    } catch {
-      /* ignore */
-    }
 
     const onMessage = (e: MessageEvent) => {
       if (!isTrustedHost(e.origin)) return;
