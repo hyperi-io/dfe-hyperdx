@@ -62,6 +62,9 @@ packages/app/CHANGELOG.md
 packages/app/next.config.mjs
 packages/app/package.json
 packages/app/pages/_app.tsx
+# One added inline head script (EMBED_INIT_SCRIPT), mirroring upstream's own
+# THEME_INIT_SCRIPT, to hide the chrome sidebar before first paint in embed mode.
+packages/app/pages/_document.tsx
 packages/app/pages/register.tsx
 packages/app/public/pyodide/pyodide.asm.js
 packages/app/public/pyodide/pyodide.js

@@ -22,6 +22,23 @@ const THEME_INIT_SCRIPT = `
 })();
 `;
 
+// Applied before React hydrates to prevent a flash of the full chrome sidebar
+// when embedded in dfe-ui (?embed=1). Mirrors the sessionStorage persistence of
+// isEmbedChrome() so internal embed navigation stays chromeless; the class hides
+// .dfe-appnav-slot via globals.css before first paint.
+const EMBED_INIT_SCRIPT = `
+(function () {
+  try {
+    var embed = new URLSearchParams(window.location.search).get('embed') === '1'
+      || window.sessionStorage.getItem('dfeEmbed') === '1';
+    if (embed) {
+      window.sessionStorage.setItem('dfeEmbed', '1');
+      document.documentElement.classList.add('dfe-embed');
+    }
+  } catch (e) {}
+})();
+`;
+
 export default function Document() {
   const fontClasses = [
     ibmPlexMono.variable,
@@ -37,6 +54,7 @@ export default function Document() {
         {/* eslint-disable-next-line @next/next/no-sync-scripts */}
         <script src="/__ENV.js" />
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: EMBED_INIT_SCRIPT }} />
         {!IS_CLICKHOUSE_BUILD && (
           <>
             {/* eslint-disable-next-line @next/next/no-sync-scripts */}
