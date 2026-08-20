@@ -66,8 +66,15 @@ function okFetch(body: unknown) {
   });
 }
 
+const PLATFORM_CONN = {
+  name: 'platform',
+  host: 'http://ch:8123',
+  username: 'dfe_query_reader',
+  password: 'pw',
+};
+
 describe('ensureOrgConnection', () => {
-  test('seeds the caller org connection + one source on an empty team', async () => {
+  test('a tenant team is seeded with the org connection + ONLY the default source', async () => {
     mockConns.mockResolvedValue([]);
     mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
     mockSources.mockResolvedValue([]);
@@ -83,9 +90,35 @@ describe('ensureOrgConnection', () => {
       'team-1',
       expect.objectContaining({ username: 'dfe_org_acme', name: 'acme' }),
     );
+    // A tenant gets `default` + `hunts` only - never the otel sources.
+    const seeded = mockCreateSource.mock.calls.map(c => c[1].name);
+    expect(seeded).toEqual(['default', 'hunts']);
     expect(mockCreateSource).toHaveBeenCalledWith(
       'team-1',
-      expect.objectContaining({ connection: 'conn-1', name: 'events' }),
+      expect.objectContaining({ connection: 'conn-1', name: 'default' }),
+    );
+  });
+
+  test('the platform team ALSO gets the three otel sources', async () => {
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([]);
+    okFetch(PLATFORM_CONN);
+
+    await ensureOrgConnection('tok', 'team-1');
+
+    // default + hunts (every team) then the three otel kinds, all on one connection.
+    const seeded = mockCreateSource.mock.calls.map(c => c[1].name);
+    expect(seeded).toEqual([
+      'default',
+      'hunts',
+      'otel_logs',
+      'otel_traces',
+      'otel_metrics',
+    ]);
+    expect(mockCreateSource).toHaveBeenCalledWith(
+      'team-1',
+      expect.objectContaining({ connection: 'conn-1', kind: 'trace' }),
     );
   });
 
