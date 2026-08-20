@@ -35,33 +35,17 @@ jest.mock('@/dfe/config', () => ({
   DFE_ENGINE_JWKS_URL: 'http://engine.test:8000/.well-known/jwks.json',
 }));
 
-jest.mock('@/dfe/dashboards', () => ({
-  seedTeamDashboards: jest.fn(),
-}));
-
 import {
   createConnection,
   getConnectionsByTeam,
 } from '@/controllers/connection';
 import { createSource, getSources } from '@/controllers/sources';
 import { ensureOrgConnection } from '@/dfe/controllers/org-connection';
-import { seedTeamDashboards } from '@/dfe/dashboards';
 
 const mockConns = getConnectionsByTeam as jest.Mock;
 const mockCreateConn = createConnection as jest.Mock;
 const mockSources = getSources as jest.Mock;
 const mockCreateSource = createSource as jest.Mock;
-const mockSeedDashboards = seedTeamDashboards as jest.Mock;
-
-// The real createSource resolves the created doc; the id is what the dashboard
-// tiles reference, so it has to be present for the seeding assertions to mean
-// anything.
-function createSourceReturnsIds() {
-  let n = 0;
-  mockCreateSource.mockImplementation(() =>
-    Promise.resolve({ _id: `src-${++n}` }),
-  );
-}
 
 const ORG_CONN = {
   name: 'acme',
@@ -157,41 +141,7 @@ describe('ensureOrgConnection', () => {
     expect(mockCreateSource).not.toHaveBeenCalled();
   });
 
-  test('seeds dashboards with the source ids it just minted, tenant-flagged', async () => {
-    mockConns.mockResolvedValue([]);
-    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
-    mockSources.mockResolvedValue([]);
-    createSourceReturnsIds();
-    okFetch(ORG_CONN);
-
-    await ensureOrgConnection('tok', 'team-1');
-
-    expect(mockSeedDashboards).toHaveBeenCalledTimes(1);
-    const [teamId, sourceIds, isPlatform] = mockSeedDashboards.mock.calls[0];
-    expect(teamId).toBe('team-1');
-    expect(isPlatform).toBe(false);
-    expect([...sourceIds.entries()]).toEqual([
-      ['default', 'src-1'],
-      ['hunts', 'src-2'],
-    ]);
-  });
-
-  test('flags the platform team and passes it the otel source ids', async () => {
-    mockConns.mockResolvedValue([]);
-    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
-    mockSources.mockResolvedValue([]);
-    createSourceReturnsIds();
-    okFetch(PLATFORM_CONN);
-
-    await ensureOrgConnection('tok', 'team-1');
-
-    const [, sourceIds, isPlatform] = mockSeedDashboards.mock.calls[0];
-    expect(isPlatform).toBe(true);
-    expect(sourceIds.get('otel_metrics')).toBe('src-5');
-    expect(sourceIds.get('otel_logs')).toBe('src-3');
-  });
-
-  test('seeds no dashboards when the team already has sources', async () => {
+  test('creates no sources when the team already has some', async () => {
     mockConns.mockResolvedValue([]);
     mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
     mockSources.mockResolvedValue([{ _id: 'existing-source' }]);
@@ -200,7 +150,6 @@ describe('ensureOrgConnection', () => {
     await ensureOrgConnection('tok', 'team-1');
 
     expect(mockCreateSource).not.toHaveBeenCalled();
-    expect(mockSeedDashboards).not.toHaveBeenCalled();
   });
 
   test('swallows a thrown controller error so login is never blocked', async () => {

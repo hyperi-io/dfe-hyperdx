@@ -151,6 +151,23 @@ upstream behaviour and tests are unchanged. The service flag is set by
   and its routes are hidden by the embed nav gating. Detection is the DFE rules
   engine's job. Rationale:
   [../decisions/0002-alerting-disabled-for-dfe-rules.md](../decisions/0002-alerting-disabled-for-dfe-rules.md).
+- `packages/api/src/dfe/middleware/provisioned-lockdown.ts` - 403 on PATCH and
+  DELETE against a dashboard the provisioner owns. Not polish: the provisioner
+  runs on a one-minute cron and `$set`s tiles every pass, so an unguarded edit is
+  reverted within 60s with no error. Users take their own copy through Export
+  Dashboard -> Import Dashboard, which needed no change.
+- **`packages/api/src/tasks/provisionDashboards/index.ts` - the one edit to a
+  pristine upstream file** (catalogued in `.fork-surface`). `syncDashboards` wrote
+  tiles verbatim, so a file naming a source by name stored a name where an
+  ObjectId belongs and the tile rendered dead; upstream's own `AUTO_PROVISION.md`
+  example has the same bug. `resolveDashboardRefs` matches source and connection
+  names case-insensitively, as `DBDashboardImportPage` does interactively.
+  Unresolvable references pass through unchanged by default, so upstream's
+  behaviour and its dangling-source fixture still hold;
+  `DASHBOARD_PROVISIONER_REQUIRE_REFS=true` skips the dashboard instead. That flag
+  is the RBAC mechanism for the DFE set: a tenant team holds no otel source, so the
+  platform dashboards never resolve for it. Content is dfe-engine's, mounted in by
+  dfe-infra and dfe-docker.
 
 ## Config and bootstrap
 
