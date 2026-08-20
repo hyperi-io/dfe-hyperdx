@@ -141,11 +141,12 @@ upstream behaviour and tests are unchanged. The service flag is set by
   columns too.
 - `packages/app/src/dfe/embedFeatures.ts` + `EmbedThemeSync.tsx` - chromeless
   embed mode: feature gating by route, and live theme sync from the host UI.
-  `pages/_document.tsx` carries one added inline head script (`EMBED_INIT_SCRIPT`,
-  alongside upstream's own `THEME_INIT_SCRIPT`) that sets `html.dfe-embed` from
-  the `embed=1` URL param / persisted flag before hydration; `styles/globals.css`
-  hides `.dfe-appnav-slot` (the layout.tsx wrapper) under that class, so the full
-  chrome sidebar never flashes before React removes it.
+  `pages/_document.tsx` carries one added inline head script
+  (`EMBED_INIT_SCRIPT`, alongside upstream's own `THEME_INIT_SCRIPT`) that sets
+  `html.dfe-embed` from the `embed=1` URL param / persisted flag before
+  hydration; `styles/globals.css` hides `.dfe-appnav-slot` (the layout.tsx
+  wrapper) under that class, so the full chrome sidebar never flashes before
+  React removes it.
 - **Alerting is disabled, not removed.** HyperDX's alert checker is not started
   and its routes are hidden by the embed nav gating. Detection is the DFE rules
   engine's job. Rationale:
