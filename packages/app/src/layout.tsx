@@ -87,7 +87,15 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
         </Group>
       )}
       <div className="d-flex" style={{ height: '100%', overflow: 'hidden' }}>
-        {!isEmbed && !isDashboardKioskMode && <AppNav />}
+        {/* dfe-appnav-slot is display:contents (layout-transparent) so AppNav stays
+            a direct flex child; the embed init script in _document hides it before
+            paint via `html.dfe-embed .dfe-appnav-slot`, killing the chrome flash the
+            post-hydration React removal below cannot reach on an SSR paint. */}
+        {!isEmbed && !isDashboardKioskMode && (
+          <div className="dfe-appnav-slot">
+            <AppNav />
+          </div>
+        )}
         <div
           id="app-content-scroll-container"
           className="w-100 min-w-0"

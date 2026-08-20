@@ -37,6 +37,17 @@ a {
   height: 100vh;
 }
 
+/* DFE embed: the slot is layout-transparent so AppNav stays a direct flex child;
+   the _document embed init script sets html.dfe-embed before paint to hide it,
+   preventing a flash of the full chrome sidebar inside the dfe-ui iframe. */
+.dfe-appnav-slot {
+  display: contents;
+}
+
+html.dfe-embed .dfe-appnav-slot {
+  display: none !important;
+}
+
 .app-layout-with-banner {
   height: 100vh;
   display: grid;
