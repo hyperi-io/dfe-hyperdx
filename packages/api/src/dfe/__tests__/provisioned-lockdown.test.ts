@@ -13,7 +13,12 @@
 
 jest.mock('@/utils/logger', () => ({
   __esModule: true,
-  default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
 }));
 
 jest.mock('@/models/dashboard', () => ({
@@ -32,8 +37,8 @@ let mockDfeEnabled = true;
 
 import type { NextFunction, Request, Response } from 'express';
 
-import Dashboard from '@/models/dashboard';
 import { blockProvisionedWrites } from '@/dfe/middleware/provisioned-lockdown';
+import Dashboard from '@/models/dashboard';
 
 const mockExists = Dashboard.exists as unknown as jest.Mock;
 
@@ -63,7 +68,9 @@ describe('blockProvisionedWrites', () => {
 
       expect(res.status).toHaveBeenCalledWith(403);
       expect(json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('Duplicate it') }),
+        expect.objectContaining({
+          error: expect.stringContaining('Duplicate it'),
+        }),
       );
       expect(next).not.toHaveBeenCalled();
     },

@@ -11,7 +11,12 @@
 
 jest.mock('@/utils/logger', () => ({
   __esModule: true,
-  default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
 }));
 
 import type { DashboardWithoutId } from '@hyperdx/common-utils/dist/types';
@@ -119,7 +124,9 @@ describe('resolveDashboardRefs', () => {
 
     resolveDashboardRefs(input, SOURCES, CONNECTIONS);
 
-    expect((input.tiles[0].config as { source?: string }).source).toBe('default');
+    expect((input.tiles[0].config as { source?: string }).source).toBe(
+      'default',
+    );
   });
 
   test('an unresolvable name passes through unchanged by default', () => {
