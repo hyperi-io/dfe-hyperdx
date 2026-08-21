@@ -213,6 +213,31 @@ function otelMetricsSource(connectionId: string) {
   };
 }
 
+// PLATFORM-ONLY. ClickHouse's own `system` database: server log lines to search,
+// and the connection the pre-canned ClickHouse dashboards run their raw SQL on.
+// `system.text_log` is the searchable table; the dashboards name their own
+// system tables in full, so the `from` here only decides what /search shows.
+//
+// Reading it needs SELECT on the system tables, which the engine grants to the
+// platform reader alone - a tenant's dfe_org_<org> user cannot read them at all,
+// so this source is fenced twice over.
+function clickhouseSystemSource(connectionId: string) {
+  return {
+    name: 'clickhouse_system',
+    kind: 'log',
+    connection: connectionId,
+    from: { databaseName: 'system', tableName: 'text_log' },
+    timestampValueExpression: 'event_time',
+    displayedTimestampValueExpression: 'event_time',
+    defaultTableSelectExpression:
+      'event_time, level, logger_name, message, query_id',
+    severityTextExpression: 'level',
+    bodyExpression: 'message',
+    implicitColumnExpression: 'message',
+    serviceNameExpression: 'logger_name',
+  };
+}
+
 /**
  * Ensure the caller's team holds ONLY its own org connection, plus its seed
  * sources: `events` for every team, and the otel sources as well for the
@@ -249,8 +274,8 @@ export async function ensureOrgConnection(
       const connectionId = String(conn._id);
 
       // EVERY team gets `default` and `hunts` (both org-fenced by their tenant
-      // row policies). The platform/admin team ALSO gets the otel sources; tenant
-      // teams never do.
+      // row policies). The platform/admin team ALSO gets the otel sources and
+      // ClickHouse's own system database; tenant teams never do.
       //
       // TODO(dfe-engine): the seeded source SET is hard-coded here for now -
       // default + hunts + the three otel kinds. The engine will later own the
@@ -267,6 +292,7 @@ export async function ensureOrgConnection(
           otelLogsSource(connectionId),
           otelTracesSource(connectionId),
           otelMetricsSource(connectionId),
+          clickhouseSystemSource(connectionId),
         );
       }
 
