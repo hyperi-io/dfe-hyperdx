@@ -125,6 +125,13 @@ upstream behaviour and tests are unchanged. The service flag is set by
 
 ## DFE integration features
 
+- `packages/api/src/dfe/controllers/org-connection.ts` - a team holds ONLY its
+  own org's ClickHouse connection, fetched from the engine, plus its seed
+  sources. `default` and `hunts` for every team (org-fenced by their row
+  policies); `otel_logs`, `otel_traces`, `otel_metrics` and `clickhouse_system`
+  for the platform team alone, since operator telemetry and ClickHouse's own
+  `system` database must never reach an org_viewer. That source set is also the
+  RBAC fence for the pre-canned dashboards - see the provisioner note below.
 - `packages/api/src/dfe/routers/query-export.ts` - export a saved search or SQL
   to a DFE rule
 - `packages/app/src/dfe/components/CreateRuleFromSearch/` - the button that

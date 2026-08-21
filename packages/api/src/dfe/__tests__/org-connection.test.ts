@@ -99,7 +99,7 @@ describe('ensureOrgConnection', () => {
     );
   });
 
-  test('the platform team ALSO gets the three otel sources', async () => {
+  test('the platform team ALSO gets the otel sources and the system database', async () => {
     mockConns.mockResolvedValue([]);
     mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
     mockSources.mockResolvedValue([]);
@@ -107,7 +107,7 @@ describe('ensureOrgConnection', () => {
 
     await ensureOrgConnection('tok', 'team-1');
 
-    // default + hunts (every team) then the three otel kinds, all on one connection.
+    // default + hunts (every team) then the platform-only set, all on one connection.
     const seeded = mockCreateSource.mock.calls.map(c => c[1].name);
     expect(seeded).toEqual([
       'default',
@@ -115,11 +115,31 @@ describe('ensureOrgConnection', () => {
       'otel_logs',
       'otel_traces',
       'otel_metrics',
+      'clickhouse_system',
     ]);
     expect(mockCreateSource).toHaveBeenCalledWith(
       'team-1',
       expect.objectContaining({ connection: 'conn-1', kind: 'trace' }),
     );
+    expect(mockCreateSource).toHaveBeenCalledWith(
+      'team-1',
+      expect.objectContaining({
+        name: 'clickhouse_system',
+        from: { databaseName: 'system', tableName: 'text_log' },
+      }),
+    );
+  });
+
+  test('a tenant team never gets the system database', async () => {
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([]);
+    okFetch(ORG_CONN);
+
+    await ensureOrgConnection('tok', 'team-1');
+
+    const seeded = mockCreateSource.mock.calls.map(c => c[1].name);
+    expect(seeded).not.toContain('clickhouse_system');
   });
 
   test('is a no-op when the team already has a connection', async () => {
