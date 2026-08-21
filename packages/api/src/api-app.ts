@@ -10,6 +10,7 @@ import {
   blockClickhouseProxyTest,
   requireServicePrincipal,
 } from './dfe/middleware/admin-lockdown';
+import { blockProvisionedWrites } from './dfe/middleware/provisioned-lockdown';
 import { mountObservability } from './dfe/observability';
 import queryExportRouter from './dfe/routers/query-export';
 import mcpRouter from './mcp/app';
@@ -137,7 +138,14 @@ app.use(
   requireServicePrincipal,
   routers.alertsRouter,
 );
-app.use('/dashboards', isUserAuthenticated, routers.dashboardRouter);
+// DFE: provisioned dashboards are owned by the release and replaced on upgrade,
+// so writes to them are refused and users duplicate instead.
+app.use(
+  '/dashboards',
+  isUserAuthenticated,
+  blockProvisionedWrites,
+  routers.dashboardRouter,
+);
 app.use('/me', isUserAuthenticated, routers.meRouter);
 app.use(
   '/team',

@@ -7,6 +7,8 @@ import {
 import fs from 'fs';
 import path from 'path';
 
+import { getConnectionsByTeam } from '@/controllers/connection';
+import { getSources } from '@/controllers/sources';
 import { connectDB, mongooseConnection } from '@/models';
 import Dashboard from '@/models/dashboard';
 import Team from '@/models/team';
@@ -62,9 +64,111 @@ export function readDashboardFiles(dir: string): DashboardWithoutId[] {
   return dashboards;
 }
 
-export async function syncDashboards(teamId: string, dir: string) {
-  const dashboards = readDashboardFiles(dir);
-  if (dashboards.length === 0) return;
+interface NamedRef {
+  id: string;
+  name: string;
+}
+
+/**
+ * Resolve a tile or filter's source/connection reference to an id.
+ *
+ * An id is returned unchanged, so id-based files keep working. Otherwise the
+ * reference is matched against names case-insensitively, the same match the
+ * import UI performs (`DBDashboardImportPage`). Returns undefined when neither
+ * matches.
+ */
+function resolveRef(ref: string, refs: NamedRef[]): string | undefined {
+  if (refs.some(r => r.id === ref)) {
+    return ref;
+  }
+  const lowered = ref.toLowerCase();
+  return refs.find(r => r.name.toLowerCase() === lowered)?.id;
+}
+
+/**
+ * Rewrite a dashboard's source and connection references to ids for one team.
+ *
+ * An unresolvable reference is passed through unchanged, matching the previous
+ * behaviour of writing files verbatim. Set `requireResolvable` to skip the
+ * dashboard instead, which suits a directory provisioned to every team: a
+ * dashboard naming a source only some teams hold is then seeded only to those
+ * teams rather than to all of them with dead tiles.
+ *
+ * Exported so a provisioned file can be checked against a team without writing.
+ */
+export function resolveDashboardRefs(
+  dashboard: DashboardWithoutId,
+  sources: NamedRef[],
+  connections: NamedRef[],
+  requireResolvable = false,
+): DashboardWithoutId | undefined {
+  const resolved = structuredClone(dashboard);
+  let unresolved: string | undefined;
+
+  const rewrite = (
+    holder: { source?: string; connection?: string },
+    key: 'source' | 'connection',
+    refs: NamedRef[],
+  ) => {
+    const ref = holder[key];
+    if (!ref) {
+      return;
+    }
+    const id = resolveRef(ref, refs);
+    if (!id) {
+      unresolved ??= `${key}:${ref}`;
+      return;
+    }
+    holder[key] = id;
+  };
+
+  for (const tile of resolved.tiles) {
+    const config = tile.config as { source?: string; connection?: string };
+    rewrite(config, 'source', sources);
+    rewrite(config, 'connection', connections);
+  }
+
+  for (const filter of resolved.filters ?? []) {
+    rewrite(filter, 'source', sources);
+  }
+
+  if (unresolved) {
+    logger.warn(
+      { name: dashboard.name, unresolved, requireResolvable },
+      'Dashboard reference did not match any of the team’s sources or connections',
+    );
+    if (requireResolvable) {
+      return undefined;
+    }
+  }
+
+  return resolved;
+}
+
+export async function syncDashboards(
+  teamId: string,
+  dir: string,
+  requireResolvable = false,
+) {
+  const rawDashboards = readDashboardFiles(dir);
+  if (rawDashboards.length === 0) return;
+
+  const [teamSources, teamConnections] = await Promise.all([
+    getSources(teamId),
+    getConnectionsByTeam(teamId),
+  ]);
+  const sources: NamedRef[] = teamSources.map(s => ({
+    id: String(s.id ?? s._id),
+    name: s.name,
+  }));
+  const connections: NamedRef[] = teamConnections.map(c => ({
+    id: String(c.id ?? c._id),
+    name: c.name,
+  }));
+
+  const dashboards = rawDashboards
+    .map(d => resolveDashboardRefs(d, sources, connections, requireResolvable))
+    .filter((d): d is DashboardWithoutId => d !== undefined);
 
   for (const dashboard of dashboards) {
     try {
@@ -175,8 +279,14 @@ export default class ProvisionDashboardsTask
       teamIds = teams.map(t => t._id.toString());
     }
 
+    // Off by default so a directory of id-based dashboards keeps provisioning
+    // exactly as before. On, a dashboard naming a source the team does not hold
+    // is skipped for that team instead of being written with dead tiles.
+    const requireResolvable =
+      process.env.DASHBOARD_PROVISIONER_REQUIRE_REFS === 'true';
+
     for (const id of teamIds) {
-      await syncDashboards(id, dir);
+      await syncDashboards(id, dir, requireResolvable);
     }
   }
 

@@ -141,6 +141,17 @@ describe('ensureOrgConnection', () => {
     expect(mockCreateSource).not.toHaveBeenCalled();
   });
 
+  test('creates no sources when the team already has some', async () => {
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([{ _id: 'existing-source' }]);
+    okFetch(ORG_CONN);
+
+    await ensureOrgConnection('tok', 'team-1');
+
+    expect(mockCreateSource).not.toHaveBeenCalled();
+  });
+
   test('swallows a thrown controller error so login is never blocked', async () => {
     mockConns.mockRejectedValue(new Error('db down'));
 
