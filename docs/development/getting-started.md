@@ -22,12 +22,12 @@ yarn dev:dfe
 ```
 
 This starts FerretDB + PostgreSQL in Docker (replacing upstream MongoDB) and
-runs the API and Next.js app as local processes. It does NOT start ClickHouse
-or the otel collectors -- the DFE override scales them to zero because ingest
+runs the API and Next.js app as local processes. It does NOT start ClickHouse or
+the otel collectors -- the DFE override scales them to zero because ingest
 belongs to the DFE stack (dfe-docker or a local ClickHouse you point
-`DEFAULT_CONNECTIONS` at, in `.env.dfe`). The collectors are never built
-either: the override pins the prebuilt image, so there is no from-source
-collector compile.
+`DEFAULT_CONNECTIONS` at, in `.env.dfe`). The collectors are never built either:
+the override pins the prebuilt image, so there is no from-source collector
+compile.
 
 ```mermaid
 flowchart LR
@@ -44,10 +44,10 @@ flowchart LR
 
 Ports are FIXED under `dev:dfe`: API 8000, app 8080, FerretDB 27017 (published
 on all interfaces), from `.env` defaults -- the per-worktree port slots and the
-:9900 dev portal belong to upstream `yarn dev`, not this flow, so two
-`dev:dfe` checkouts collide. To retarget by hand: the API and the app BOTH
-read `PORT`, so run them as separate processes with distinct `PORT` values and
-set `HYPERDX_API_PORT` so the app's `/api` proxy finds the API.
+:9900 dev portal belong to upstream `yarn dev`, not this flow, so two `dev:dfe`
+checkouts collide. To retarget by hand: the API and the app BOTH read `PORT`, so
+run them as separate processes with distinct `PORT` values and set
+`HYPERDX_API_PORT` so the app's `/api` proxy finds the API.
 
 ## Wiring against dfe-engine
 
@@ -92,9 +92,9 @@ the full design (FerretDB, OIDC, additive-only strategy) is in
 ## FerretDB serves the MongoDB wire protocol
 
 - The MongoDB DATA LAYER is unchanged: Mongoose, connect-mongo and
-  passport-local-mongoose all work through FerretDB (the fork's additions
-  live mainly under `packages/*/src/dfe/`, guarded by the conflict-surface
-  check in `.github/workflows/fork-surface.yml`)
+  passport-local-mongoose all work through FerretDB (the fork's additions live
+  mainly under `packages/*/src/dfe/`, guarded by the conflict-surface check in
+  `.github/workflows/fork-surface.yml`)
 - FerretDB translates the wire protocol to SQL via PostgreSQL + DocumentDB
 - Port 27017 matches upstream MongoDB, so the existing `MONGO_URI` in
   `.env.development` works as-is
@@ -102,11 +102,11 @@ the full design (FerretDB, OIDC, additive-only strategy) is in
 
 ## Where config lives
 
-| File                            | Purpose                                   |
-| ------------------------------- | ----------------------------------------- |
-| `.env`                          | Upstream defaults (image versions, ports) |
-| `.env.dfe.example`              | Template for `.env.dfe` -- copy first     |
-| `.env.dfe`                      | DFE overrides (auth mode, engine, conns)  |
-| `packages/api/.env.development` | Local API dev config                      |
-| `docker-compose.dfe.dev.yml`    | DFE dev compose override (FerretDB, no CH)|
-| `docker-compose.dfe.yml`        | DFE production compose override           |
+| File                            | Purpose                                    |
+| ------------------------------- | ------------------------------------------ |
+| `.env`                          | Upstream defaults (image versions, ports)  |
+| `.env.dfe.example`              | Template for `.env.dfe` -- copy first      |
+| `.env.dfe`                      | DFE overrides (auth mode, engine, conns)   |
+| `packages/api/.env.development` | Local API dev config                       |
+| `docker-compose.dfe.dev.yml`    | DFE dev compose override (FerretDB, no CH) |
+| `docker-compose.dfe.yml`        | DFE production compose override            |
