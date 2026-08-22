@@ -101,6 +101,7 @@ docker-compose.prod.yml
 **/.env
 .env.*
 **/.env.*
+!.env.dfe.example
 .vscode/
 *.swp
 *.swo
