@@ -106,9 +106,12 @@ function defaultSource(connectionId: string) {
     from: { databaseName: 'dfe', tableName: 'default' },
     timestampValueExpression: '_timestamp',
     displayedTimestampValueExpression: '_timestamp',
-    implicitColumnExpression: '_raw',
-    bodyExpression: '_raw',
-    defaultTableSelectExpression: '_timestamp,_org_id,_source,_raw',
+    // DFE data lands in the structured `_json` column; `_raw` is the exception
+    // (raw payload, only when captured) and may be NULL. Surface `_json` as the
+    // body, the implicit search column and the default view -- never `_raw`.
+    implicitColumnExpression: '_json',
+    bodyExpression: '_json',
+    defaultTableSelectExpression: '_timestamp,_json',
   };
 }
 
@@ -127,8 +130,10 @@ function huntsSource(connectionId: string) {
     displayedTimestampValueExpression: '_timestamp',
     implicitColumnExpression: 'rule_name',
     bodyExpression: '_json',
+    // Detection payload only -- drop the _org_id/_source header plumbing, keep
+    // the analyst-facing match columns plus the structured `_json`.
     defaultTableSelectExpression:
-      '_timestamp,_org_id,severity,hunt_name,rule_name,_source',
+      '_timestamp,severity,hunt_name,rule_name,source_table,matched_uuid,rule_id,_json',
   };
 }
 

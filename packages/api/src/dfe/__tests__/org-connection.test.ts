@@ -93,10 +93,24 @@ describe('ensureOrgConnection', () => {
     // A tenant gets `default` + `hunts` only - never the otel sources.
     const seeded = mockCreateSource.mock.calls.map(c => c[1].name);
     expect(seeded).toEqual(['default', 'hunts']);
+    // DFE sources surface the structured `_json`, never `_raw` or the header
+    // plumbing (_org_id/_source/_uuid/_tags): `_json` is the body, implicit
+    // column and the default view for `default`.
     expect(mockCreateSource).toHaveBeenCalledWith(
       'team-1',
-      expect.objectContaining({ connection: 'conn-1', name: 'default' }),
+      expect.objectContaining({
+        connection: 'conn-1',
+        name: 'default',
+        bodyExpression: '_json',
+        implicitColumnExpression: '_json',
+        defaultTableSelectExpression: '_timestamp,_json',
+      }),
     );
+    const hunts = mockCreateSource.mock.calls.find(c => c[1].name === 'hunts');
+    expect(hunts?.[1].defaultTableSelectExpression).toBe(
+      '_timestamp,severity,hunt_name,rule_name,source_table,matched_uuid,rule_id,_json',
+    );
+    expect(hunts?.[1].defaultTableSelectExpression).not.toContain('_org_id');
   });
 
   test('the platform team ALSO gets the otel sources and the system database', async () => {
