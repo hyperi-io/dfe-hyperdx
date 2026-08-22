@@ -21,11 +21,20 @@ services:
   # Both collectors exist only to write into ch-server, and depend_on it as
   # service_healthy — with ClickHouse gone they would block the stack from
   # coming up, so they are disabled here too. Ingest belongs to dfe-docker.
+  #
+  # `build: !reset null` drops the build inherited from docker-compose.dev.yml so
+  # `compose up` does not compile the collector from source for a service it never
+  # starts. `image:` mirrors the prod-compose ref; with replicas 0 it is never
+  # pulled or run and only lets compose skip the build.
   otel-collector:
+    build: !reset null
+    image: ${CH_IMAGE_REPO:-hyperdx}/${NEXT_OTEL_COLLECTOR_IMAGE_NAME_DOCKERHUB:-hyperdx-otel-collector}:${IMAGE_VERSION:-2}
     deploy:
       replicas: 0
 
   otel-collector-json:
+    build: !reset null
+    image: ${CH_IMAGE_REPO:-hyperdx}/${NEXT_OTEL_COLLECTOR_IMAGE_NAME_DOCKERHUB:-hyperdx-otel-collector}:${IMAGE_VERSION:-2}
     deploy:
       replicas: 0
 
