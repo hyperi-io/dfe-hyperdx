@@ -92,6 +92,7 @@ import { DBTimeChart, type SeriesGroupFilter } from '@/components/DBTimeChart';
 import EmptyState from '@/components/EmptyState';
 import { ErrorBoundary } from '@/components/Error/ErrorBoundary';
 import { FavoriteButton } from '@/components/FavoriteButton';
+import ResourceTerraformPopover from '@/components/Iac/ResourceTerraformPopover';
 import { InputControlled } from '@/components/InputControlled';
 import OnboardingModal from '@/components/OnboardingModal';
 import SearchWhereInput, {
@@ -210,22 +211,25 @@ const SEARCH_RESULTS_PANEL_KEEP_OPEN_SELECTOR =
 
 // Helper function to get the default source id
 export function getDefaultSourceId(
-  sources: { id: string; disabled?: boolean }[] | undefined,
+  sources: Pick<TSource, 'id' | 'kind' | 'disabled'>[] | undefined,
   lastSelectedSourceId: string | undefined,
 ): string {
   if (!sources || sources.length === 0) return '';
 
-  // Filter out disabled sources
-  const enabledSources = sources.filter(s => !s.disabled);
-  if (enabledSources.length === 0) return '';
+  // Restrict to sources that this page can actually display.
+  const searchableSources = sources.filter(
+    s => ALLOWED_SOURCE_KINDS.includes(s.kind) && !s.disabled,
+  );
+  if (searchableSources.length === 0) return '';
 
   if (
     lastSelectedSourceId &&
-    enabledSources.some(s => s.id === lastSelectedSourceId)
+    searchableSources.some(s => s.id === lastSelectedSourceId)
   ) {
     return lastSelectedSourceId;
   }
-  return enabledSources[0].id;
+
+  return searchableSources[0].id;
 }
 
 function SourceEditModal({
@@ -2175,6 +2179,14 @@ export function DBSearchPage() {
                 </Button>
               </Tags>
 
+              <ResourceTerraformPopover
+                resource={{
+                  type: 'saved_search',
+                  id: savedSearch.id,
+                  name: savedSearch.name,
+                }}
+              />
+
               <SearchPageActionBar
                 onClickDeleteSavedSearch={() => {
                   deleteSavedSearch.mutate(savedSearch?.id ?? '', {
@@ -2733,7 +2745,7 @@ export function DBSearchPage() {
 
 const DBSearchPageDynamic = dynamic(async () => DBSearchPage, { ssr: false });
 
-// @ts-ignore
+// @ts-expect-error next/dynamic component type does not include the getLayout static
 DBSearchPageDynamic.getLayout = withAppNav;
 
 export default DBSearchPageDynamic;

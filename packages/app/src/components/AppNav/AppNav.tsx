@@ -322,7 +322,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
   ]);
 
   return (
-    <AppNavContext.Provider value={{ isCollapsed, pathname }}>
+    <AppNavContext value={{ isCollapsed, pathname }}>
       {fixed && (
         <div
           className={styles.navGhost}
@@ -546,6 +546,6 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
         opened={UserPreferencesOpen}
         onClose={closeUserPreferences}
       />
-    </AppNavContext.Provider>
+    </AppNavContext>
   );
 }
