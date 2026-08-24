@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment -- see the note below */
 // @ts-nocheck
 // DFE INTERIM (2.29 merge): this sidebar nav drifted vs upstream 2.29
 // (use-query-params -> nuqs, removed @/types SavedSearch/ServerDashboard, Mantine

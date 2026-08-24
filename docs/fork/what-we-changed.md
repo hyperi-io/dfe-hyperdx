@@ -146,6 +146,18 @@ upstream behaviour and tests are unchanged. The service flag is set by
   `JSONExtract*` also rejects, so that ONE case is wrapped in `toString()`.
   Narrow by design - wrapping unconditionally changed the SQL for String and Map
   columns too.
+- `packages/common-utils/src/dfe/jsonPath.ts` - native ClickHouse JSON for
+  charts and filters. A JSON sub-path is `Dynamic`, which ClickHouse refuses in
+  `IN`, aggregates, `GROUP BY` and `ORDER BY`, so it needs an explicit coercion.
+  All the logic is here; the one edit to **`core/renderChartConfig.ts`
+  (catalogued)** is a single added call in `renderWhereExpressionStr`, the seam
+  every SQL filter already passes through. Coercion is `toString()`, NOT the
+  `.:String` sub-column upstream #2549 proposes - see the module header for the
+  measurement that rules it out.
+- `packages/app/jest.dfe.config.js` + `jest.dfe.setup.js` - pins
+  `NEXT_PUBLIC_THEME=hyperdx` for app unit tests, so upstream's suite passes
+  unchanged instead of us editing their test files to accommodate the rebrand.
+  Mirrors `packages/api/jest.dfe.config.js`.
 - `packages/app/src/dfe/embedFeatures.ts` + `EmbedThemeSync.tsx` - chromeless
   embed mode: feature gating by route, and live theme sync from the host UI.
   `pages/_document.tsx` carries one added inline head script

@@ -72,7 +72,7 @@ export const AppNavUserMenu = ({
   logoutUrl,
   onClickUserPreferences,
 }: AppNavUserMenuProps) => {
-  const { isCollapsed } = React.useContext(AppNavContext);
+  const { isCollapsed } = React.use(AppNavContext);
 
   const initials = userName
     .split(' ')
@@ -175,7 +175,7 @@ export const AppNavHelpMenu = ({
   version?: string;
   onAddDataClick?: () => void;
 }) => {
-  const { isCollapsed } = React.useContext(AppNavContext);
+  const { isCollapsed } = React.use(AppNavContext);
 
   const [
     installModalOpen,
@@ -267,7 +267,7 @@ export const AppNavLink = ({
   onToggle?: () => void;
   isBeta?: boolean;
 }) => {
-  const { pathname, isCollapsed } = React.useContext(AppNavContext);
+  const { pathname, isCollapsed } = React.use(AppNavContext);
 
   const testId = `nav-link-${href.replace(/^\//, '').replace(/\//g, '-') || 'home'}`;
 

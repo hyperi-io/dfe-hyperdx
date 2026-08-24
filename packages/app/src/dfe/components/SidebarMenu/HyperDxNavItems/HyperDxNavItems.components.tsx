@@ -25,7 +25,7 @@ export const AppNavLink = ({
   onToggle?: () => void;
   isBeta?: boolean;
 }) => {
-  const { pathname, isCollapsed } = React.useContext(AppNavContext);
+  const { pathname, isCollapsed } = React.use(AppNavContext);
 
   const testId = `nav-link-${href.replace(/^\//, '').replace(/\//g, '-') || 'home'}`;
 

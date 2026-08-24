@@ -59,9 +59,9 @@ describe('DBRowJsonViewer - native ClickHouse JSON columns', () => {
 
   const render = () =>
     renderWithMantine(
-      <RowSidePanelContext.Provider value={context}>
+      <RowSidePanelContext value={context}>
         <DBRowJsonViewer data={nativeJsonData} jsonColumns={['_json']} />
-      </RowSidePanelContext.Provider>,
+      </RowSidePanelContext>,
     );
 
   // The tree renders expanded by default - clicking the parent COLLAPSES it.

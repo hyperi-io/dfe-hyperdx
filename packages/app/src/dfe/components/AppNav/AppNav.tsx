@@ -33,7 +33,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
   const navWidth = isCollapsed ? 79 : 250;
 
   return (
-    <AppNavContext.Provider value={{ isCollapsed, pathname }}>
+    <AppNavContext value={{ isCollapsed, pathname }}>
       {fixed && (
         <div
           className={styles.navGhost}
@@ -86,6 +86,6 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
         </div>
         <SidebarMenu isCollapsed={isCollapsed} />
       </div>
-    </AppNavContext.Provider>
+    </AppNavContext>
   );
 }

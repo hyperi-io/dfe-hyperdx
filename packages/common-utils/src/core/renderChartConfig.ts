@@ -23,6 +23,7 @@ import {
   pickBucketTimestampColumn,
   splitAndTrimWithBracket,
 } from '@/core/utils';
+import { dfeCoerceJsonPaths } from '@/dfe/jsonPath';
 import { isPromqlChartConfig, isRawSqlChartConfig } from '@/guards';
 import { replaceMacros } from '@/macros';
 import {
@@ -1273,6 +1274,15 @@ async function renderWhereExpressionStr({
       '',
     );
   }
+
+  // DFE: a native JSON sub-path is Dynamic, which ClickHouse refuses in IN,
+  // aggregates, GROUP BY and ORDER BY. See dfe/jsonPath.ts.
+  _condition = await dfeCoerceJsonPaths(_condition, {
+    metadata,
+    databaseName: from.databaseName,
+    tableName: from.tableName,
+    connectionId,
+  });
 
   return _condition;
 }

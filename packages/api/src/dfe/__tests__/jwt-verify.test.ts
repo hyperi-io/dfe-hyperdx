@@ -330,7 +330,7 @@ describe('engineJwtMiddleware', () => {
       .setIssuer(ISSUER)
       .setIssuedAt()
       .setExpirationTime('5m')
-      .sign(hmac as CryptoKey);
+      .sign(hmac);
 
     const req = makeReq({ authorization: `Bearer ${token}` });
     const next = jest.fn();
