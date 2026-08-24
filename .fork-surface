@@ -90,6 +90,8 @@ packages/app/src/theme/types.ts
 packages/app/src/utils.ts
 packages/app/styles/LogTable.module.scss
 packages/app/styles/globals.css
+packages/app/src/components/SQLEditor/SQLInlineEditor.tsx
+packages/app/src/hooks/useAutoCompleteOptions.tsx
 packages/app/tests/e2e/README.md
 packages/app/tsconfig.build.json
 packages/common-utils/CHANGELOG.md

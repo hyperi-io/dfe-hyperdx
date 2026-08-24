@@ -31,9 +31,11 @@ import CodeMirror, {
 } from '@uiw/react-codemirror';
 
 import InputLanguageSwitch from '@/components/SearchInput/InputLanguageSwitch';
+import { dfeJsonColumnsFromFields } from '@/dfe/jsonColumns';
+import { deriveMapColumnsFromFields } from '@/hooks/useAutoCompleteOptions';
 import { useMultipleAllFields } from '@/hooks/useMetadata';
 import { useSource } from '@/source';
-import { useQueryHistory } from '@/utils';
+import { mergePath, useQueryHistory } from '@/utils';
 import { clickhouseSql } from '@/utils/codeMirror';
 
 import { KEYWORDS_FOR_WHERE_OR_ORDER_BY } from './constants';
@@ -120,6 +122,17 @@ export default function SQLInlineEditor({
     return filterField ? fields?.filter(filterField) : fields;
   }, [fields, filterField]);
 
+  // DFE: which roots take dot access and which take a subscript. Derived once
+  // per field list, not per field.
+  const jsonColumns = useMemo(
+    () => dfeJsonColumnsFromFields(filteredFields),
+    [filteredFields],
+  );
+  const mapColumns = useMemo(
+    () => deriveMapColumnsFromFields(filteredFields),
+    [filteredFields],
+  );
+
   // query search history
   const [queryHistory, setQueryHistory] = useQueryHistory(queryHistoryType);
 
@@ -184,12 +197,11 @@ export default function SQLInlineEditor({
   const updateAutocompleteColumns = useCallback(
     (viewRef: EditorView) => {
       const identifiers = [
-        ...(filteredFields?.map(column => {
-          if (column.path.length > 1) {
-            return `${column.path[0]}['${column.path[1]}']`;
-          }
-          return column.path[0];
-        }) ?? []),
+        // DFE: `col['key']` is arrayElement, which a JSON column rejects, so a
+        // nested path has to know whether its root is a Map or a JSON column.
+        ...(filteredFields?.map(column =>
+          mergePath(column.path, jsonColumns, mapColumns),
+        ) ?? []),
         ...(additionalSuggestions ?? []),
       ];
 
@@ -214,6 +226,8 @@ export default function SQLInlineEditor({
     },
     [
       filteredFields,
+      jsonColumns,
+      mapColumns,
       additionalSuggestions,
       variableCompletions,
       disableKeywordAutocomplete,

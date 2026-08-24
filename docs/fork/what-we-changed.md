@@ -154,6 +154,14 @@ upstream behaviour and tests are unchanged. The service flag is set by
   every SQL filter already passes through. Coercion is `toString()`, NOT the
   `.:String` sub-column upstream #2549 proposes - see the module header for the
   measurement that rules it out.
+- `packages/app/src/dfe/jsonColumns.ts` - which roots take dot access. Two
+  catalogued call sites read it: **`components/SQLEditor/SQLInlineEditor.tsx`**
+  (the chart-builder autocomplete rendered every nested path as `col['key']`,
+  which is `arrayElement` on a JSON column) and
+  **`hooks/useAutoCompleteOptions.tsx`** (passed an empty `jsonColumns` to
+  `mergePath`, so the search bar's facet fetch silently returned nothing). Both
+  now call `mergePath` with the JSON roots derived from the field list they
+  already hold, so neither adds a query.
 - `packages/app/jest.dfe.config.js` + `jest.dfe.setup.js` - pins
   `NEXT_PUBLIC_THEME=hyperdx` for app unit tests, so upstream's suite passes
   unchanged instead of us editing their test files to accommodate the rebrand.

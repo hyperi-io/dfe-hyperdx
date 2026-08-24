@@ -990,9 +990,12 @@ export class Metadata {
         const where = whereConditions.length
           ? chSql`WHERE ${concatChSql(' AND ', ...whereConditions)}`
           : '';
+        // DFE: All, not Dynamic. JSONDynamicPathsWithTypes omits paths declared
+        // as typed hints and any path past max_dynamic_paths (default 1024,
+        // which wide telemetry crosses), so those fields never reach the UI.
         const sql = chSql`WITH all_paths AS
         (
-            SELECT DISTINCT JSONDynamicPathsWithTypes(${{ Identifier: column }}) as paths
+            SELECT DISTINCT JSONAllPathsWithTypes(${{ Identifier: column }}) as paths
             FROM ${tableExpr({ database: databaseName, table: tableName })} ${where}
             LIMIT ${{ Int32: maxKeys }}
             SETTINGS timeout_overflow_mode = 'break', max_execution_time = 2
