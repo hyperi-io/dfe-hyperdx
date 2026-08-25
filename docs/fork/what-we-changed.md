@@ -186,6 +186,21 @@ upstream behaviour and tests are unchanged. The service flag is set by
   jest config rather than compiled, so no tsconfig project covers it and typed
   linting cannot parse it; **`packages/app/eslint.config.mjs`** carries one
   added `ignores` entry for it, beside upstream's own `global-setup.js` line.
+- `packages/app/src/dfe/defaultSource.ts` - which source `/search` opens on
+  cold. DFE analysts work from hunt detections, so `hunts` is the landing view
+  rather than whichever source sorts first. **`DBSearchPage.tsx` (catalogued)**
+  carries the whole delta: one `??` on the existing fallback return in
+  `getDefaultSourceId`, plus `& { name?: string }` on its parameter type. The
+  name stays OPTIONAL so upstream's own tests, whose fixtures carry no name,
+  still typecheck - and it is what makes them still pass, since a nameless
+  fixture never matches a preference.
+
+  Upstream's precedence is untouched and still wins: an explicit `?source=`, a
+  saved search, and the user's last selection all take priority. dfe-ui's
+  "Hunt Results" entry links `?source=hunts` for that reason - it must beat the
+  last selection, which a bare `/search` deliberately does not. Upstream already
+  resolves `?source=` by NAME as well as id (`useResolvedSourceParam`), so
+  linking by name needs nothing here.
 - `packages/app/src/dfe/embedFeatures.ts` + `EmbedThemeSync.tsx` - chromeless
   embed mode: feature gating by route, and live theme sync from the host UI.
   `pages/_document.tsx` carries one added inline head script

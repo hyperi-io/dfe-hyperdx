@@ -106,6 +106,7 @@ import { SQLInlineEditorControlled } from '@/components/SQLEditor/SQLInlineEdito
 import { Tags } from '@/components/Tags';
 import { TimePicker } from '@/components/TimePicker';
 import { IS_LOCAL_MODE } from '@/config';
+import { dfePreferredSourceId } from '@/dfe/defaultSource';
 import { useAliasMapFromChartConfig } from '@/hooks/useChartConfig';
 import { useExplainQuery } from '@/hooks/useExplainQuery';
 import { useResolvedSourceParam } from '@/hooks/useResolvedSourceParam';
@@ -211,7 +212,9 @@ const SEARCH_RESULTS_PANEL_KEEP_OPEN_SELECTOR =
 
 // Helper function to get the default source id
 export function getDefaultSourceId(
-  sources: Pick<TSource, 'id' | 'kind' | 'disabled'>[] | undefined,
+  sources:
+    | (Pick<TSource, 'id' | 'kind' | 'disabled'> & { name?: string })[]
+    | undefined,
   lastSelectedSourceId: string | undefined,
 ): string {
   if (!sources || sources.length === 0) return '';
@@ -229,7 +232,8 @@ export function getDefaultSourceId(
     return lastSelectedSourceId;
   }
 
-  return searchableSources[0].id;
+  // DFE: hunt detections are the analyst's landing view. See dfe/defaultSource.
+  return dfePreferredSourceId(searchableSources) ?? searchableSources[0].id;
 }
 
 function SourceEditModal({
