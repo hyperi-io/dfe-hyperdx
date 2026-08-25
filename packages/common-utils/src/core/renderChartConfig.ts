@@ -1561,7 +1561,15 @@ async function renderSeriesLimitCte(
   // inside Map['a,b']; the per-column null filter below needs them separated.
   let groupByCols: ChSql[];
   if (typeof chartConfig.groupBy === 'string') {
-    groupByCols = splitAndTrimWithBracket(chartConfig.groupBy).map(
+    // DFE: these land inside tuple(...) and must match the CTE's own GROUP BY,
+    // which renderGroupBy has already coerced. See dfe/jsonPath.ts.
+    const dfeGroupBy = await dfeCoerceJsonPaths(chartConfig.groupBy, {
+      metadata,
+      databaseName: chartConfig.from.databaseName,
+      tableName: chartConfig.from.tableName,
+      connectionId: chartConfig.connection,
+    });
+    groupByCols = splitAndTrimWithBracket(dfeGroupBy).map(
       col => chSql`${{ UNSAFE_RAW_SQL: col }}`,
     );
   } else {
