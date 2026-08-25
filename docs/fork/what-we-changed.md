@@ -149,11 +149,19 @@ upstream behaviour and tests are unchanged. The service flag is set by
 - `packages/common-utils/src/dfe/jsonPath.ts` - native ClickHouse JSON for
   charts and filters. A JSON sub-path is `Dynamic`, which ClickHouse refuses in
   `IN`, aggregates, `GROUP BY` and `ORDER BY`, so it needs an explicit coercion.
-  All the logic is here; the one edit to **`core/renderChartConfig.ts`
-  (catalogued)** is a single added call in `renderWhereExpressionStr`, the seam
-  every SQL filter already passes through. Coercion is `toString()`, NOT the
-  `.:String` sub-column upstream #2549 proposes - see the module header for the
-  measurement that rules it out.
+  All the logic is here; **`core/renderChartConfig.ts` (catalogued)** carries
+  two added calls and nothing else - one in `renderWhereExpressionStr`, the seam
+  every SQL filter already passes through, and one in `renderSelectList`'s
+  raw-string early return, which `renderSelect` and `renderGroupBy` BOTH feed,
+  so the SELECT list and the GROUP BY key cannot disagree. Coercion is
+  `toString()`, NOT the `.:String` sub-column upstream #2549 proposes - see the
+  module header for the measurement that rules it out.
+
+  Aggregate arguments are left alone: `aggFnExpr` already emits
+  `toFloat64OrDefault(toString(expr))` around them, which our idempotence check
+  recognises. ORDER BY is also left alone, deliberately - `toString` sorts
+  "99.5" above "1000.25", and a wrongly ordered table is worse than the Code 44
+  that names the fix.
 
   `dfeJsonPathRoot` in the same module serves a second catalogued call site, the
   facet dispatch in **`core/metadata.ts`**'s `getAllKeyValues`. That dispatch

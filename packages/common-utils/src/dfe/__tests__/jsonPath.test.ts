@@ -209,4 +209,12 @@ describe('coerceJsonPathsInSql', () => {
   it('handles an empty condition', () => {
     expect(coerceJsonPathsInSql('', jsonColumns)).toBe('');
   });
+
+  // Aggregate arguments need no pass of ours: aggFnExpr in renderChartConfig
+  // already emits toFloat64OrDefault(toString(expr)) around them. Pinned so a
+  // second coercion is not reintroduced if that wrapper is ever read as absent.
+  it('leaves an aggregate argument upstream already coerced', () => {
+    const sql = 'avg(toFloat64OrDefault(toString(Body.latency_ms)))';
+    expect(coerceJsonPathsInSql(sql, jsonColumns)).toBe(sql);
+  });
 });

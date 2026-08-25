@@ -218,12 +218,16 @@ type ColumnReader = {
 };
 
 /**
- * Coerce every native-JSON sub-path in a rendered SQL condition.
+ * Coerce every native-JSON sub-path in a rendered SQL fragment.
  *
- * The seam. Called from `renderWhereExpressionStr`, which every SQL filter --
- * search, charts, dashboards, alerts -- already passes through, so one call
- * covers them all. Failure to read the schema leaves the condition untouched
- * rather than blocking the query.
+ * The seam, called from two places every query already passes through:
+ * `renderWhereExpressionStr` for filters (search, charts, dashboards, alerts)
+ * and `renderSelectList`'s raw-string branch for GROUP BY keys. Failure to read
+ * the schema leaves the fragment untouched rather than blocking the query.
+ *
+ * Aggregate ARGUMENTS need no pass here: upstream's `aggFnExpr` already emits
+ * `toFloat64OrDefault(toString(expr))` around them, which `isAlreadyCoerced`
+ * recognises and leaves alone.
  */
 export async function dfeCoerceJsonPaths(
   condition: string,

@@ -727,7 +727,17 @@ async function renderSelectList(
   { mergeRatio }: RenderSelectListOptions,
 ) {
   if (typeof selectList === 'string') {
-    return chSql`${{ UNSAFE_RAW_SQL: selectList }}`;
+    // DFE: a GROUP BY key arrives here as raw SQL, and renderSelect passes the
+    // same string, so coercing here keeps the two in lockstep. A bare column is
+    // left alone -- only a JSON SUB-PATH is rewritten. See dfe/jsonPath.ts.
+    return chSql`${{
+      UNSAFE_RAW_SQL: await dfeCoerceJsonPaths(selectList, {
+        metadata,
+        databaseName: chartConfig.from.databaseName,
+        tableName: chartConfig.from.tableName,
+        connectionId: chartConfig.connection,
+      }),
+    }}`;
   }
 
   // This metadata query is executed in an attempt tp optimize the selects by favoring materialized fields
