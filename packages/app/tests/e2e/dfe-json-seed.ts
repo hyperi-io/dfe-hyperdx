@@ -18,9 +18,15 @@ import { E2E_CLICKHOUSE_DATABASE } from './utils/constants';
 export const DFE_JSON_TABLE = 'dfe_json_e2e_events';
 export const DFE_JSON_SOURCE_NAME = 'DFE Native JSON';
 
-/** Rows are spread either side of now so a relative time range still finds them. */
-const PAST_MS = 30 * 60 * 1000;
-const FUTURE_MS = 90 * 60 * 1000;
+/**
+ * Rows sit mostly in the recent past, with a small future tail so the fixture
+ * does not age out mid-run. Weighted this way because the relative ranges the
+ * specs use all look BACKWARDS from now, and `getJSONKeys` caches its result
+ * without the date range -- so a window that finds nothing on the first call
+ * leaves the sidebar empty for the rest of the page's life.
+ */
+const PAST_MS = 50 * 60 * 1000;
+const FUTURE_MS = 10 * 60 * 1000;
 const ROW_COUNT = 60;
 
 export const DFE_JSON_USERS = ['alice', 'bob', 'carol'] as const;

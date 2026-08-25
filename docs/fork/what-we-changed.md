@@ -163,6 +163,19 @@ upstream behaviour and tests are unchanged. The service flag is set by
   "99.5" above "1000.25", and a wrongly ordered table is worse than the Code 44
   that names the fix.
 
+  Two shapes the seam must handle, both found by e2e and pinned by tests. A
+  trailing `.:String` is a TYPE, not a path segment: quoting it as one reads a
+  JSON key literally named `:String`, empty for every row. And
+  `findJsonExpressions` returns the ENCLOSING call's closing paren attached when
+  a path ends in a type specifier, so consuming it unbalances the aggregate
+  around it - a syntax error that fails the whole facet batch and empties every
+  other column's filter values with it.
+
+  Stripping that suffix also settles the facet-value question without touching
+  upstream's `renderJsonStringSubcolumn`: values coerce with `toString()`, so a
+  mixed-type path stops under-matching, and upstream's six assertions on that
+  function still pass.
+
   `dfeJsonPathRoot` in the same module serves a second catalogued call site, the
   facet dispatch in **`core/metadata.ts`**'s `getAllKeyValues`. That dispatch
   matches a key against the table's physical column names, and `parseKeyPath`

@@ -210,6 +210,55 @@ describe('coerceJsonPathsInSql', () => {
     expect(coerceJsonPathsInSql('', jsonColumns)).toBe('');
   });
 
+  // The facet path renders `.:String` before this seam sees it. Quoting that as
+  // a path segment looks up a JSON key literally named `:String`, which is
+  // empty for every row -- the sidebar then drops the facet as valueless.
+  describe('typed sub-column suffix', () => {
+    it('replaces the typed suffix with a toString coercion', () => {
+      expect(
+        coerceJsonPathsInSql('Body.`user`.`name`.:String', jsonColumns),
+      ).toBe('toString(Body.`user`.`name`)');
+    });
+
+    it('never quotes the suffix as a path segment', () => {
+      expect(
+        coerceJsonPathsInSql('Body.`user`.`name`.:String', jsonColumns),
+      ).not.toContain('`:String`');
+    });
+
+    it('handles a typed suffix in a select list', () => {
+      expect(
+        coerceJsonPathsInSql(
+          'ServiceName as param0, Body.`user`.`name`.:String as param1',
+          jsonColumns,
+        ),
+      ).toBe('ServiceName as param0, toString(Body.`user`.`name`) as param1');
+    });
+
+    it('leaves a bare column with only a typed suffix alone', () => {
+      const sql = 'Body.:String';
+      expect(coerceJsonPathsInSql(sql, jsonColumns)).toBe(sql);
+    });
+
+    // The facet batch wraps each key in groupUniqArray(N)(...). Dropping one of
+    // those closing parens is a syntax error that fails the WHOLE batch, so
+    // every other column's values disappear with it.
+    it('keeps the enclosing aggregate balanced', () => {
+      const out = coerceJsonPathsInSql(
+        'SELECT groupUniqArray(10000)(ServiceName) AS param0, ' +
+          'groupUniqArray(10000)(ResourceAttributes.`key`.`subKey`.:String) AS param1 FROM t',
+        ['ResourceAttributes'],
+      );
+
+      expect(out).toContain(
+        'groupUniqArray(10000)(toString(ResourceAttributes.`key`.`subKey`)) AS param1',
+      );
+      expect((out.match(/\(/g) ?? []).length).toBe(
+        (out.match(/\)/g) ?? []).length,
+      );
+    });
+  });
+
   // Aggregate arguments need no pass of ours: aggFnExpr in renderChartConfig
   // already emits toFloat64OrDefault(toString(expr)) around them. Pinned so a
   // second coercion is not reintroduced if that wrapper is ever read as absent.

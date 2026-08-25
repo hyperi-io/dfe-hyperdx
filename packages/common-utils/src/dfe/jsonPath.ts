@@ -180,7 +180,14 @@ export function coerceJsonPathsInSql(
 
   // Apply right-to-left so earlier indices stay valid as the string grows.
   let out = sql;
-  for (const { expr, index } of [...found].sort((a, b) => b.index - a.index)) {
+  for (const { expr: rawExpr, index } of [...found].sort(
+    (a, b) => b.index - a.index,
+  )) {
+    // A path ending in a type specifier comes back with the ENCLOSING call's
+    // closing paren attached. Consuming it unbalances the aggregate around it,
+    // which is a syntax error that fails the whole batch.
+    const expr = rawExpr.replace(/\)+$/, '');
+
     const segments = splitJsonPath(expr);
     if (!segments || segments.length < 2) continue;
 
@@ -188,14 +195,30 @@ export function coerceJsonPathsInSql(
     if (!roots.has(root)) continue;
     if (isAlreadyCoerced(sql, index)) continue;
 
+    const path = stripTypeSuffix(segments.slice(1));
+    if (path.length === 0) continue;
+
     const coerced = renderJsonStringExpression(
       root,
-      segments.slice(1).map(unquoteJsonSegment),
+      path.map(unquoteJsonSegment),
     );
     out = out.slice(0, index) + coerced + out.slice(index + expr.length);
   }
 
   return out;
+}
+
+/**
+ * Drop a trailing typed sub-column marker (`.:String`) from a path.
+ *
+ * It is a TYPE, not a path segment, so quoting it as one looks up a JSON key
+ * literally named `:String` and reads empty for every row. Dropping it also
+ * upgrades the expression to `toString()`, which is what a mixed-type path
+ * needs -- see the file header.
+ */
+function stripTypeSuffix(path: string[]): string[] {
+  const last = path[path.length - 1];
+  return last?.startsWith(':') ? path.slice(0, -1) : path;
 }
 
 /**
