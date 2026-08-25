@@ -135,6 +135,26 @@ export function splitJsonPath(expression: string): string[] | undefined {
 }
 
 /**
+ * The root column of a native-JSON dot path, when that root is one of
+ * `jsonColumns`. Undefined for anything else -- a plain column, a Map subscript,
+ * a function call.
+ *
+ * `parseKeyPath` in core/metadata.ts splits BRACKET form only, so a JSON dot
+ * path reaches the facet dispatch as one opaque segment and matches no column
+ * name. This is what lets that dispatch recognise it as a sub-path.
+ */
+export function dfeJsonPathRoot(
+  keyExpression: string,
+  jsonColumns: Iterable<string>,
+): string | undefined {
+  const segments = splitJsonPath(keyExpression);
+  if (!segments || segments.length < 2) return undefined;
+
+  const root = unquoteJsonSegment(segments[0]);
+  return new Set(jsonColumns).has(root) ? root : undefined;
+}
+
+/**
  * Rewrite every native-JSON sub-path in a SQL fragment so it carries a
  * `toString()` coercion.
  *

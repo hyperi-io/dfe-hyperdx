@@ -154,6 +154,23 @@ upstream behaviour and tests are unchanged. The service flag is set by
   every SQL filter already passes through. Coercion is `toString()`, NOT the
   `.:String` sub-column upstream #2549 proposes - see the module header for the
   measurement that rules it out.
+
+  `dfeJsonPathRoot` in the same module serves a second catalogued call site, the
+  facet dispatch in **`core/metadata.ts`**'s `getAllKeyValues`. That dispatch
+  matches a key against the table's physical column names, and `parseKeyPath`
+  splits BRACKET form only - so a JSON dot path arrives as one opaque segment,
+  matches nothing, and falls out of the loop with neither a facet nor an error.
+  That is why the filter sidebar listed no JSON sub-path at all. We match on the
+  path's ROOT column instead and hand the path through intact. The same branch
+  drops a bracket subscript on a JSON column, which is `arrayElement`: one
+  illegal expression fails the whole batch and takes every other facet with it.
+
+  Facet VALUES still render through upstream's `.:String`, so a path storing a
+  non-String type in some rows lists an incomplete value set. Selecting a value
+  is unaffected - the WHERE seam coerces with `toString()`, which matches a
+  superset - so this costs completeness, never correctness. Changing it means
+  editing upstream's own `metadata.test.ts` assertions, which is the most
+  expensive delta shape we have.
 - `packages/app/src/dfe/jsonColumns.ts` - which roots take dot access. Two
   catalogued call sites read it: **`components/SQLEditor/SQLInlineEditor.tsx`**
   (the chart-builder autocomplete rendered every nested path as `col['key']`,
@@ -165,7 +182,10 @@ upstream behaviour and tests are unchanged. The service flag is set by
 - `packages/app/jest.dfe.config.js` + `jest.dfe.setup.js` - pins
   `NEXT_PUBLIC_THEME=hyperdx` for app unit tests, so upstream's suite passes
   unchanged instead of us editing their test files to accommodate the rebrand.
-  Mirrors `packages/api/jest.dfe.config.js`.
+  Mirrors `packages/api/jest.dfe.config.js`. The setup file is loaded by the
+  jest config rather than compiled, so no tsconfig project covers it and typed
+  linting cannot parse it; **`packages/app/eslint.config.mjs`** carries one
+  added `ignores` entry for it, beside upstream's own `global-setup.js` line.
 - `packages/app/src/dfe/embedFeatures.ts` + `EmbedThemeSync.tsx` - chromeless
   embed mode: feature gating by route, and live theme sync from the host UI.
   `pages/_document.tsx` carries one added inline head script

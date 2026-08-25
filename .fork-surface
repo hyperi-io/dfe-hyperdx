@@ -55,6 +55,7 @@ packages/api/src/utils/logger.ts
 packages/app/.env.development
 packages/app/.storybook/public/mockServiceWorker.js
 packages/app/CHANGELOG.md
+packages/app/eslint.config.mjs
 packages/app/next.config.mjs
 packages/app/package.json
 packages/app/pages/_app.tsx

@@ -1,7 +1,7 @@
 import {
-  JSDataType,
   type ColumnMetaType,
   convertCHDataTypeToJSType,
+  JSDataType,
 } from '@hyperdx/common-utils/dist/clickhouse';
 import type { Field } from '@hyperdx/common-utils/dist/core/metadata';
 

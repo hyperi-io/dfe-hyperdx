@@ -1,5 +1,6 @@
 import {
   coerceJsonPathsInSql,
+  dfeJsonPathRoot,
   quoteJsonSegment,
   renderJsonNumberExpression,
   renderJsonPath,
@@ -29,10 +30,13 @@ describe('quoting round-trips', () => {
     expect(unquoteJsonSegment(quoteJsonSegment(segment))).toBe(segment);
   });
 
-  it.each(segments)('quoting %j is idempotent through a round trip', segment => {
-    const once = quoteJsonSegment(segment);
-    expect(quoteJsonSegment(unquoteJsonSegment(once))).toBe(once);
-  });
+  it.each(segments)(
+    'quoting %j is idempotent through a round trip',
+    segment => {
+      const once = quoteJsonSegment(segment);
+      expect(quoteJsonSegment(unquoteJsonSegment(once))).toBe(once);
+    },
+  );
 
   it('doubles a backtick when quoting', () => {
     expect(quoteJsonSegment('a`b')).toBe('`a``b`');
@@ -41,9 +45,7 @@ describe('quoting round-trips', () => {
 
 describe('renderJsonPath', () => {
   it('leaves a bare root unquoted and quotes each segment', () => {
-    expect(renderJsonPath('Body', ['user', 'name'])).toBe(
-      'Body.`user`.`name`',
-    );
+    expect(renderJsonPath('Body', ['user', 'name'])).toBe('Body.`user`.`name`');
   });
 
   it('quotes a root that is not a bare identifier', () => {
@@ -114,6 +116,37 @@ describe('splitJsonPath', () => {
   });
 });
 
+describe('dfeJsonPathRoot', () => {
+  const jsonColumns = ['_json', '_tags'];
+
+  it('names the root of a quoted dot path', () => {
+    expect(dfeJsonPathRoot('_json.`user`.`name`', jsonColumns)).toBe('_json');
+  });
+
+  it('names the root of an unquoted dot path', () => {
+    expect(dfeJsonPathRoot('_tags.env', jsonColumns)).toBe('_tags');
+  });
+
+  it('rejects a path rooted at a column that is not JSON', () => {
+    expect(dfeJsonPathRoot('LogAttributes.host', jsonColumns)).toBeUndefined();
+  });
+
+  // arrayElement is illegal on a JSON column, so the caller must not emit it.
+  it('rejects bracket form even on a JSON column', () => {
+    expect(dfeJsonPathRoot("_json['user.name']", jsonColumns)).toBeUndefined();
+  });
+
+  it('rejects the bare column, which has no sub-path', () => {
+    expect(dfeJsonPathRoot('_json', jsonColumns)).toBeUndefined();
+  });
+
+  it('rejects a function call', () => {
+    expect(
+      dfeJsonPathRoot('toString(_json.`user`.`name`)', jsonColumns),
+    ).toBeUndefined();
+  });
+});
+
 describe('coerceJsonPathsInSql', () => {
   const jsonColumns = ['Body', 'ResourceAttributes'];
 
@@ -162,12 +195,10 @@ describe('coerceJsonPathsInSql', () => {
   it('coerces several paths in one predicate', () => {
     expect(
       coerceJsonPathsInSql(
-        "Body.a = 1 AND ResourceAttributes.b = 2",
+        'Body.a = 1 AND ResourceAttributes.b = 2',
         jsonColumns,
       ),
-    ).toBe(
-      'toString(Body.`a`) = 1 AND toString(ResourceAttributes.`b`) = 2',
-    );
+    ).toBe('toString(Body.`a`) = 1 AND toString(ResourceAttributes.`b`) = 2');
   });
 
   it('is a no-op when the table has no JSON columns', () => {

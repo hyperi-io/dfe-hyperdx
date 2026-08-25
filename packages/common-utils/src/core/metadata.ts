@@ -14,6 +14,7 @@ import {
   tableExpr,
 } from '@/clickhouse';
 import { renderChartConfig, timeFilterExpr } from '@/core/renderChartConfig';
+import { dfeJsonPathRoot } from '@/dfe/jsonPath';
 import {
   FilterState,
   filterStateToPredicate,
@@ -2280,6 +2281,14 @@ export class Metadata {
         metadataMVs,
       });
 
+    // DFE: the table's native JSON columns, for the sub-path branch below.
+    // getColumns is cached, so this costs no extra query.
+    const dfeJsonColumns = (
+      await this.getColumns({ databaseName, tableName, connectionId })
+    )
+      .filter(c => convertCHDataTypeToJSType(c.type) === JSDataType.JSON)
+      .map(c => c.name);
+
     // build expressions for each query type
     const mapTextIndexQueryOptions: TextIndexMapColumnQueryOptions = new Map();
     const nativeTextIndexQueryOptions: TextIndexColumnQueryOptions = new Map();
@@ -2346,7 +2355,19 @@ export class Metadata {
       // from callers like the MCP describeSource tool), so they must be
       // SQL-escaped before being embedded as a literal — `SqlString.escape`
       // returns a fully-quoted, safely-escaped ClickHouse string literal.
-      if (keyValueFetchingStrategies.rawTable.includes(key.column)) {
+      // DFE: a native JSON sub-path arrives as one opaque segment, because
+      // parseKeyPath splits bracket form only. It matches no rawTable column
+      // and would be dropped here with neither a facet nor an error, so match
+      // on its ROOT column instead and hand the path through intact.
+      // A bracket subscript or the bare column is skipped: arrayElement is
+      // illegal on JSON, and one illegal expression fails the whole batch,
+      // taking every other facet down with it.
+      if (dfeJsonPathRoot(key.keyExpression, dfeJsonColumns)) {
+        rawQueryOptions.push(key.keyExpression);
+      } else if (
+        !dfeJsonColumns.includes(key.column) &&
+        keyValueFetchingStrategies.rawTable.includes(key.column)
+      ) {
         const quotedColumn = quoteIdentifierIfNeeded(key.column);
         if (key.mapKey) {
           rawQueryOptions.push(

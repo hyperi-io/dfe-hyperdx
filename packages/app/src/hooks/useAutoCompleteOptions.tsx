@@ -291,7 +291,9 @@ export function useAutoCompleteOptions(
 
   useEffect(() => {
     if (searchField && !searchField.type.startsWith('Map')) {
-      loadMoreFacetsForKey(mergePath(searchField.path, jsonColumns, mapColumns));
+      loadMoreFacetsForKey(
+        mergePath(searchField.path, jsonColumns, mapColumns),
+      );
     }
   }, [searchField, loadMoreFacetsForKey, jsonColumns, mapColumns]);
 
