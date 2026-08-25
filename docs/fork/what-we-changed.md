@@ -223,6 +223,15 @@ upstream behaviour and tests are unchanged. The service flag is set by
   `@/` resolves to `src/` and cannot reach `tests/`, and the eslint config bans
   parent-relative imports. A `dfe-` prefix carries the ownership instead.
 
+  It also seeds the stored WHERE language to Lucene in the saved storage state.
+  The fork defaults that language to SQL (`6cf72984`), and upstream's
+  `search-input` test id is rendered ONLY on the Lucene input -- the SQL branch
+  renders `SQLInlineEditorControlled` and never receives it. Without the seed
+  every upstream spec calling `performSearch` waits for an element that does not
+  exist. Realigning the TEST environment leaves what a real DFE user gets
+  unchanged, and rewriting upstream's specs is the alternative fork discipline
+  rules out.
+
   Opt-in by construction: both apply only to a run passing
   `--config=playwright.dfe.config.ts`, so upstream's default path and CI, which
   do have a bundled Chromium, are untouched. Neither a dependency bump nor an

@@ -1,24 +1,66 @@
 /**
- * DFE e2e global setup: upstream's, with browser launches pointed at Chrome.
+ * DFE e2e global setup: upstream's, plus the two things a DFE host needs.
  *
- * Playwright 1.57.0 ships no bundled Chromium for Ubuntu 26.04, so the pinned
- * revision cannot be fetched on a DFE dev host. `channel: 'chrome'` in
- * playwright.dfe.config.ts covers the TESTS, but not global setup, which calls
- * `chromium.launch()` directly and so never sees the project config. Playwright
- * 1.57 honours no environment override for that call -- verified, not assumed.
+ * 1. Browser launches go to the system Chrome. Playwright 1.57.0 ships no
+ *    bundled Chromium for Ubuntu 26.04, so the pinned revision can never be
+ *    fetched here. `channel: 'chrome'` in playwright.dfe.config.ts covers the
+ *    TESTS, but not this setup, which calls `chromium.launch()` directly and so
+ *    never sees the project config -- and Playwright 1.57 honours no
+ *    environment override for that call.
  *
- * Defaulting the channel here rather than editing `global-setup-fullstack.ts`
- * keeps upstream's file pristine AND keeps the change opt-in: it applies only
- * to a run passing `--config=playwright.dfe.config.ts`, so upstream's default
- * path and CI, which do have a bundled Chromium, are untouched.
+ * 2. The stored WHERE language is seeded to Lucene. The fork defaults it to SQL
+ *    (see SearchWhereInput and commit 6cf72984), and upstream's `search-input`
+ *    test id is rendered ONLY on the Lucene input, so on a fresh profile every
+ *    upstream spec calling `performSearch` waits for an element that does not
+ *    exist. Seeding the preference restores upstream's assumption for their
+ *    specs without changing what a real DFE user gets.
  *
- * A caller's explicit channel still wins.
+ * Both apply only to a run passing `--config=playwright.dfe.config.ts`, so
+ * upstream's default path and CI are untouched.
  */
-import { chromium } from '@playwright/test';
+import fs from 'fs';
+import path from 'path';
+import { chromium, type FullConfig } from '@playwright/test';
 
 import baseGlobalSetup from './global-setup-fullstack';
+
+const AUTH_FILE = path.join(__dirname, '.auth/user.json');
+const APP_ORIGIN = `http://localhost:${process.env.HDX_E2E_APP_PORT || '21300'}`;
+const LANGUAGE_KEY = 'hdx-search-where-language';
 
 const launch = chromium.launch.bind(chromium);
 chromium.launch = options => launch({ channel: 'chrome', ...options });
 
-export default baseGlobalSetup;
+/** Add the Lucene preference to the storage state upstream's setup just saved. */
+function seedLucenePreference(): void {
+  if (!fs.existsSync(AUTH_FILE)) return;
+
+  const state = JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8'));
+  state.origins ??= [];
+
+  let origin = state.origins.find(
+    (o: { origin: string }) => o.origin === APP_ORIGIN,
+  );
+  if (!origin) {
+    origin = { origin: APP_ORIGIN, localStorage: [] };
+    state.origins.push(origin);
+  }
+  origin.localStorage ??= [];
+
+  const existing = origin.localStorage.find(
+    (entry: { name: string }) => entry.name === LANGUAGE_KEY,
+  );
+  if (existing) {
+    existing.value = 'lucene';
+  } else {
+    origin.localStorage.push({ name: LANGUAGE_KEY, value: 'lucene' });
+  }
+
+  fs.writeFileSync(AUTH_FILE, JSON.stringify(state, null, 2));
+}
+
+export default async function dfeGlobalSetup(config: FullConfig) {
+  const result = await baseGlobalSetup(config);
+  seedLucenePreference();
+  return result;
+}
