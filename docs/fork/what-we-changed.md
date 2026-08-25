@@ -209,6 +209,25 @@ upstream behaviour and tests are unchanged. The service flag is set by
   last selection, which a bare `/search` deliberately does not. Upstream already
   resolves `?source=` by NAME as well as id (`useResolvedSourceParam`), so
   linking by name needs nothing here.
+- `packages/app/playwright.dfe.config.ts` +
+  `tests/e2e/dfe-global-setup-chrome.ts` - run e2e against the system Chrome.
+  Playwright 1.57.0 ships no bundled Chromium for Ubuntu 26.04 and
+  `playwright install chromium` refuses for that platform, so a DFE dev host can
+  never fetch the pinned revision. The config sets `channel: 'chrome'` per
+  project and raises the webServer budget (`E2E_APP_SERVER_TIMEOUT_MS`); the
+  setup file exists because global setup calls `chromium.launch()` directly and
+  so never sees the project config, and Playwright 1.57 honours no environment
+  override for that call.
+
+  The setup file sits BESIDE upstream's rather than under `src/dfe/`, because
+  `@/` resolves to `src/` and cannot reach `tests/`, and the eslint config bans
+  parent-relative imports. A `dfe-` prefix carries the ownership instead.
+
+  Opt-in by construction: both apply only to a run passing
+  `--config=playwright.dfe.config.ts`, so upstream's default path and CI, which
+  do have a bundled Chromium, are untouched. Neither a dependency bump nor an
+  edit to `playwright.config.ts` was needed. Mirrors the `jest.dfe.config.js`
+  pattern.
 - `packages/app/src/dfe/embedFeatures.ts` + `EmbedThemeSync.tsx` - chromeless
   embed mode: feature gating by route, and live theme sync from the host UI.
   `pages/_document.tsx` carries one added inline head script
