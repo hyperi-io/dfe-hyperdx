@@ -20,7 +20,6 @@ import {
   IconCheck,
   IconCopy,
   IconFilter,
-  IconFilterX,
   IconMinus,
   IconPlus,
   IconSearch,
@@ -34,10 +33,10 @@ import HyperJson, {
   LineAction,
 } from '@/components/HyperJson';
 import {
-  dfeFilterFieldPath,
   dfeJsonColumnPath,
   dfeJsonExtractQuery,
 } from '@/dfe/clickhouseJsonPath';
+import { dfeExcludeAction } from '@/dfe/rowExcludeAction';
 import { useFormatTime } from '@/useFormatTime';
 import { mergePath } from '@/utils';
 import {
@@ -432,29 +431,52 @@ export function DBRowJsonViewer({
         fieldPath != 'Timestamp' &&
         fieldPath != 'TimestampTime'
       ) {
-        // Shared by include and exclude so the two can never disagree on which
-        // physical expression they filter.
-        const filterFieldPath = dfeFilterFieldPath({
-          keyPath,
-          fieldPath,
-          value,
-          isInParsedJson,
-          parsedJsonRootPath,
-          jsonColumns,
-          mapColumns,
-        });
-        const filterValue = (
-          filterFieldPath.startsWith('toString(') || typeof value !== 'boolean'
-            ? String(value)
-            : value
-        ) as string;
-
         actions.push({
           key: 'add-to-search',
           label: <IconFilter size={14} />,
           title: 'Add to Filters',
           onClick: () => {
-            onPropertyAddClick(filterFieldPath, filterValue);
+            let filterFieldPath = fieldPath;
+
+            // Handle parsed JSON from string columns using JSONExtractString
+            if (isInParsedJson && parsedJsonRootPath) {
+              let jsonExtractFn: JSONExtractFn = 'JSONExtractString';
+
+              if (typeof value === 'number') {
+                jsonExtractFn = 'JSONExtractFloat';
+              } else if (typeof value === 'boolean') {
+                jsonExtractFn = 'JSONExtractBool';
+              }
+
+              const jsonQuery = dfeJsonExtractQuery(
+                keyPath,
+                parsedJsonRootPath,
+                jsonColumns,
+                jsonExtractFn,
+                mapColumns,
+              );
+              if (jsonQuery) {
+                filterFieldPath = jsonQuery;
+              } else {
+                // We're at the root of the parsed JSON, treat as string
+                filterFieldPath = isJsonColumn
+                  ? `toString(${fieldPath})`
+                  : fieldPath;
+              }
+            } else {
+              // Regular JSON column or non-JSON field
+              filterFieldPath = isJsonColumn
+                ? dfeJsonColumnPath(keyPath)
+                : fieldPath;
+            }
+
+            onPropertyAddClick(
+              filterFieldPath,
+              (filterFieldPath.startsWith('toString(') ||
+              typeof value !== 'boolean'
+                ? String(value)
+                : value) as string,
+            );
             notifications.show({
               color: 'green',
               message: `Added "${fieldPath} = ${String(value)}" to filters`,
@@ -462,18 +484,19 @@ export function DBRowJsonViewer({
           },
         });
 
-        actions.push({
-          key: 'exclude-from-search',
-          label: <IconFilterX size={14} />,
-          title: 'Exclude this value',
-          onClick: () => {
-            onPropertyAddClick(filterFieldPath, filterValue, 'exclude');
-            notifications.show({
-              color: 'green',
-              message: `Excluded "${fieldPath} = ${String(value)}" from filters`,
-            });
-          },
-        });
+        // DFE: the negation of upstream's action above. See dfe/rowExcludeAction.
+        actions.push(
+          dfeExcludeAction({
+            keyPath,
+            fieldPath,
+            value,
+            isInParsedJson,
+            parsedJsonRootPath,
+            jsonColumns,
+            mapColumns,
+            onPropertyAddClick,
+          }),
+        );
       }
 
       if (generateSearchUrl && typeof value !== 'object') {

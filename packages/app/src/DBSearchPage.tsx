@@ -212,9 +212,7 @@ const SEARCH_RESULTS_PANEL_KEEP_OPEN_SELECTOR =
 
 // Helper function to get the default source id
 export function getDefaultSourceId(
-  sources:
-    | (Pick<TSource, 'id' | 'kind' | 'disabled'> & { name?: string })[]
-    | undefined,
+  sources: Pick<TSource, 'id' | 'kind' | 'disabled'>[] | undefined,
   lastSelectedSourceId: string | undefined,
 ): string {
   if (!sources || sources.length === 0) return '';
