@@ -34,6 +34,7 @@ jest.mock('@/useFormatTime', () => ({
 const ACTION_TITLE: Record<string, string> = {
   Search: 'search for this value only',
   'Add to Filters': 'add to filters',
+  Exclude: 'exclude this value',
   Column: 'column to results table',
 };
 
@@ -96,6 +97,17 @@ describe('DBRowJsonViewer - native ClickHouse JSON columns', () => {
     expect(mockOnPropertyAddClick).toHaveBeenCalledWith(
       "JSONExtractString(toString(_json), '_source')",
       'simple_fetcher_to_loader_kafka',
+    );
+  });
+
+  it('excludes with the same expression the include action filters on', () => {
+    render();
+    clickAction('_source', 'Exclude');
+
+    expect(mockOnPropertyAddClick).toHaveBeenCalledWith(
+      "JSONExtractString(toString(_json), '_source')",
+      'simple_fetcher_to_loader_kafka',
+      'exclude',
     );
   });
 

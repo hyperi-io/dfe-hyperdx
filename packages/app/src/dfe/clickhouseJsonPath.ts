@@ -60,6 +60,58 @@ export function dfeJsonColumnPath(keyPath: string[]): string {
 }
 
 /**
+ * The physical expression to filter a JSON-viewer line on.
+ *
+ * Both the include and the exclude action call this, so they cannot disagree
+ * about which expression they filter. Covers all three shapes the viewer sees:
+ * a value inside parsed JSON from a String column, a native JSON sub-path, and
+ * an ordinary column.
+ */
+export function dfeFilterFieldPath({
+  keyPath,
+  fieldPath,
+  value,
+  isInParsedJson,
+  parsedJsonRootPath,
+  jsonColumns = [],
+  mapColumns = [],
+}: {
+  keyPath: string[];
+  fieldPath: string;
+  value: unknown;
+  isInParsedJson?: boolean;
+  parsedJsonRootPath?: string[];
+  jsonColumns?: string[];
+  mapColumns?: string[];
+}): string {
+  const isJsonColumn = keyPath.length > 0 && jsonColumns.includes(keyPath[0]);
+
+  if (isInParsedJson && parsedJsonRootPath) {
+    const jsonExtractFn: JSONExtractFn =
+      typeof value === 'number'
+        ? 'JSONExtractFloat'
+        : typeof value === 'boolean'
+          ? 'JSONExtractBool'
+          : 'JSONExtractString';
+
+    const jsonQuery = dfeJsonExtractQuery(
+      keyPath,
+      parsedJsonRootPath,
+      jsonColumns,
+      jsonExtractFn,
+      mapColumns,
+    );
+    if (jsonQuery) {
+      return jsonQuery;
+    }
+    // At the root of the parsed JSON, so treat the whole value as a string.
+    return isJsonColumn ? `toString(${fieldPath})` : fieldPath;
+  }
+
+  return isJsonColumn ? dfeJsonColumnPath(keyPath) : fieldPath;
+}
+
+/**
  * Drop-in for upstream's `buildJSONExtractQuery` with an IDENTICAL signature,
  * so the call sites differ from upstream by one identifier and nothing else.
  *
