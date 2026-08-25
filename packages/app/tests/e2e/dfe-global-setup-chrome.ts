@@ -20,12 +20,14 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { chromium, type FullConfig } from '@playwright/test';
+import { chromium, type FullConfig, request } from '@playwright/test';
 
+import { dfeJsonSourceBody, seedDfeJson } from './dfe-json-seed';
 import baseGlobalSetup from './global-setup-fullstack';
 
 const AUTH_FILE = path.join(__dirname, '.auth/user.json');
 const APP_ORIGIN = `http://localhost:${process.env.HDX_E2E_APP_PORT || '21300'}`;
+const API_URL = `http://localhost:${process.env.HDX_E2E_API_PORT || '21000'}`;
 const LANGUAGE_KEY = 'hdx-search-where-language';
 
 const launch = chromium.launch.bind(chromium);
@@ -59,8 +61,36 @@ function seedLucenePreference(): void {
   fs.writeFileSync(AUTH_FILE, JSON.stringify(state, null, 2));
 }
 
+/** Register the native-JSON source against the team upstream's setup just created. */
+async function createDfeJsonSource(): Promise<void> {
+  const api = await request.newContext({
+    baseURL: API_URL,
+    storageState: AUTH_FILE,
+  });
+  try {
+    const connections = await (await api.get('/connections')).json();
+    const connectionId = connections?.[0]?.id ?? connections?.[0]?._id;
+    if (!connectionId) {
+      throw new Error('DFE JSON setup: no ClickHouse connection on the team');
+    }
+
+    const created = await api.post('/sources', {
+      data: dfeJsonSourceBody(String(connectionId)),
+    });
+    if (!created.ok()) {
+      throw new Error(
+        `DFE JSON setup: source creation failed (${created.status()}): ${await created.text()}`,
+      );
+    }
+  } finally {
+    await api.dispose();
+  }
+}
+
 export default async function dfeGlobalSetup(config: FullConfig) {
   const result = await baseGlobalSetup(config);
   seedLucenePreference();
+  await seedDfeJson();
+  await createDfeJsonSource();
   return result;
 }
