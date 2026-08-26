@@ -256,6 +256,57 @@ crafted GLOB, and our globs come from config. No vector.
 resolve 6.3.1 - BELOW the vulnerable range, not above it. Worth reading version
 ranges in both directions.
 
+### Two feeds, not one - and dismissing alerts does not touch the gate
+
+This one cost time. Dependabot alerts and the CI audit gate are SEPARATE.
+
+`quality.typescript.audit` in `.hyperi-ci.yaml` runs
+`yarn npm audit --severity moderate` (hyperi-ci builds that command in
+`languages/typescript/quality.py`). It reads the lockfile against npm's
+advisory DB. **Dismissing a Dependabot alert does nothing to it.** Plan the two
+separately or you will dismiss 99 things and watch the build fail anyway.
+
+Measured 2026-08-26: 99 Dependabot alerts, but only **26** audit findings at
+moderate-and-above. Fewer because yarn dedupes by package, and different
+because it walks the whole workspace including devDependencies - so it finds
+nested copies the hoisted `node_modules` view hides. `lodash` reads 4.18.1 at
+the top level and the audit finds a 4.17.21 copy; `semver` reads 6.3.1 and the
+audit finds 5.7.1.
+
+**How to silence one, properly.** Yarn Berry's own settings, confirmed present
+in 4.13.0 via `yarn config --json`:
+
+- `npmAuditIgnoreAdvisories` - a list of advisory IDs. Use this one.
+- `npmAuditExcludePackages` - excludes a package entirely, so a NEW advisory
+  against it is silenced too. Do not use it for risk acceptance.
+
+The IDs are the numeric npm ones from the audit output (`1104000`), not GHSA
+strings. Get them with:
+
+```
+yarn npm audit --severity moderate --json --recursive
+```
+
+Each line carries `children.ID`, `children.URL` (the GHSA link) and
+`Tree Versions`. Put the ID in `.yarnrc.yml` with a comment naming the reason
+and the date, same discipline as a `security/overrides.yaml` entry.
+
+`.yarnrc.yml` is upstream's file, so an addition there is fork surface and
+belongs in the catalogue.
+
+**Other finding classes take an inline tag instead**, and should use it rather
+than a config-level mute:
+
+| Finding | Where the acceptance goes |
+|---|---|
+| dependency advisory | `.yarnrc.yml` `npmAuditIgnoreAdvisories` - there is no line of code to tag |
+| eslint `security/*` | `// eslint-disable-next-line security/detect-object-injection -- <reason>` at the site |
+| semgrep (`fork-security.yml`) | `// nosemgrep: <rule-id> -- <reason>`, or a rule-scoped entry in `.hyperi-ci.yaml` `quality.ignore` |
+| CodeQL, once enabled | `// codeql[<rule-id>] -- <reason>` |
+
+The `.hyperi-ci.yaml` `quality.ignore` block already does this for two semgrep
+rules, with a written reason each. Follow that shape.
+
 ### Tooling warts found on the way
 
 - **`hyperi-ci deps drift` never read `yarn.lock`.** It looked for
@@ -303,3 +354,10 @@ ranges in both directions.
 - `.hyperi-ci.yaml` still has `quality.typescript.audit: warn`. It goes back to
   `blocking` LAST, once the backlog is cleared - flipping it first just turns
   the build red and teaches everyone to bypass the gate.
+
+  The backlog for THAT gate is the 26 audit findings, not the 99 alerts. Of the
+  26, five are on packages in the production closure (ajv, cross-spawn, lodash,
+  picomatch, semver) and the rest are dev or build only. Note the audit found
+  different VERSIONS of lodash and semver than the hoisted view did, so those
+  two need re-checking against the copies the audit actually names before any
+  of them are written off.
