@@ -32,7 +32,7 @@ import request from 'supertest';
 import { extractToken } from '@/dfe/middleware/jwt-verify';
 import router from '@/dfe/routers/query-export';
 
-const mockExtractToken = extractToken as jest.Mock;
+const mockExtractToken = jest.mocked(extractToken);
 
 const app = express();
 app.use(express.json());
@@ -97,7 +97,7 @@ describe('POST /dfe/create-rule status mapping', () => {
 
     await request(app).post('/dfe/create-rule').send(RULE_BODY);
 
-    const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+    const [, init] = jest.mocked(global.fetch).mock.calls[0];
     expect(JSON.parse(init.body)).toMatchObject({
       raw_sql: 'SELECT 1',
       saved_search_name: 'noisy logins',

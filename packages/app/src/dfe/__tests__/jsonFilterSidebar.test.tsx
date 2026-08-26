@@ -13,7 +13,6 @@
  * docs/fork/what-we-changed.md. The mock harness is duplicated from upstream's
  * `DBSearchPageFilters/hooks.test.tsx`, which exports none of it.
  */
-/* eslint-disable @typescript-eslint/no-unsafe-type-assertion */
 import React from 'react';
 import { enableMapSet } from 'immer';
 import { BuilderChartConfigWithDateRange } from '@hyperdx/common-utils/dist/types';
@@ -160,12 +159,23 @@ function wrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Stub a mocked hook with a partial return value.
+ *
+ * The sidebar reads a handful of fields off each hook, so the doubles are
+ * deliberately partial. Routing them through one `unknown`-typed helper keeps
+ * that honest without a cast on every line.
+ */
+function stub(hook: jest.Mock, value: unknown) {
+  hook.mockReturnValue(value);
+}
+
 function setup({ jsonColumns }: { jsonColumns: string[] }) {
-  useMe.mockReturnValue({
+  stub(useMe, {
     data: { team: { filterKeysFetchLimit: 100 } },
     isFetched: true,
-  } as any);
-  useSource.mockReturnValue({
+  });
+  stub(useSource, {
     data: {
       id: 'source1',
       kind: 'log',
@@ -175,26 +185,26 @@ function setup({ jsonColumns }: { jsonColumns: string[] }) {
       timestampValueExpression: '_timestamp',
     },
     isLoading: false,
-  } as any);
-  useColumns.mockReturnValue({ data: COLUMNS, isLoading: false } as any);
-  useDateTimeColumns.mockReturnValue([COLUMNS[0]] as any);
-  useJsonColumns.mockReturnValue({ data: jsonColumns } as any);
-  useMapColumns.mockReturnValue({ data: [] } as any);
-  useAllFields.mockReturnValue({ data: ALL_FIELDS } as any);
-  usePinnedFilters.mockReturnValue({
+  });
+  stub(useColumns, { data: COLUMNS, isLoading: false });
+  stub(useDateTimeColumns, [COLUMNS[0]]);
+  stub(useJsonColumns, { data: jsonColumns });
+  stub(useMapColumns, { data: [] });
+  stub(useAllFields, { data: ALL_FIELDS });
+  stub(usePinnedFilters, {
     isFieldPinned: jest.fn().mockReturnValue(false),
     isSharedFieldPinned: jest.fn().mockReturnValue(false),
-  } as any);
-  useMetadataWithSettings.mockReturnValue({
+  });
+  stub(useMetadataWithSettings, {
     getKeyValuesWithMVs: jest.fn(),
     getAllKeyValues: jest.fn(),
-  } as any);
-  useGetKeyValues.mockReturnValue({
+  });
+  stub(useGetKeyValues, {
     data: undefined,
     isLoading: false,
     isFetching: false,
     error: null,
-  } as any);
+  });
 }
 
 /** The `keys` argument the sidebar hands to useGetKeyValues. */

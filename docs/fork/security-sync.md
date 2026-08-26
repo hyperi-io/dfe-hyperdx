@@ -335,12 +335,72 @@ rules, with a written reason each. Follow that shape.
   `scripts/dfe-lint-ours.mjs` scopes eslint, so it audits our code and ignores
   upstream's. Until then the hook stays off and lint-staged has to be run by
   hand.
+- **There are TWO ratchets, and the second one catches you fixing the first
+  wrongly.** `--max-warnings` per package is one. `scripts/ci/ratchet.mjs` is
+  the other, and it counts `as any` and `eslint-disable` occurrences against a
+  committed baseline. So silencing an eslint warning with a disable comment
+  passes the first and fails the second, by design. Good design - it is the
+  guard against exactly that reflex.
+
+  The right move is a real fix. `sql[i]` in a loop trips
+  `security/detect-object-injection` on every read; `sql.charAt(i)` does not,
+  and is the same operation. `as jest.Mock` trips `no-unsafe-type-assertion`;
+  `jest.mocked()` is the typed helper and needs no cast. Eleven
+  `(dfeConfig as any).X = ` assignments collapse to one
+  `dfeConfig as Record<string, unknown>` alias. Twenty-one casts removed that
+  way this pass, none of them muted.
+
+- **The warning ratchet hides behind errors.** common-utils runs
+  `eslint . --max-warnings 80` and was at 83. That was invisible while the run
+  also had 3 prettier ERRORS - the summary reads "86 problems (3 errors, 83
+  warnings)" and the eye goes to the errors. Fix the errors and the ratchet
+  breach becomes the failure. Check both numbers, not the headline.
+
 - **Renovate's blanket-disable pattern is broken upstream.**
   `matchFileNames: ['**'], enabled: false` plus `vulnerabilityAlerts` is the
   obvious way to say "security only", and Renovate 43.113.0 added a filter that
   drops those deps anyway - security PRs get autoclosed and no new ones appear
   (renovatebot/renovate#42655, closed as not planned). We scope by
   `includePaths` instead so there is no disabled dep to mis-filter.
+
+### Repo settings are org policy, not a repo toggle
+
+Trying to enable secret scanning per-repo returns a 422: "An enforced security
+configuration prevented modifying secret scanning enablement."
+
+The org carries four configurations, and a repo is attached to one:
+
+| Config | Enforced | Secret scanning | Push protection | Code scanning |
+|---|---|---|---|---|
+| HyperI Default | yes | off | off | off |
+| HyperI Public | yes | on | on | on |
+| HyperI Public Fork | yes | on | off | off |
+| GitHub recommended | no | on | on | on |
+
+dfe-hyperdx is on **HyperI Default**, hyperi-ci is on **HyperI Public**. That
+is the whole difference, and it is deliberate: dfe-hyperdx is PRIVATE
+(`"visibility":"private"`, `"fork":false`), the org is on the Team plan, and
+those features are only free on public repos. They stay off until the repo is
+public and GA.
+
+Do not confuse it with `hyperdx-1`, which IS a public fork and IS on HyperI
+Public Fork - but was last pushed 2026-03-05 and is not where the work happens.
+
+`dependabot_alerts` is `enabled` in every one of these configs, which is why
+the alerts arrive regardless.
+
+### What is done as of this pass
+
+- 99 alerts -> 4. The 95 dismissed each carry their reason on the alert;
+  `scripts/dismiss-triaged-alerts.py` holds the verdicts as data and re-runs
+  after a sync.
+- The 4 left open are systeminformation, the one real finding. They close when
+  the pin reaches the default branch.
+- The audit gate is back to `blocking` at `audit_level: moderate`, and
+  `yarn npm audit --severity moderate` reports "No audit suggestions".
+- Two real fixes fell out of clearing that gate: `@ungap/structured-clone`
+  1.3.0 -> 1.3.3 for the CWE-502, and eslint -> 9.39.5.
+- `SECURITY.md` points anyone running a scanner at this file before they file.
 
 ### Still open
 

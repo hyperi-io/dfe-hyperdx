@@ -111,10 +111,12 @@ export function splitJsonPath(expression: string): string[] | undefined {
   let inBacktick = false;
 
   for (let i = 0; i < expression.length; i++) {
-    const c = expression[i];
+    // charAt rather than [i] throughout: the index is a loop counter, and the
+    // bracket form trips security/detect-object-injection on every read.
+    const c = expression.charAt(i);
     if (c === '`') {
       // A doubled backtick is an escaped one, not a delimiter.
-      if (inBacktick && expression[i + 1] === '`') {
+      if (inBacktick && expression.charAt(i + 1) === '`') {
         current += '``';
         i++;
         continue;
@@ -247,16 +249,18 @@ function quotedSpans(sql: string): [number, number][] {
   const spans: [number, number][] = [];
 
   for (let i = 0; i < sql.length; i++) {
-    const c = sql[i];
+    // charAt rather than [i] throughout: the index is a loop counter, and the
+    // bracket form trips security/detect-object-injection on every read.
+    const c = sql.charAt(i);
 
-    if (c === '-' && sql[i + 1] === '-') {
+    if (c === '-' && sql.charAt(i + 1) === '-') {
       const end = sql.indexOf('\n', i);
       spans.push([i, end === -1 ? sql.length : end]);
       i = end === -1 ? sql.length : end;
       continue;
     }
 
-    if (c === '/' && sql[i + 1] === '*') {
+    if (c === '/' && sql.charAt(i + 1) === '*') {
       const end = sql.indexOf('*/', i + 2);
       spans.push([i, end === -1 ? sql.length : end + 2]);
       i = end === -1 ? sql.length : end + 1;
@@ -268,13 +272,13 @@ function quotedSpans(sql: string): [number, number][] {
     const start = i;
     i++;
     while (i < sql.length) {
-      if (sql[i] === '\\') {
+      if (sql.charAt(i) === '\\') {
         i += 2;
         continue;
       }
-      if (sql[i] === "'") {
+      if (sql.charAt(i) === "'") {
         // A doubled quote is an escaped one, not the end of the literal.
-        if (sql[i + 1] === "'") {
+        if (sql.charAt(i + 1) === "'") {
           i += 2;
           continue;
         }
