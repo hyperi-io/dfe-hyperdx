@@ -186,6 +186,19 @@ describe('ensureOrgConnection', () => {
     expect(mockCreateSource).not.toHaveBeenCalled();
   });
 
+  test('refuses connection material with no password', async () => {
+    // The hand-rolled guard this replaced checked name/host/username and not
+    // password, so an engine response missing it stored `undefined` as the
+    // ClickHouse password.
+    mockConns.mockResolvedValue([]);
+    okFetch({ name: 'acme', host: 'http://ch:8123', username: 'dfe_org_acme' });
+
+    await ensureOrgConnection('tok', 'team-1');
+
+    expect(mockCreateConn).not.toHaveBeenCalled();
+    expect(mockCreateSource).not.toHaveBeenCalled();
+  });
+
   test('swallows a thrown controller error so login is never blocked', async () => {
     mockConns.mockRejectedValue(new Error('db down'));
 

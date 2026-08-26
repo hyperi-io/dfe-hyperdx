@@ -12,6 +12,8 @@
  * controllers means asserting narrower types than their broad exports.
  */
 
+import { z } from 'zod';
+
 import {
   createConnection,
   getConnectionsByTeam,
@@ -20,12 +22,22 @@ import { createSource, getSources } from '@/controllers/sources';
 import * as dfeConfig from '@/dfe/config';
 import logger from '@/utils/logger';
 
-interface OrgConnection {
-  name: string;
-  host: string;
-  username: string;
-  password: string;
-}
+/**
+ * The engine's connection material.
+ *
+ * Parsed rather than asserted: this is a response from another service, and
+ * `password` is written straight onto a ClickHouse connection. A hand-rolled
+ * guard checked the other three fields and missed that one, which would have
+ * stored `undefined` as the password.
+ */
+const OrgConnectionSchema = z.object({
+  name: z.string().min(1),
+  host: z.string().min(1),
+  username: z.string().min(1),
+  password: z.string(),
+});
+
+type OrgConnection = z.infer<typeof OrgConnectionSchema>;
 
 const ENGINE_TIMEOUT_MS = 5000;
 
@@ -64,11 +76,15 @@ async function fetchOrgConnection(
       );
       return undefined;
     }
-    const data = (await resp.json()) as OrgConnection;
-    if (!data?.name || !data?.host || !data?.username) {
+    const parsed = OrgConnectionSchema.safeParse(await resp.json());
+    if (!parsed.success) {
+      logger.warn(
+        { issues: parsed.error.issues },
+        'DFE: engine connection material failed validation',
+      );
       return undefined;
     }
-    return data;
+    return parsed.data;
   } catch (err) {
     logger.warn({ err }, 'DFE: engine connection endpoint unreachable');
     return undefined;
