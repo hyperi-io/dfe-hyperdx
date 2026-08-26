@@ -369,6 +369,8 @@ built on" for any release we have cut.
 
 - [design.md](design.md) - why the fork is shaped this way
 - [sync-cycle.md](sync-cycle.md) - how to move to a newer upstream
+- [security-sync.md](security-sync.md) - what we have learnt about the
+  inherited dependency tree, one dated section per sync
 - [leaving-upstream.md](leaving-upstream.md) - how this ends
 - The `x-oidc-*` contract is the universal seam shared with the rest of DFE -
   see the dfe-engine OIDC dual-mode design
