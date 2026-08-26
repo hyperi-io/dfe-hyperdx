@@ -98,7 +98,7 @@ describe('POST /dfe/create-rule status mapping', () => {
     await request(app).post('/dfe/create-rule').send(RULE_BODY);
 
     const [, init] = jest.mocked(global.fetch).mock.calls[0];
-    expect(JSON.parse(init.body)).toMatchObject({
+    expect(JSON.parse(String(init?.body))).toMatchObject({
       raw_sql: 'SELECT 1',
       saved_search_name: 'noisy logins',
     });
