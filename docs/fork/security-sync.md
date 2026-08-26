@@ -157,6 +157,40 @@ from `isPrivateIp`.
 **Re-check this one every sync.** If a merge ever drags that declaration back
 below 10.3.1 it becomes a real remote SSRF immediately.
 
+### The 15 that ARE in the image
+
+Resolved versions read out of the production `node_modules`, not from
+`yarn.lock`.
+
+| Package | Resolved | Verdict |
+|---|---|---|
+| protobufjs | 6.11.4 via browser SDK | REAL - see above, needs a resolutions pin |
+| systeminformation | 5.30.7 -> 5.33.1 | REAL - pinned this pass |
+| ip-address | 10.3.1 | already above range, re-check every sync |
+| fast-xml-parser | upstream pins `^4.5.6` | already handled upstream |
+| ajv | 8.20.0 | above `< 8.18.0`, not in range |
+| cross-spawn | 7.0.6 | above `< 7.0.5`, not in range |
+| fast-uri | 3.1.4 | above both 2.x ranges, not in range |
+| lodash | 4.18.1 | above `<= 4.17.23`, not in range |
+| semver | 6.3.1 | BELOW the `>= 7.0.0` range, not in range |
+| path-to-regexp | 0.1.12 via express | in range, no vector - see below |
+| picomatch | 4.0.3 | in range, no vector - see below |
+| bn.js, qs, uuid, hono | - | medium or low, no reachable sink |
+
+**path-to-regexp is the one worth understanding.** `express@4.22.1` pulls
+`0.1.12`, which is inside #81's `< 0.1.13`, and express is unambiguously
+production. The ReDoS is in ROUTE PATTERN compilation though, and route
+patterns are our own source. An attacker supplies a URL, not a route
+definition. No vector.
+
+**picomatch** is in the closure but every parent is build tooling - jest,
+rollup, knip, micromatch, tinyglobby, dotenvx. Both advisories are ReDoS via a
+crafted GLOB, and our globs come from config. No vector.
+
+**semver is the nice one.** Alerts #22 and #1 are `>= 7.0.0, < 7.5.2`, and we
+resolve 6.3.1 - BELOW the vulnerable range, not above it. Worth reading version
+ranges in both directions.
+
 ### Tooling warts found on the way
 
 - **`hyperi-ci deps drift` never read `yarn.lock`.** It looked for
@@ -165,8 +199,26 @@ below 10.3.1 it becomes a real remote SSRF immediately.
   floors a whole major behind the lock, including `zod` declared `3.25` against
   `4.4.3` locked, in four packages.
 - **husky is not installed on a fresh clone**, so `lint-staged` never runs and
-  formatting errors reach the commit. `yarn setup` fixes it. Worth checking
-  after any host move.
+  formatting errors reach the commit. Two of ours got through that way this
+  pass.
+
+  Do not just run `yarn setup` to fix it. Installing husky turns on
+  `.husky/pre-commit`, which also runs `npx knip --no-config-hints`, and knip
+  cannot pass on this fork: it flags UPSTREAM's unused files -
+  `BenchmarkPage.tsx`, `ClickhousePage.tsx`, all of `TeamSettings/*`,
+  `SessionsPage.tsx`, `JoinTeamPage.tsx`, `TeamPage.tsx`,
+  `DBServiceMapPage.tsx` - and deleting those is exactly the fork-surface
+  damage we do not do. So installing husky blocks every commit. Tried it,
+  reverted it with `git config --unset core.hooksPath`.
+
+  The hook's own comment says it "runs the same check as the Knip CI workflow".
+  There is no Knip workflow in this repo. Knip runs in the hook and nowhere
+  else.
+
+  Real fix, not done yet: scope knip to `packages/*/src/dfe/**` the same way
+  `scripts/dfe-lint-ours.mjs` scopes eslint, so it audits our code and ignores
+  upstream's. Until then the hook stays off and lint-staged has to be run by
+  hand.
 - **Renovate's blanket-disable pattern is broken upstream.**
   `matchFileNames: ['**'], enabled: false` plus `vulnerabilityAlerts` is the
   obvious way to say "security only", and Renovate 43.113.0 added a filter that
