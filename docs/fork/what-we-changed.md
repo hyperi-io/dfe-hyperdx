@@ -150,18 +150,29 @@ upstream behaviour and tests are unchanged. The service flag is set by
   charts and filters. A JSON sub-path is `Dynamic`, which ClickHouse refuses in
   `IN`, aggregates, `GROUP BY` and `ORDER BY`, so it needs an explicit coercion.
   All the logic is here; **`core/renderChartConfig.ts` (catalogued)** carries
-  two added calls and nothing else - one in `renderWhereExpressionStr`, the seam
-  every SQL filter already passes through, and one in `renderSelectList`'s
+  three added calls and nothing else - one in `renderWhereExpressionStr`, the
+  seam every SQL filter already passes through, one in `renderSelectList`'s
   raw-string early return, which `renderSelect` and `renderGroupBy` BOTH feed,
-  so the SELECT list and the GROUP BY key cannot disagree. Coercion is
-  `toString()`, NOT the `.:String` sub-column upstream #2549 proposes - see the
-  module header for the measurement that rules it out.
+  so the SELECT list and the GROUP BY key cannot disagree, and one wrapping the
+  `renderOrderBy` argument. Coercion is `toString()`, NOT the `.:String`
+  sub-column upstream #2549 proposes - see the module header for the measurement
+  that rules it out.
 
   Aggregate arguments are left alone: `aggFnExpr` already emits
   `toFloat64OrDefault(toString(expr))` around them, which our idempotence check
-  recognises. ORDER BY is also left alone, deliberately - `toString` sorts
-  "99.5" above "1000.25", and a wrongly ordered table is worse than the Code 44
-  that names the fix.
+  recognises.
+
+  ORDER BY was left alone until 2026-08-26 and now coerces via
+  `dfeCoerceOrderBy`, which walks both the string and the `valueExpression[]`
+  forms. This is a deliberate reversal, and it trades one wrong answer for
+  another: previously a JSON sub-path was `Dynamic`, which ClickHouse refuses in
+  ORDER BY, so the chart failed with a Code 44 that at least named its own fix.
+  It now sorts, but `toString` sorts lexically - "99.5" above "1000.25". Sorting
+  a numeric JSON path correctly needs the path's concrete TYPE, and
+  `getJSONKeys` keeps only `typeArr[0]`, which for a mixed-type path is whatever
+  ClickHouse happened to list first. That decision is still open and is tracked
+  with max/min and facet values in the plan, since all three are the same
+  question.
 
   Two shapes the seam must handle, both found by e2e and pinned by tests. A
   trailing `.:String` is a TYPE, not a path segment: quoting it as one reads a

@@ -23,7 +23,7 @@ import {
   pickBucketTimestampColumn,
   splitAndTrimWithBracket,
 } from '@/core/utils';
-import { dfeCoerceJsonPaths } from '@/dfe/jsonPath';
+import { dfeCoerceJsonPaths, dfeCoerceOrderBy } from '@/dfe/jsonPath';
 import { isPromqlChartConfig, isRawSqlChartConfig } from '@/guards';
 import { replaceMacros } from '@/macros';
 import {
@@ -2859,7 +2859,7 @@ export async function renderChartConfig(
   let where = await renderWhere(chartConfig, metadata);
   const groupBy = await renderGroupBy(chartConfig, metadata);
   const having = await renderHaving(chartConfig, metadata);
-  const orderBy = renderOrderBy(chartConfig);
+  const orderBy = renderOrderBy(await dfeCoerceOrderBy(chartConfig, metadata));
   // TODO: WITH FILL (gap-filling for time buckets) was removed as dead code; it
   // broke heatmaps and some charts. Reintroduce a fill renderer if we revisit this.
   const limit = renderLimit(chartConfig);

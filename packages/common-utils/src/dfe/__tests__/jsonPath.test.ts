@@ -1,5 +1,7 @@
 import {
   coerceJsonPathsInSql,
+  dfeCoerceJsonPaths,
+  dfeCoerceOrderBy,
   dfeJsonPathRoot,
   quoteJsonSegment,
   renderJsonNumberExpression,
@@ -259,11 +261,184 @@ describe('coerceJsonPathsInSql', () => {
     });
   });
 
+  // findJsonExpressions ends a token on whitespace and arithmetic but NOT on a
+  // comparison operator or a cast, so these arrive glued to the last segment.
+  // Re-quoting one produces a lookup for a key no row has, and `Body.status=200`
+  // collapses a whole predicate into a single string that ClickHouse then
+  // rejects as a filter. Declining to touch them is always safe.
+  describe('an operator glued to the path', () => {
+    it.each([
+      'Body.status=200',
+      'Body.status>200',
+      'Body.status!=200',
+      'Body.a%2 = 0',
+      'Body.count-1 > 5',
+      'Body.end-Body.start > 5',
+    ])('leaves %s exactly as written', sql => {
+      expect(coerceJsonPathsInSql(sql, jsonColumns)).toBe(sql);
+    });
+
+    it('still coerces the same predicate written with spaces', () => {
+      expect(coerceJsonPathsInSql('Body.status = 200', jsonColumns)).toBe(
+        'toString(Body.`status`) = 200',
+      );
+    });
+
+    it.each(['Body.port::Int64 > 100', "Body.name::String = 'a'"])(
+      'leaves the cast in %s alone rather than quoting it as a key',
+      sql => {
+        expect(coerceJsonPathsInSql(sql, jsonColumns)).toBe(sql);
+      },
+    );
+  });
+
+  // Upstream's literal skip in findJsonExpressions never advances, so a dot-path
+  // typed inside a search term is reported as if it were code. Upstream puts the
+  // same bytes back; we substitute different ones, so the term silently changes.
+  describe('a dot-path inside a string literal', () => {
+    it('leaves the contents of a literal alone', () => {
+      const sql = "Body.msg = 'saw Body.user.name failure'";
+      expect(coerceJsonPathsInSql(sql, jsonColumns)).toBe(
+        "toString(Body.`msg`) = 'saw Body.user.name failure'",
+      );
+    });
+
+    it('does not rewrite a search term that only looks like a path', () => {
+      const sql = "ServiceName = 'Body.user.name '";
+      expect(coerceJsonPathsInSql(sql, jsonColumns)).toBe(sql);
+    });
+
+    it('survives an escaped quote inside the literal', () => {
+      const sql = "ServiceName = 'it\\'s Body.user.name ' AND Body.a = 1";
+      expect(coerceJsonPathsInSql(sql, jsonColumns)).toBe(
+        "ServiceName = 'it\\'s Body.user.name ' AND toString(Body.`a`) = 1",
+      );
+    });
+
+    it('survives a doubled quote inside the literal', () => {
+      const sql = "ServiceName = 'it''s Body.user.name ' AND Body.a = 1";
+      expect(coerceJsonPathsInSql(sql, jsonColumns)).toBe(
+        "ServiceName = 'it''s Body.user.name ' AND toString(Body.`a`) = 1",
+      );
+    });
+
+    it.each(['-- Body.b.c goes here', '/* Body.b.c */ Body.a = 1'])(
+      'leaves the comment in %s alone',
+      sql => {
+        expect(coerceJsonPathsInSql(sql, jsonColumns)).not.toContain(
+          'toString(Body.`b`',
+        );
+      },
+    );
+  });
+
+  // A wrapper does not stop `.:String` reading NULL for a differently-typed row,
+  // so the suffix has to go even when the expression is already coerced.
+  it('strips a typed suffix that is already inside a toString', () => {
+    expect(
+      coerceJsonPathsInSql("toString(Body.`port`.:String) = '8080'", ['Body']),
+    ).toBe("toString(Body.`port`) = '8080'");
+  });
+
   // Aggregate arguments need no pass of ours: aggFnExpr in renderChartConfig
   // already emits toFloat64OrDefault(toString(expr)) around them. Pinned so a
   // second coercion is not reintroduced if that wrapper is ever read as absent.
   it('leaves an aggregate argument upstream already coerced', () => {
     const sql = 'avg(toFloat64OrDefault(toString(Body.latency_ms)))';
     expect(coerceJsonPathsInSql(sql, jsonColumns)).toBe(sql);
+  });
+});
+
+// The seam reads the schema through this shape. A metadata failure must leave
+// the fragment alone rather than block the query -- that is the difference
+// between a degraded query and no query at all.
+describe('dfeCoerceJsonPaths', () => {
+  const reader = (columns: { name: string; type: string }[]) => ({
+    getColumns: jest.fn().mockResolvedValue(columns),
+  });
+  const args = (metadata: { getColumns: jest.Mock }) => ({
+    metadata,
+    databaseName: 'db',
+    tableName: 't',
+    connectionId: 'conn',
+  });
+
+  it('coerces a sub-path on a column the schema reports as JSON', async () => {
+    await expect(
+      dfeCoerceJsonPaths(
+        'Body.user.name = 1',
+        args(reader([{ name: 'Body', type: 'JSON' }])),
+      ),
+    ).resolves.toBe('toString(Body.`user`.`name`) = 1');
+  });
+
+  it('leaves a String column holding JSON alone', async () => {
+    const sql = 'Body.user.name = 1';
+    await expect(
+      dfeCoerceJsonPaths(sql, args(reader([{ name: 'Body', type: 'String' }]))),
+    ).resolves.toBe(sql);
+  });
+
+  it('degrades to no coercion when the schema cannot be read', async () => {
+    const sql = 'Body.user.name = 1';
+    const metadata = {
+      getColumns: jest.fn().mockRejectedValue(new Error('clickhouse down')),
+    };
+    await expect(dfeCoerceJsonPaths(sql, args(metadata))).resolves.toBe(sql);
+  });
+
+  it('does not query the schema without a table', async () => {
+    const metadata = reader([{ name: 'Body', type: 'JSON' }]);
+    await expect(
+      dfeCoerceJsonPaths('Body.a = 1', { ...args(metadata), tableName: '' }),
+    ).resolves.toBe('Body.a = 1');
+    expect(metadata.getColumns).not.toHaveBeenCalled();
+  });
+});
+
+// Sorting by a JSON sub-path is ClickHouse code 44, and renderOrderBy is
+// synchronous, so the coercion has to happen on the config before it renders.
+describe('dfeCoerceOrderBy', () => {
+  const base = {
+    from: { databaseName: 'db', tableName: 't' },
+    connection: 'conn',
+  };
+  const metadata = {
+    getColumns: jest.fn().mockResolvedValue([{ name: 'Body', type: 'JSON' }]),
+  };
+
+  it('coerces a string orderBy', async () => {
+    const out = await dfeCoerceOrderBy(
+      { ...base, orderBy: 'Body.latency_ms DESC' },
+      metadata,
+    );
+    expect(out.orderBy).toBe('toString(Body.`latency_ms`) DESC');
+  });
+
+  it('coerces every valueExpression in a sort specification list', async () => {
+    const out = await dfeCoerceOrderBy(
+      {
+        ...base,
+        orderBy: [
+          { valueExpression: 'Body.latency_ms', ordering: 'DESC' },
+          { valueExpression: 'ServiceName', ordering: 'ASC' },
+        ],
+      },
+      metadata,
+    );
+    expect(out.orderBy).toEqual([
+      { valueExpression: 'toString(Body.`latency_ms`)', ordering: 'DESC' },
+      { valueExpression: 'ServiceName', ordering: 'ASC' },
+    ]);
+  });
+
+  it('returns the config untouched when there is no orderBy', async () => {
+    const config = { ...base };
+    expect(await dfeCoerceOrderBy(config, metadata)).toBe(config);
+  });
+
+  it('returns the config untouched when the source has no table', async () => {
+    const config = { orderBy: 'Body.a', connection: 'conn' };
+    expect(await dfeCoerceOrderBy(config, metadata)).toBe(config);
   });
 });

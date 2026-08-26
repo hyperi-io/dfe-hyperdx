@@ -51,9 +51,11 @@ describe('DBRowJsonViewer - native ClickHouse JSON columns', () => {
     generateChartUrl: jest.fn(),
   };
 
-  // A native JSON column, as the DFE loader writes it.
+  // A native JSON column, as the DFE loader writes it. The port and the flag
+  // are here because JSONExtractString returns '' for anything that is not a
+  // JSON string, so a non-string field used to filter to zero rows.
   const nativeJsonData = {
-    _json: { _source: 'simple_fetcher_to_loader_kafka' },
+    _json: { _source: 'simple_fetcher_to_loader_kafka', port: 8080, ok: true },
   };
 
   beforeEach(() => jest.clearAllMocks());
@@ -77,25 +79,24 @@ describe('DBRowJsonViewer - native ClickHouse JSON columns', () => {
     );
   };
 
-  it('searches with JSONExtractString, not a bracket subscript', () => {
+  it('searches on the sub-path, not a bracket subscript', () => {
     render();
     clickAction('_source', 'Search');
 
     // _json['_source'] would be arrayElement on a JSON column, which
     // ClickHouse rejects outright.
     expect(mockGenerateSearchUrl).toHaveBeenCalledWith({
-      where:
-        "JSONExtractString(toString(_json), '_source') = 'simple_fetcher_to_loader_kafka'",
+      where: "toString(_json.`_source`) = 'simple_fetcher_to_loader_kafka'",
       whereLanguage: 'sql',
     });
   });
 
-  it('adds a filter with the extract expression', () => {
+  it('adds a filter with the sub-path expression', () => {
     render();
     clickAction('_source', 'Add to Filters');
 
     expect(mockOnPropertyAddClick).toHaveBeenCalledWith(
-      "JSONExtractString(toString(_json), '_source')",
+      'toString(_json.`_source`)',
       'simple_fetcher_to_loader_kafka',
     );
   });
@@ -105,18 +106,37 @@ describe('DBRowJsonViewer - native ClickHouse JSON columns', () => {
     clickAction('_source', 'Exclude');
 
     expect(mockOnPropertyAddClick).toHaveBeenCalledWith(
-      "JSONExtractString(toString(_json), '_source')",
+      'toString(_json.`_source`)',
       'simple_fetcher_to_loader_kafka',
       'exclude',
     );
   });
 
-  it('toggles a column with the extract expression', () => {
+  it('toggles a column with the sub-path expression', () => {
     render();
     clickAction('_source', 'Column');
 
-    expect(mockToggleColumn).toHaveBeenCalledWith(
-      "JSONExtractString(toString(_json), '_source')",
+    expect(mockToggleColumn).toHaveBeenCalledWith('toString(_json.`_source`)');
+  });
+
+  it('filters a numeric field on its text form rather than an empty string', () => {
+    render();
+    clickAction('port', 'Add to Filters');
+
+    expect(mockOnPropertyAddClick).toHaveBeenCalledWith(
+      'toString(_json.`port`)',
+      '8080',
+    );
+  });
+
+  it('filters a boolean field the same way', () => {
+    render();
+    clickAction('ok', 'Exclude');
+
+    expect(mockOnPropertyAddClick).toHaveBeenCalledWith(
+      'toString(_json.`ok`)',
+      'true',
+      'exclude',
     );
   });
 });

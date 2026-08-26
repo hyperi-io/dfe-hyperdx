@@ -44,9 +44,9 @@ const NUMBER_COERCION = 'toFloat64OrNull';
  * Quote one path segment for ClickHouse. Backticks inside an identifier are
  * escaped by doubling, which is what `unquoteJsonSegment` reverses.
  *
- * Matches `quoteJsonPathSegment` in core/metadata.ts. Kept here rather than
- * imported so this module stays free of a cycle, and asserted equivalent in
- * `__tests__/jsonPath.test.ts`.
+ * Mirrors `quoteJsonPathSegment` in core/metadata.ts, which is not exported.
+ * Kept here rather than imported so this module stays free of a cycle, which
+ * means the two agree by inspection only -- nothing asserts it.
  */
 export function quoteJsonSegment(segment: string): string {
   const bare = stripBackticks(segment);
@@ -178,6 +178,8 @@ export function coerceJsonPathsInSql(
   const found = findJsonExpressions(sql);
   if (found.length === 0) return sql;
 
+  const literalSpans = quotedSpans(sql);
+
   // Apply right-to-left so earlier indices stay valid as the string grows.
   let out = sql;
   for (const { expr: rawExpr, index } of [...found].sort(
@@ -190,22 +192,100 @@ export function coerceJsonPathsInSql(
 
     const segments = splitJsonPath(expr);
     if (!segments || segments.length < 2) continue;
+    if (!segments.every(isLegalSegment)) continue;
 
     const root = unquoteJsonSegment(segments[0]);
     if (!roots.has(root)) continue;
-    if (isAlreadyCoerced(sql, index)) continue;
+    if (literalSpans.some(([from, to]) => index >= from && index < to))
+      continue;
 
     const path = stripTypeSuffix(segments.slice(1));
     if (path.length === 0) continue;
 
-    const coerced = renderJsonStringExpression(
-      root,
-      path.map(unquoteJsonSegment),
-    );
+    // A typed sub-column still has to go inside an existing coercion, because
+    // the wrapper does not stop `.:String` reading NULL for a differently-typed
+    // row. Only the suffix is dropped there -- re-wrapping would just nest.
+    const inCoercion = isAlreadyCoerced(sql, index);
+    const hadTypeSuffix = path.length !== segments.length - 1;
+    if (inCoercion && !hadTypeSuffix) continue;
+
+    const unquoted = path.map(unquoteJsonSegment);
+    const coerced = inCoercion
+      ? renderJsonPath(root, unquoted)
+      : renderJsonStringExpression(root, unquoted);
     out = out.slice(0, index) + coerced + out.slice(index + expr.length);
   }
 
   return out;
+}
+
+/**
+ * True when a segment is a name we can safely re-quote as a JSON key.
+ *
+ * `findJsonExpressions` ends a token only on whitespace, a paren, a brace, a
+ * bracket, a comma or an arithmetic operator, so `=`, `!`, `<`, `>`, `%` and a
+ * `::` cast all arrive glued to the last segment. Re-quoting one of those
+ * produces a lookup for a key no row has, and `Body.status=200` collapses a
+ * whole predicate into a single string. Declining is always safe: the
+ * expression is left exactly as the user wrote it.
+ */
+function isLegalSegment(segment: string): boolean {
+  if (segment.startsWith('`')) return segment.endsWith('`');
+  // A leading colon is the typed sub-column marker, stripped further down.
+  return /^:?[A-Za-z_$][A-Za-z0-9_$]*$/.test(segment);
+}
+
+/**
+ * Half-open [start, end) spans of every single-quoted literal and SQL comment.
+ *
+ * Upstream's own literal skip in `findJsonExpressions` never advances, so a
+ * dot-path written inside a search term is reported as if it were code. Upstream
+ * survives that because it puts the same bytes back; we substitute different
+ * ones, which silently rewrites what the analyst typed.
+ */
+function quotedSpans(sql: string): [number, number][] {
+  const spans: [number, number][] = [];
+
+  for (let i = 0; i < sql.length; i++) {
+    const c = sql[i];
+
+    if (c === '-' && sql[i + 1] === '-') {
+      const end = sql.indexOf('\n', i);
+      spans.push([i, end === -1 ? sql.length : end]);
+      i = end === -1 ? sql.length : end;
+      continue;
+    }
+
+    if (c === '/' && sql[i + 1] === '*') {
+      const end = sql.indexOf('*/', i + 2);
+      spans.push([i, end === -1 ? sql.length : end + 2]);
+      i = end === -1 ? sql.length : end + 1;
+      continue;
+    }
+
+    if (c !== "'") continue;
+
+    const start = i;
+    i++;
+    while (i < sql.length) {
+      if (sql[i] === '\\') {
+        i += 2;
+        continue;
+      }
+      if (sql[i] === "'") {
+        // A doubled quote is an escaped one, not the end of the literal.
+        if (sql[i + 1] === "'") {
+          i += 2;
+          continue;
+        }
+        break;
+      }
+      i++;
+    }
+    spans.push([start, Math.min(i + 1, sql.length)]);
+  }
+
+  return spans;
 }
 
 /**
@@ -252,6 +332,55 @@ type ColumnReader = {
  * `toFloat64OrDefault(toString(expr))` around them, which `isAlreadyCoerced`
  * recognises and leaves alone.
  */
+/**
+ * The same coercion, applied to a chart config's `orderBy` before it renders.
+ *
+ * `renderOrderBy` is synchronous and reaches `renderSortSpecificationList`
+ * directly, so the seam cannot sit inside it. Sorting by a JSON sub-path is
+ * ClickHouse code 44 -- not allowed in ORDER BY keys -- which is one of the
+ * cases this whole module exists to fix.
+ *
+ * Returns the config unchanged when there is nothing to do, so the call site
+ * stays a single expression.
+ */
+export async function dfeCoerceOrderBy<
+  T extends {
+    orderBy?: unknown;
+    from?: { databaseName: string; tableName: string };
+    connection?: string;
+  },
+>(chartConfig: T, metadata: ColumnReader): Promise<T> {
+  const { orderBy, from, connection } = chartConfig;
+  if (!from || !connection) return chartConfig;
+
+  const coerce = (expression: string) =>
+    dfeCoerceJsonPaths(expression, {
+      metadata,
+      databaseName: from.databaseName,
+      tableName: from.tableName,
+      connectionId: connection,
+    });
+
+  if (typeof orderBy === 'string') {
+    return { ...chartConfig, orderBy: await coerce(orderBy) };
+  }
+
+  if (Array.isArray(orderBy)) {
+    return {
+      ...chartConfig,
+      orderBy: await Promise.all(
+        orderBy.map(async spec =>
+          spec && typeof spec.valueExpression === 'string'
+            ? { ...spec, valueExpression: await coerce(spec.valueExpression) }
+            : spec,
+        ),
+      ),
+    };
+  }
+
+  return chartConfig;
+}
+
 export async function dfeCoerceJsonPaths(
   condition: string,
   {
