@@ -203,6 +203,7 @@ upstream behaviour and tests are unchanged. The service flag is set by
   superset - so this costs completeness, never correctness. Changing it means
   editing upstream's own `metadata.test.ts` assertions, which is the most
   expensive delta shape we have.
+
 - `packages/app/src/dfe/jsonColumns.ts` - which roots take dot access. Two
   catalogued call sites read it: **`components/SQLEditor/SQLInlineEditor.tsx`**
   (the chart-builder autocomplete rendered every nested path as `col['key']`,
@@ -228,11 +229,12 @@ upstream behaviour and tests are unchanged. The service flag is set by
   fixture never matches a preference.
 
   Upstream's precedence is untouched and still wins: an explicit `?source=`, a
-  saved search, and the user's last selection all take priority. dfe-ui's
-  "Hunt Results" entry links `?source=hunts` for that reason - it must beat the
-  last selection, which a bare `/search` deliberately does not. Upstream already
+  saved search, and the user's last selection all take priority. dfe-ui's "Hunt
+  Results" entry links `?source=hunts` for that reason - it must beat the last
+  selection, which a bare `/search` deliberately does not. Upstream already
   resolves `?source=` by NAME as well as id (`useResolvedSourceParam`), so
   linking by name needs nothing here.
+
 - `packages/app/playwright.dfe.config.ts` +
   `tests/e2e/dfe-global-setup-chrome.ts` - run e2e against the system Chrome.
   Playwright 1.57.0 ships no bundled Chromium for Ubuntu 26.04 and
@@ -261,6 +263,7 @@ upstream behaviour and tests are unchanged. The service flag is set by
   do have a bundled Chromium, are untouched. Neither a dependency bump nor an
   edit to `playwright.config.ts` was needed. Mirrors the `jest.dfe.config.js`
   pattern.
+
 - `packages/app/src/dfe/embedFeatures.ts` + `EmbedThemeSync.tsx` - chromeless
   embed mode: feature gating by route, and live theme sync from the host UI.
   `pages/_document.tsx` carries one added inline head script
@@ -338,16 +341,23 @@ upstream behaviour and tests are unchanged. The service flag is set by
   `service-map,services,sessions,team}.tsx`), and upstream's own debris - the
   `jsonwebtoken` dependency they left declared after removing its code in
   `f34cfaed`. Ignored rather than deleted: dead upstream files are never
-  imported so Next never bundles them, and removing 5,000 lines of upstream
-  code buys a delete/modify conflict on every sync for no runtime gain. Worth
-  raising upstream.
+  imported so Next never bundles them, and removing 5,000 lines of upstream code
+  buys a delete/modify conflict on every sync for no runtime gain. Worth raising
+  upstream.
 - `.yarnrc.yml` - one added `npmAuditIgnoreAdvisories` block. The audit gate
   runs `yarn npm audit` against the lockfile, so it reports on upstream's whole
   tree including devDependencies, and there is no line of code to tag. Excluded
   by advisory id, never by package name - `npmAuditExcludePackages` would mute
-  the next advisory against the same package too. Each id carries its reason
-  and the traces are in [security-sync.md](security-sync.md). Upstream churns
-  this file rarely, so the conflict is small.
+  the next advisory against the same package too. Each id carries its reason and
+  the traces are in [security-sync.md](security-sync.md). Upstream churns this
+  file rarely, so the conflict is small.
+- `scripts/ci/ratchet-baseline.json` - upstream's escape-hatch ratchet, our
+  numbers. The baseline is the floor for `as any` and `eslint-disable` counts
+  per package, so every hatch we remove has to be locked in here or the ratchet
+  nags on every run and the improvement is free to be undone. Upstream has
+  touched the file four times, and the conflict is trivial either way: take
+  ours, then re-run `yarn ratchet:update` after the sync so the numbers match
+  the merged tree.
 - `package.json` `resolutions` - one generated fork pin,
   `systeminformation ^5.31.7`, raising upstream's own `^5.24.0`. It is generated
   from `security/overrides.yaml` by `scripts/security-override.py --apply`, so
@@ -376,6 +386,13 @@ The fork version in `package.json` is the **HyperI** version, independent of the
 upstream HyperDX app version. When pinning this fork in dfe-infra, use the image
 tag this repo's CI publishes, NOT the upstream HyperDX version.
 
+That image is `ghcr.io/hyperi-io/dfe-hyperdx`, built by hyperi-ci from
+`publish.container` in `.hyperi-ci.yaml` using the root `Dockerfile` (amd64
+only - the arm64 half runs under qemu and Next's build-time font fetch times
+out). GHCR is the only registry hyperi-ci publishes to. Upstream's `release.yml`
+pushes to Docker Hub under `hyperdx/*` and `clickhouse/*`, which are not ours -
+that workflow is deliberately absent from `main`.
+
 `git show <our-tag>:.upstream-version` answers "which upstream is release X
 built on" for any release we have cut.
 
@@ -385,8 +402,8 @@ built on" for any release we have cut.
 
 - [design.md](design.md) - why the fork is shaped this way
 - [sync-cycle.md](sync-cycle.md) - how to move to a newer upstream
-- [security-sync.md](security-sync.md) - what we have learnt about the
-  inherited dependency tree, one dated section per sync
+- [security-sync.md](security-sync.md) - what we have learnt about the inherited
+  dependency tree, one dated section per sync
 - [leaving-upstream.md](leaving-upstream.md) - how this ends
 - The `x-oidc-*` contract is the universal seam shared with the rest of DFE -
   see the dfe-engine OIDC dual-mode design

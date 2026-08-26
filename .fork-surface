@@ -104,4 +104,5 @@ packages/common-utils/src/__tests__/clickhouse.test.ts
 packages/common-utils/src/core/metadata.ts
 packages/common-utils/src/core/renderChartConfig.ts
 packages/otel-collector/CHANGELOG.md
+scripts/ci/ratchet-baseline.json
 yarn.lock
