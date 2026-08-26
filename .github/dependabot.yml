@@ -1,0 +1,57 @@
+# Project:   dfe-hyperdx
+# File:      .github/dependabot.yml
+# Purpose:   Dependabot posture for a fork - alerts yes, pull requests no
+#
+# License:   MIT (inherits upstream hyperdxio/hyperdx)
+# Copyright: (c) 2026 HYPERI PTY LIMITED
+#
+# ALERTS ARE THE POINT; PULL REQUESTS ARE NOT. Dependabot ALERTS need no file
+# and are the only tool that sees upstream's whole dependency tree, so they are
+# how an inherited CVE reaches us. What this file does is stop Dependabot
+# acting on them by raising version-update PRs against files we do not own.
+#
+# WHY NOT LET IT RAISE THEM. Every bump in packages/*/package.json diverges us
+# from hyperdxio/hyperdx for a fix we did not write, turns a pristine file into
+# permanent rerere conflict surface, and is reverted or re-conflicted on the
+# next sync. A queue of PRs that must be closed unmerged trains everyone to
+# ignore the queue, including the one that matters.
+#
+# WHAT HAPPENS TO AN ALERT INSTEAD. It is triaged against the bar in
+# security/overrides.yaml: HIGH or CRITICAL and a written, reachable vector.
+# One that clears it becomes a register entry, applied to package.json by
+# scripts/security-override.py, stripped before an upstream merge and rebuilt
+# after - so a pin never reaches rerere. One that does not clear it is
+# dismissed with the trace recorded.
+#
+# open-pull-requests-limit: 0 disables VERSION updates only. Security-update
+# PRs are exempt from the limit, so they are held off by the repository's
+# Dependabot security updates setting being disabled, which matches hyperi-ci.
+#
+# Functionality updates for the files we DO own are Renovate's job, scoped by
+# includePaths in renovate.json. The two tools do not overlap.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: gomod
+    directory: /packages/otel-collector
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
