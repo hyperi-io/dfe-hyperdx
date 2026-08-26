@@ -34,6 +34,7 @@
 .gitignore
 .prettierignore
 .prettierrc
+.yarnrc.yml
 CLAUDE.md
 LOCAL.md
 README.md

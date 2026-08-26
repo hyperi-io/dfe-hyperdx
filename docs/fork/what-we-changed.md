@@ -332,6 +332,13 @@ upstream behaviour and tests are unchanged. The service flag is set by
   temporary security layer
 - `.gitattributes` - ONE added line routing `yarn.lock` to
   `scripts/merge-lockfile.sh`
+- `.yarnrc.yml` - one added `npmAuditIgnoreAdvisories` block. The audit gate
+  runs `yarn npm audit` against the lockfile, so it reports on upstream's whole
+  tree including devDependencies, and there is no line of code to tag. Excluded
+  by advisory id, never by package name - `npmAuditExcludePackages` would mute
+  the next advisory against the same package too. Each id carries its reason
+  and the traces are in [security-sync.md](security-sync.md). Upstream churns
+  this file rarely, so the conflict is small.
 - `package.json` `resolutions` - one generated fork pin,
   `systeminformation ^5.31.7`, raising upstream's own `^5.24.0`. It is generated
   from `security/overrides.yaml` by `scripts/security-override.py --apply`, so

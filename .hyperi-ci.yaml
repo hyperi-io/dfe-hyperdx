@@ -9,10 +9,13 @@
 # Reference: config/defaults.yaml in hyperi-ci.
 
 language: typescript
+# audit was held at `warn` while 99 inherited alerts sat untriaged. They are
+# triaged now, so this inherits the house default of `blocking` at
+# audit_level: moderate. Advisories judged unreachable are excluded by id in
+# .yarnrc.yml, each with its reason; the traces are in
+# docs/fork/security-sync.md.
 quality:
   enabled: true
-  typescript:
-    audit: warn
 test:
   enabled: true
   coverage: true
