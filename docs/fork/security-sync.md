@@ -76,9 +76,12 @@ The other 17 are not. That kills most of the backlog in one go, including the
 biggest clusters - tar (12 alerts), minimatch (9), js-yaml (4), postcss (4),
 nanoid (3).
 
-**Final tally: 2 real out of 99.** protobufjs and systeminformation. Everything
-else is either absent from the image, outside its vulnerable range in one
-direction or the other, or has no path an attacker can take.
+**Final tally: 1 real out of 99** - systeminformation, pinned. Everything else
+is absent from the image, outside its vulnerable range in one direction or the
+other, or has no path an attacker can take.
+
+protobufjs was the last one standing and it went too, on the advisory's own
+wording rather than on anything we did.
 
 ### tar - both criticals were not what they looked like
 
@@ -114,11 +117,30 @@ control, so there is nothing to bump directly. It needs a `resolutions` entry
 raising protobufjs across the tree, and then someone has to confirm the session
 recorder still works.
 
-The other half of the story: protobufjs there is serialising OTLP telemetry
-against a fixed compiled schema. No attacker-supplied `.proto` reaches the
-parser. So it is critical and reachable and the vector is still weak. Worth
-pinning because the cost is near zero, not because anyone is getting code
-execution out of it.
+**Then read the advisory properly, and it clears itself.** Its own text:
+
+> Applications that only decode messages using trusted, application-defined
+> schemas are not directly affected by this issue.
+
+The preconditions are explicit - the attacker has to control a protobuf
+definition or JSON DESCRIPTOR, and it has to be loaded through protobufjs
+reflection APIs. The session recorder serialises OTLP telemetry against a fixed
+schema compiled into the bundle. It never loads a descriptor from anywhere,
+let alone an untrusted one.
+
+So NOT reachable, and no pin needed. Which is the good outcome, because the pin
+was the dangerous one: `resolutions` would have forced every copy to 7.x while
+the recorder asks for `~6.11.2`, a major bump on a transitive of a package we
+do not control.
+
+The lesson worth keeping: "critical" plus "the vulnerable version is in our
+tree" got this to the top of the list, and the thing that actually settled it
+was two sentences in the advisory's own Impact section. Read those before
+reaching for a pin.
+
+For completeness, the init path is conditional anyway - `pages/_app.tsx:159`
+only calls `HyperDX.init()` outside local mode and only when `/api/config`
+returns an `apiKey`. That was not needed to clear it.
 
 ### systeminformation - pinned, and the tool then called it redundant
 
@@ -207,7 +229,7 @@ Resolved versions read out of the production `node_modules`, not from
 
 | Package | Resolved | Verdict |
 |---|---|---|
-| protobufjs | 6.11.4 via browser SDK | REAL - see above, needs a resolutions pin |
+| protobufjs | 6.11.4 via browser SDK | in range, no vector - the advisory needs an untrusted descriptor and we load none |
 | systeminformation | 5.30.7 -> 5.33.1 | REAL - pinned this pass |
 | ip-address | 10.3.1 | already above range, re-check every sync |
 | fast-xml-parser | upstream pins `^4.5.6` | already handled upstream |
@@ -274,8 +296,7 @@ ranges in both directions.
 - The ~50 alerts on packages absent from the image are cleared by question 1
   but not yet dismissed on GitHub. Each needs the trace pasted into its
   dismissal so this does not get redone.
-- protobufjs `resolutions` pin not applied - it changes the frontend bundle and
-  wants a browser check first.
+- Nothing further to fix. systeminformation was the only pin this pass.
 - Repo settings are still off: secret scanning, push protection, code scanning.
   hyperi-ci has the first two on and CodeQL via default setup. Human-only to
   change.
