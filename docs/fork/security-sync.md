@@ -419,6 +419,19 @@ patterns that replaced them, worth reusing:
 - `sql.charAt(i)` instead of `sql[i]` - same operation, and it does not trip
   `security/detect-object-injection` on every read.
 
+**Do not try `jest.mocked()` on the mongoose controller mocks.** Tried it on
+org-connection, provisioned-lockdown, user-provisioning and jwt-verify. It
+type-checks the mock properly, which is the point, and that is exactly why it
+fails: `createConnection` resolves a full mongoose `Document` - 50-plus methods
+- so `mockResolvedValue({ _id: someObjectId })` is rejected. Minting real
+ObjectIds does not help; the Document shape is the blocker, not the id type.
+
+17 tsc errors, and no honest way through short of building real Documents in
+every fixture. The loose `x as jest.Mock` cast exists for that reason and the
+file-level disables saying so were correct. `jest.mocked()` DOES work where the
+mock is a plain function - admin-lockdown and team-provisioning - and those
+kept it.
+
 The three left are deliberate:
 
 | Where | Rule | Why it stays |
