@@ -38,7 +38,26 @@
 #   `--check` tells you when. Delete the entry, delete the resolutions line,
 #   run `yarn install` to re-resolve, done.
 
-overrides: []
+overrides:
+  - package: systeminformation
+    # Narrowest range that clears every open advisory against this package.
+    # ^ rather than >= so a major bump cannot arrive silently.
+    range: "^5.31.7"
+    advisory: GHSA-5xpp-75jx-m839
+    severity: high
+    vector: >-
+      The API instantiates @opentelemetry/host-metrics in
+      packages/api/src/index.ts, which calls systeminformation's networkStats()
+      on the metrics interval, and networkStats() calls the vulnerable
+      networkInterfaces() (systeminformation/lib/network.js:1302,1518). That
+      function interpolates an interfaces(5) source-directive path
+      (GHSA-5xpp-75jx-m839) and a NetworkManager connection profile name
+      (GHSA-hvx9-hwr7-wjj9) into a shell command, so anyone who can write host
+      network configuration gets code execution inside the API process rather
+      than only on the host. The sink is provably live; the source is
+      host-local, not remote, which is why this is the only pin we carry.
+    upstream: https://github.com/hyperdxio/hyperdx/issues/TODO-FILE-THIS
+    added: 2026-08-26
 # Example of the shape (keep commented - an empty register is the goal state):
 #
 #   - package: some-parser

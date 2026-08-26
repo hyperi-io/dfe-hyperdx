@@ -332,6 +332,14 @@ upstream behaviour and tests are unchanged. The service flag is set by
   temporary security layer
 - `.gitattributes` - ONE added line routing `yarn.lock` to
   `scripts/merge-lockfile.sh`
+- `package.json` `resolutions` - one generated fork pin,
+  `systeminformation ^5.31.7`, raising upstream's own `^5.24.0`. It is generated
+  from `security/overrides.yaml` by `scripts/security-override.py --apply`, so
+  edit the register, never this line. The vector is in the register entry.
+  `--check` currently reports it REDUNDANT: it compares our floor against the
+  lockfile resolution our own pin produced, so it cannot tell an upstream fix
+  from ours. The pin is real - the lockfile moved 5.30.7 to 5.33.1 when it was
+  applied. `--verify`, which is what CI gates on, passes.
 
 ## Docs
 
