@@ -1,11 +1,11 @@
-# Project:   hyperi-hyperdx
+# Project:   dfe-hyperdx
 # File:      Dockerfile
 # Purpose:   production container image (API + App) published to GHCR by hyperi-ci
 #
 # License:   MIT
 # Copyright: (c) 2026 HYPERI PTY LIMITED
 #
-# Auto-built + published to ghcr.io/hyperi-io/hyperi-hyperdx by hyperi-ci
+# Auto-built + published to ghcr.io/hyperi-io/dfe-hyperdx by hyperi-ci
 # (publish.container in .hyperi-ci.yaml). This is a self-contained, flattened
 # equivalent of the `prod` target in docker/hyperdx/Dockerfile: it builds with a
 # plain `docker build .` (no --build-context, no --target) because hyperi-ci's
@@ -76,7 +76,7 @@ FROM node:${NODE_VERSION}-alpine AS prod
 LABEL org.opencontainers.image.vendor="HyperI" \
       org.opencontainers.image.title="HyperI HyperDX Production" \
       org.opencontainers.image.description="HyperI HyperDX (DFE fork) production image with API and App services" \
-      org.opencontainers.image.source="https://github.com/hyperi-io/hyperi-hyperdx" \
+      org.opencontainers.image.source="https://github.com/hyperi-io/dfe-hyperdx" \
       org.opencontainers.image.licenses="MIT"
 
 ARG CODE_VERSION
