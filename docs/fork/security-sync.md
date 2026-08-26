@@ -66,14 +66,19 @@ none of them had ever failed a build.
 
 Full install is 2691 packages. The api production closure is **331**.
 
-Of the 38 packages carrying alerts, **15** are in the image:
+Of the 38 packages carrying alerts, **21** are in the image:
 
 ajv, bn.js, cross-spawn, fast-uri, fast-xml-parser, hono, ip-address, lodash,
-path-to-regexp, picomatch, protobufjs, qs, semver, systeminformation, uuid
+path-to-regexp, picomatch, protobufjs, qs, semver, systeminformation, uuid,
+`@hono/node-server`, and five `@opentelemetry/*`.
 
-The other 23 are not. That kills most of the backlog in one go, including the
+The other 17 are not. That kills most of the backlog in one go, including the
 biggest clusters - tar (12 alerts), minimatch (9), js-yaml (4), postcss (4),
 nanoid (3).
+
+**Final tally: 2 real out of 99.** protobufjs and systeminformation. Everything
+else is either absent from the image, outside its vulnerable range in one
+direction or the other, or has no path an attacker can take.
 
 ### tar - both criticals were not what they looked like
 
@@ -157,7 +162,45 @@ from `isPrivateIp`.
 **Re-check this one every sync.** If a merge ever drags that declaration back
 below 10.3.1 it becomes a real remote SSRF immediately.
 
-### The 15 that ARE in the image
+### Watch the scoped packages - a top-level listing misses them
+
+First pass at "what is in the image" listed `node_modules` one level deep and
+came back with 15 packages. That was wrong: a scoped package sits at
+`node_modules/@scope/name`, so `@opentelemetry/core` reads as `@opentelemetry`
+and never matches. Depth 2 is the real number - **21**, not 15.
+
+Six more turned out to be in the image: `@hono/node-server` and five
+`@opentelemetry/*`. Only `@babel/runtime` was genuinely absent.
+
+### The OpenTelemetry six, and why none of them bite
+
+Five of the six are inside their vulnerable ranges, so version alone does not
+clear them. What clears them is that `packages/api/src/index.ts` starts METRICS
+ONLY:
+
+```
+const meterProvider = new MeterProvider({ readers: [getHyperDXMetricReader()] })
+const hostMetrics = new HostMetrics({ meterProvider })
+hostMetrics.start()
+```
+
+No `NodeSDK`, no tracer provider, no HTTP instrumentation, no propagators
+registered.
+
+| Alert | Package | Have | Range | Why it does not bite |
+|---|---|---|---|---|
+| 126, 127, 128 | exporter-prometheus, auto-instrumentations-node, sdk-node | 0.57.2 / 0.56.1 | `< 0.217.0` | Prometheus exporter crash needs the exporter's own HTTP server. We never instantiate it - our metrics endpoint is `prom-client` directly in `dfe/observability/metrics.ts`. The package only arrives because `sdk-node` bundles every exporter. |
+| 184 | core | 1.30.1 | `< 2.8.0` | Unbounded memory in W3C Baggage propagation. Baggage needs a propagator on a tracing SDK, and no tracing SDK is started. |
+| 227 | propagator-jaeger | 1.30.1 | `< 2.9.0` | Needs `OTEL_PROPAGATORS` to include jaeger. That string appears NOWHERE in the repo - not code, compose or env - and OTel's defaults are tracecontext plus baggage. |
+| 265 | @hono/node-server | 1.19.17 | `>= 2.0.0, < 2.0.5` | Below the range, not above it. Also Windows-only path traversal, and we ship Alpine. |
+
+Alert 227 was left undetermined by the previous pass. It is settled: not
+reachable.
+
+The same file is why systeminformation IS real - `hostMetrics.start()` on line
+18 is the chain into `networkStats()`.
+
+### The other 15 in the image
 
 Resolved versions read out of the production `node_modules`, not from
 `yarn.lock`.
