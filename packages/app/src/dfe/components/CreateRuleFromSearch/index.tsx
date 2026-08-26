@@ -72,6 +72,16 @@ export function CreateRuleFromSearch({
           message: 'You do not have permission to create rules.',
           autoClose: 5000,
         });
+      } else if (err instanceof HTTPError && err.response.status === 502) {
+        // The route reports every engine-credential failure as 502 so it never
+        // trips the app's redirect-to-login on 401.
+        notifications.show({
+          color: 'red',
+          title: 'Rule engine unreachable',
+          message:
+            'The DFE engine did not accept this session. Your search is unchanged.',
+          autoClose: 5000,
+        });
       } else {
         notifications.show({
           color: 'red',
