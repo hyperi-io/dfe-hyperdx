@@ -43,7 +43,9 @@ export type JSONExtractFn =
 // JSON key names are ingest-controlled, so a key carrying a quote or a backslash
 // would otherwise break out of the literal and into the WHERE clause.
 const quoteArgs = (path: string[]): string =>
-  path.map(p => `'${p.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`).join(', ');
+  path
+    .map(p => `'${p.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`)
+    .join(', ');
 
 /**
  * Path expression for a value inside a native JSON column, outside the
