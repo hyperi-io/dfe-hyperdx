@@ -440,11 +440,16 @@ The three left are deliberate:
 | `middleware/admin-lockdown.ts` | no-namespace | Express type augmentation has no other spelling. |
 | `controllers/org-connection.ts` | no-unsafe-type-assertion | Two casts bridge upstream's loosely-typed controllers. The third is worth fixing - see below. |
 
-**Worth doing properly:** `org-connection.ts:67` does
-`(await resp.json()) as OrgConnection` on the ENGINE's response. That asserts
-the shape of data we do not control. It should be a zod parse - the repo
-already uses zod and CLAUDE.md asks for it. Left alone here because it changes
-behaviour on the org-connection path and wants its own change.
+**Done, and it was hiding a real one.** `org-connection.ts` asserted the
+engine's JSON response and then hand-checked `name`, `host` and `username`. It
+never checked `password` - which is written straight onto the ClickHouse
+connection, so a response without one stored `undefined` as the password.
+
+Now a zod parse, with the type inferred from the schema so the two cannot
+drift, plus a regression test that fails against the old guard. That is the
+argument for parsing over asserting in one example: the cast did not cause the
+bug, but it made the bug something a reader had to notice rather than something
+the code enforced.
 
 ### Still open
 
