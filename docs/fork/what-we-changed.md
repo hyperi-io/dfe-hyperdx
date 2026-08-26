@@ -332,6 +332,15 @@ upstream behaviour and tests are unchanged. The service flag is set by
   temporary security layer
 - `.gitattributes` - ONE added line routing `yarn.lock` to
   `scripts/merge-lockfile.sh`
+- `knip.json` - added ignores so the pre-commit hook can run. Two classes, and
+  neither is ours to fix. Upstream page components orphaned because this fork
+  removed their routes (`pages/{benchmark,clickhouse,join-team,kubernetes,`
+  `service-map,services,sessions,team}.tsx`), and upstream's own debris - the
+  `jsonwebtoken` dependency they left declared after removing its code in
+  `f34cfaed`. Ignored rather than deleted: dead upstream files are never
+  imported so Next never bundles them, and removing 5,000 lines of upstream
+  code buys a delete/modify conflict on every sync for no runtime gain. Worth
+  raising upstream.
 - `.yarnrc.yml` - one added `npmAuditIgnoreAdvisories` block. The audit gate
   runs `yarn npm audit` against the lockfile, so it reports on upstream's whole
   tree including devDependencies, and there is no line of code to tag. Excluded

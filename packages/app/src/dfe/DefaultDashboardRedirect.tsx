@@ -15,7 +15,7 @@ import { useDashboards } from '@/dashboard';
 
 // Must match the name built in the api package
 // (dfe/dashboards/definitions.ts buildThroughputDashboard).
-export const DFE_DEFAULT_DASHBOARD_NAME = 'DFE Throughput';
+const DFE_DEFAULT_DASHBOARD_NAME = 'DFE Throughput';
 
 export default function DefaultDashboardRedirect() {
   const router = useRouter();

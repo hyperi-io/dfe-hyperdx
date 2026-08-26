@@ -1,8 +1,4 @@
-import {
-  type ColumnMetaType,
-  convertCHDataTypeToJSType,
-  JSDataType,
-} from '@hyperdx/common-utils/dist/clickhouse';
+import { JSDataType } from '@hyperdx/common-utils/dist/clickhouse';
 import type { Field } from '@hyperdx/common-utils/dist/core/metadata';
 
 /**
@@ -22,13 +18,4 @@ export function dfeJsonColumnsFromFields(
   return (fields ?? [])
     .filter(f => f.path.length === 1 && f.jsType === JSDataType.JSON)
     .map(f => f.path[0]);
-}
-
-/** Same, from raw column metadata. */
-export function dfeJsonColumnsFromMeta(
-  columns: readonly ColumnMetaType[] | undefined,
-): string[] {
-  return (columns ?? [])
-    .filter(c => convertCHDataTypeToJSType(c.type) === JSDataType.JSON)
-    .map(c => c.name);
 }
