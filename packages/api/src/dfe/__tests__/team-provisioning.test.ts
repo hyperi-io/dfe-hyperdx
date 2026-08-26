@@ -5,11 +5,6 @@
  * concurrent inserts colliding on the unique `name` index: the loser catches the
  * duplicate-key and returns the winner so all requests land on ONE team.
  */
-/* eslint-disable @typescript-eslint/no-unsafe-type-assertion --
- * Reading jest.Mock off a mocked module asserts a narrower type than the real
- * export; scoped here rather than relaxed in upstream's eslint config.
- */
-
 jest.mock('@/utils/logger', () => ({
   __esModule: true,
   default: {
@@ -29,22 +24,25 @@ jest.mock('@/setupDefaults', () => ({ setupTeamDefaults }));
 const save = jest.fn();
 
 jest.mock('@/models/team', () => {
-  const Team = jest.fn().mockImplementation((doc: Record<string, unknown>) => ({
-    ...doc,
-    _id: { toString: () => 'new-team' },
-    save,
-  }));
-  (Team as unknown as { findOne: jest.Mock }).findOne = jest.fn();
-  (Team as unknown as { collection: { createIndex: jest.Mock } }).collection = {
-    createIndex: jest.fn().mockResolvedValue(undefined),
-  };
+  // Object.assign gives a typed intersection, so the statics need no cast.
+  const Team = Object.assign(
+    jest.fn().mockImplementation((doc: Record<string, unknown>) => ({
+      ...doc,
+      _id: { toString: () => 'new-team' },
+      save,
+    })),
+    {
+      findOne: jest.fn(),
+      collection: { createIndex: jest.fn().mockResolvedValue(undefined) },
+    },
+  );
   return { __esModule: true, default: Team };
 });
 
 import { findOrCreateTeamByName } from '@/dfe/controllers/team-provisioning';
 import Team from '@/models/team';
 
-const mockFindOne = (Team as unknown as { findOne: jest.Mock }).findOne;
+const mockFindOne = jest.mocked(Team.findOne);
 
 beforeEach(() => {
   jest.clearAllMocks();
