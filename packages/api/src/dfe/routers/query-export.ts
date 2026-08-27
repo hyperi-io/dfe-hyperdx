@@ -8,10 +8,15 @@ import { parameterizedQueryToSql } from '@hyperdx/common-utils/dist/clickhouse';
 import { ClickhouseClient } from '@hyperdx/common-utils/dist/clickhouse/node';
 import { getMetadata } from '@hyperdx/common-utils/dist/core/metadata';
 import { renderChartConfig } from '@hyperdx/common-utils/dist/core/renderChartConfig';
+import {
+  CustomSchemaSQLSerializerV2,
+  SearchQueryBuilder,
+} from '@hyperdx/common-utils/dist/queryParser';
 import { format } from '@hyperdx/common-utils/dist/sqlFormatter';
 import {
   ChartConfigWithOptDateRange,
   SavedChartConfigSchema,
+  UseTextIndex,
 } from '@hyperdx/common-utils/dist/types';
 import express from 'express';
 import { z } from 'zod';
@@ -50,6 +55,46 @@ const createRuleBodySchema = z.object({
 // Bound the wait on the engine so a slow/unreachable control plane fails the
 // request instead of hanging the client. Matches org-connection's ceiling.
 const ENGINE_TIMEOUT_MS = 5000;
+
+/**
+ * Translate a Lucene search to its SQL equivalent, using the same serializer
+ * `renderChartConfig` uses for a `whereLanguage: 'lucene'` config.
+ *
+ * The export splices `{timestamp_condition}` into `where`, and that placeholder
+ * is not valid Lucene -- the grammar reads `{...}` as `{a TO b}` range syntax
+ * and throws. Translating first lets the export hold one language.
+ *
+ * Runs against the source's REAL table: the serializer resolves column metadata,
+ * which the `{{org_id}}` / `{{source_table_name}}` placeholders cannot satisfy.
+ */
+async function luceneToSql({
+  condition,
+  metadata,
+  from,
+  connectionId,
+  implicitColumnExpression,
+  bodyExpression,
+  useTextIndexForImplicitColumn,
+}: {
+  condition: string;
+  metadata: ReturnType<typeof getMetadata>;
+  from: { databaseName: string; tableName: string };
+  connectionId: string;
+  implicitColumnExpression?: string;
+  bodyExpression?: string;
+  useTextIndexForImplicitColumn?: UseTextIndex;
+}): Promise<string> {
+  const serializer = new CustomSchemaSQLSerializerV2({
+    metadata,
+    databaseName: from.databaseName,
+    tableName: from.tableName,
+    implicitColumnExpression,
+    bodyExpression,
+    useTextIndexForImplicitColumn,
+    connectionId,
+  });
+  return new SearchQueryBuilder(condition, serializer).build();
+}
 
 /**
  * POST /dfe/export-sql
@@ -99,6 +144,16 @@ router.post(
         throw new Api500Error('Invalid connection');
       }
 
+      // Create a ClickHouse client to fetch metadata
+      const clickhouseClient = new ClickhouseClient({
+        host: connection.host,
+        username: connection.username,
+        password: connection.password,
+      });
+
+      const metadata = getMetadata(clickhouseClient);
+      const querySettings = source.querySettings;
+
       // Build the full chart config with optional date range.
       // renderChartConfig requires connection and from; add them from the resolved source.
       // `where` only exists on the builder (search/select) chart-config variant,
@@ -107,6 +162,32 @@ router.post(
         'where' in chartConfig && chartConfig.where
           ? (chartConfig.where as string)
           : undefined;
+
+      // The export holds ONE language, because `{timestamp_condition}` is only
+      // valid in the SQL one. See luceneToSql.
+      const sqlWhere =
+        existingWhere &&
+        'whereLanguage' in chartConfig &&
+        chartConfig.whereLanguage === 'lucene'
+          ? await luceneToSql({
+              condition: existingWhere,
+              metadata,
+              from: source.from,
+              connectionId,
+              implicitColumnExpression:
+                'implicitColumnExpression' in chartConfig
+                  ? chartConfig.implicitColumnExpression
+                  : undefined,
+              bodyExpression:
+                'bodyExpression' in chartConfig
+                  ? chartConfig.bodyExpression
+                  : undefined,
+              useTextIndexForImplicitColumn:
+                'useTextIndexForImplicitColumn' in chartConfig
+                  ? chartConfig.useTextIndexForImplicitColumn
+                  : undefined,
+            })
+          : existingWhere;
 
       const fullConfig = {
         ...chartConfig,
@@ -122,24 +203,11 @@ router.post(
           databaseName: '{{org_id}}',
           tableName: '{{source_table_name}}',
         },
-        where: existingWhere
-          ? `${existingWhere} AND {timestamp_condition}`
+        where: sqlWhere
+          ? `${sqlWhere} AND {timestamp_condition}`
           : '{timestamp_condition}',
-        // When where is empty, the effective where is only {timestamp_condition}
-        // (a SQL placeholder). It must not be parsed as Lucene—the Lucene parser
-        // expects {a TO b} range syntax and fails on {timestamp_condition}.
-        ...(existingWhere ? {} : { whereLanguage: 'sql' as const }),
+        whereLanguage: 'sql' as const,
       } as ChartConfigWithOptDateRange;
-
-      // Create a ClickHouse client to fetch metadata
-      const clickhouseClient = new ClickhouseClient({
-        host: connection.host,
-        username: connection.username,
-        password: connection.password,
-      });
-
-      const metadata = getMetadata(clickhouseClient);
-      const querySettings = source.querySettings;
 
       // Render the chart config to SQL
       const chSql = await renderChartConfig(
@@ -202,7 +270,11 @@ router.post(
     try {
       const token = extractToken(req);
       if (!token) {
-        return res.status(401).json({ error: 'Missing engine token' });
+        // Not 401: the HyperDX session is valid and only the engine credential
+        // is missing, and the app redirects to /login on any 401.
+        return res
+          .status(502)
+          .json({ error: 'No DFE engine credential on this session' });
       }
 
       const origin = engineOrigin();
@@ -244,6 +316,15 @@ router.post(
           { status: engineResp.status },
           'DFE: engine rule creation refused',
         );
+      }
+
+      // An engine 401 becomes 502 for the same reason a missing token does; the
+      // engine's status is kept in the body so the cause is not lost.
+      if (engineResp.status === 401) {
+        return res.status(502).json({
+          error: 'The DFE engine rejected this session credential',
+          engineStatus: 401,
+        });
       }
 
       return res.status(engineResp.status).json(payload);

@@ -1,54 +1,64 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "_comment": [
-    "INVERTED POSTURE - this repo is a long-lived FORK, so the house default is",
-    "backwards here: dependency management is OFF for everything that came from",
-    "upstream, and ON only for what WE added.",
-    "",
-    "WHY. We do not own upstream's dependency tree. Bumping a transitive dep in",
-    "packages/*/package.json diverges us from hyperdxio/hyperdx for a fix we did",
+    "FORK POSTURE. This repo is a long-lived fork of hyperdxio/hyperdx, so the",
+    "house default is inverted: dependency management covers ONLY the files WE",
+    "added. We do not own upstream's dependency tree, and bumping a transitive",
+    "dep in packages/*/package.json diverges us from upstream for a fix we did",
     "not write, turns a pristine file into permanent rerere conflict surface",
-    "(see docs/fork/design.md), and gets reverted or re-conflicted on the next",
-    "Upstream patches upstream; we get the fix when we sync. A PR queue full of",
-    "bumps we must close unmerged is worse than no queue - it trains everyone to",
-    "ignore the queue, including the one bump that matters.",
+    "(docs/fork/design.md), and gets reverted or re-conflicted on the next sync.",
     "",
-    "WHAT IS STILL ON. The GitHub Actions pinned by SHA in OUR OWN workflows.",
-    "Those are ours, the house standard requires them SHA-pinned, and a stale",
-    "pin is a real risk nobody upstream will ever fix for us.",
+    "SCOPED BY includePaths, NOT BY A BLANKET DISABLE. The obvious spelling is",
+    "`packageRules: [{matchFileNames: ['**'], enabled: false}]` plus",
+    "`vulnerabilityAlerts`, and that shape is broken upstream: Renovate 43.113.0",
+    "added a skipReason filter to flattenUpdates that drops dependencies the",
+    "vulnerability override re-enabled, so security PRs are autoclosed and none",
+    "are created (renovatebot/renovate#42655, still open on 43.120.x, closed as",
+    "not planned). includePaths restricts EXTRACTION instead, so there is no",
+    "disabled dependency to mis-filter and no rule to regress.",
     "",
-    "NOT A SUBSTITUTE FOR LOOKING. Muting the per-PR noise does not make an",
+    "WHAT IS ON. The GitHub Actions pinned by SHA in our own five workflows, and",
+    "the two compose files we added. The org preset supplies the rest: the",
+    "fix(deps): prefix so a bump actually ships, digest pinning, the 7-day",
+    "cooldown with its vulnerability exemption, and the grouped-pair rules.",
+    "",
+    "UPSTREAM CVEs ARE NOT RENOVATE'S JOB HERE. They surface as Dependabot",
+    "alerts and are triaged into security/overrides.yaml, which is stripped",
+    "before an upstream merge and rebuilt after, so a pin never reaches rerere.",
+    "That is the security-vs-functionality split this fork is built around; see",
+    "security/overrides.yaml for the bar an entry has to clear.",
+    "",
+    "NOT A SUBSTITUTE FOR LOOKING. Muting per-PR noise does not make an",
     "inherited CVE unreal - the fork ships as a container image. The image scan",
-    "at publish is what catches those, and a critical one is an argument for",
-    "syncing upstream NOW, not for patching a vendored dep by hand."
+    "at publish and the hyperi-ci quality audit are what catch those."
   ],
-  "extends": ["config:recommended"],
-  "enabledManagers": ["github-actions"],
+  "extends": ["github>hyperi-io/renovate-config"],
+  "includePaths": [
+    ".github/workflows/ci.yml",
+    ".github/workflows/upstream-sync.yml",
+    ".github/workflows/upstream-drift.yml",
+    ".github/workflows/fork-surface.yml",
+    ".github/workflows/fork-security.yml",
+    "docker-compose.dfe.yml",
+    "docker-compose.dfe.dev.yml"
+  ],
+  "enabledManagers": ["github-actions", "docker-compose"],
   "packageRules": [
     {
-      "description": "Off by default - everything, everywhere.",
-      "matchFileNames": ["**"],
-      "enabled": false
-    },
-    {
-      "description": "ON: action pins in the workflows we own. Upstream's own workflows are excluded by name, so a sync that adds one does not silently opt it in.",
-      "matchManagers": ["github-actions"],
-      "matchFileNames": [
-        ".github/workflows/ci.yml",
-        ".github/workflows/upstream-sync.yml",
-        ".github/workflows/upstream-drift.yml",
-        ".github/workflows/fork-surface.yml",
-        ".github/workflows/fork-security.yml"
+      "description": "ClickHouse is pinned to what this fork's dev and CI stacks actually run (26.5), which is ABOVE the org preset's <26.4 LTS ceiling. The ceiling exists because dfe-infra runs 26.3.13.31 and dfe-engine writes DDL against it. Constrained to the 26.5 line rather than left open, so patches still flow and a further major cannot arrive unnoticed. Resolve the split deliberately - either this fork moves to the estate's LTS line or the estate moves up - and delete this rule when it is resolved.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": [
+        "clickhouse/clickhouse-server",
+        "docker.io/clickhouse/clickhouse-server"
       ],
-      "enabled": true,
-      "pinDigests": true
+      "allowedVersions": "<26.6"
     }
   ],
   "vulnerabilityAlerts": {
-    "description": "Security PRs follow the same rule - our files only. An upstream CVE is fixed by syncing upstream, not by us editing their lockfile.",
-    "enabled": false
+    "description": "On, but not the primary net. Nothing outside includePaths is extracted, so this only ever covers our own two compose files and five workflows. Upstream's tree is covered by Dependabot alerts plus security/overrides.yaml.",
+    "enabled": true
   },
-  "osvVulnerabilityAlerts": false,
+  "osvVulnerabilityAlerts": true,
   "dependencyDashboard": true,
-  "dependencyDashboardTitle": "Renovate: fork-owned dependencies only (see renovate.json)"
+  "dependencyDashboardTitle": "Renovate: fork-owned files only (see renovate.json)"
 }

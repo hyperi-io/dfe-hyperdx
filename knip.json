@@ -4,12 +4,27 @@
     "packages/app": {
       "entry": ["pages/**/*.{ts,tsx}", "scripts/*.js", "tests/e2e/**/*.ts"],
       "project": ["src/**/*.{ts,tsx}", "pages/**/*.{ts,tsx}"],
-      "ignore": [".storybook/public/**"],
+      "ignore": [
+        ".storybook/public/**",
+        "src/BenchmarkPage.tsx",
+        "src/ClickhousePage.tsx",
+        "src/DBServiceMapPage.tsx",
+        "src/JoinTeamPage.tsx",
+        "src/SessionsPage.tsx",
+        "src/TeamPage.tsx",
+        "src/KubernetesDashboardPage.tsx",
+        "src/components/TeamSettings/**",
+        "src/sessions.ts",
+        "src/utils/webhookIcons.tsx",
+        "src/defaults.ts",
+        "src/theme/index.ts"
+      ],
       "ignoreDependencies": [
         "eslint-config-next",
         "@chromatic-com/storybook",
         "@storybook/addon-themes",
-        "react-is"
+        "react-is",
+        "@tanstack/react-query-devtools"
       ]
     },
     "packages/api": {
@@ -21,12 +36,14 @@
         "src/fixtures.ts"
       ],
       "project": ["src/**/*.ts"],
-      "ignoreDependencies": ["pino-pretty", "aws4"],
+      "ignoreDependencies": ["pino-pretty", "aws4", "jsonwebtoken"],
       "ignore": ["src/opamp/**", "src/utils/logParser.ts"]
     },
     "packages/common-utils": {
       "entry": ["src/**/*.ts", "!src/__tests__/**", "!src/**/*.test.*"],
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["@stryker-mutator/core"],
+      "ignoreBinaries": ["stryker"]
     },
     "packages/hdx-eval": {
       "project": ["src/**/*.ts"],
@@ -36,17 +53,20 @@
   },
   "ignore": [
     "scripts/dev-portal/**",
+    "scripts/ci/__tests__/**",
     ".github/scripts/**",
     ".github/actions/**",
     "docker/hyperdx/**",
-    ".claude/**"
+    ".claude/**",
+    ".hyperi/**"
   ],
-  "ignoreBinaries": ["make", "migrate"],
+  "ignoreBinaries": ["make", "migrate", "stryker"],
   "ignoreDependencies": [
     "@dotenvx/dotenvx",
     "concurrently",
     "dotenv",
-    "babel-plugin-react-compiler"
+    "babel-plugin-react-compiler",
+    "@stryker-mutator/core"
   ],
   "include": ["nsExports"],
   "exclude": ["enumMembers", "duplicates"]

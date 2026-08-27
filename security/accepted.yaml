@@ -47,3 +47,15 @@ accepted:
       against our own closed enum, written to console.warn. It is not
       attacker-controlled and the sink is a dev-console log, not a format string
       passed to util.format.
+
+  - rule: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
+    path: renovate.json
+    reason: >-
+      The rule reads one file and cannot follow `extends`. The setting is
+      present, in the org preset this config extends
+      (github>hyperi-io/renovate-config): `minimumReleaseAge: "7 days"` with
+      `minimumReleaseAgeBehaviour: "timestamp-required"`, plus the
+      vulnerabilityAlerts rule that drops it to 0 days so a CVE patch is not
+      held back. Declaring it again here would fork the value and let the two
+      drift. The Dependabot equivalent has no preset mechanism, so
+      .github/dependabot.yml carries a real `cooldown` block instead.

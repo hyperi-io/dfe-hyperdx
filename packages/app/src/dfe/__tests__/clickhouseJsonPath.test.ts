@@ -15,6 +15,8 @@
  *     function or mergePath under us, this fails in our own CI instead of
  *     shipping a broken WHERE clause.
  */
+import { renderJsonStringExpression } from '@hyperdx/common-utils/dist/dfe/jsonPath';
+
 import { buildJSONExtractQuery } from '@/components/DBRowJsonViewer';
 import {
   dfeJsonColumnPath,
@@ -27,23 +29,42 @@ describe('dfeJsonColumnPath', () => {
     expect(dfeJsonColumnPath(['_json'])).toBe('toString(_json)');
   });
 
-  it('extracts a nested field instead of subscripting the JSON column', () => {
+  it('takes the sub-path instead of subscripting the JSON column', () => {
     // col['k'] on a JSON column is arrayElement -> "Illegal types of arguments".
     expect(dfeJsonColumnPath(['_json', '_source'])).toBe(
-      "JSONExtractString(toString(_json), '_source')",
+      'toString(_json.`_source`)',
     );
   });
 
   it('handles a deep path', () => {
     expect(dfeJsonColumnPath(['_json', 'a', 'b', 'c'])).toBe(
-      "JSONExtractString(toString(_json), 'a', 'b', 'c')",
+      'toString(_json.`a`.`b`.`c`)',
     );
   });
 
   it('quotes numeric-looking segments rather than emitting array indices', () => {
     expect(dfeJsonColumnPath(['_json', '0', 'id'])).toBe(
-      "JSONExtractString(toString(_json), '0', 'id')",
+      'toString(_json.`0`.`id`)',
     );
+  });
+
+  // JSONExtractString returns '' for anything that is not a JSON string, so the
+  // old shape matched zero rows on a number or a boolean. toString() of the
+  // sub-path gives the same text the sidebar facet offers.
+  it('renders the same expression whatever the value type', () => {
+    expect(dfeJsonColumnPath(['_json', 'port'])).toBe('toString(_json.`port`)');
+  });
+
+  // The sidebar renders a facet through the query-render seam. If these two
+  // disagree, a filter added from a row never merges with a ticked facet.
+  it('agrees with the seam the filter sidebar renders through', () => {
+    expect(dfeJsonColumnPath(['_json', 'user', 'name'])).toBe(
+      renderJsonStringExpression('_json', ['user', 'name']),
+    );
+  });
+
+  it('escapes a backtick in an ingest-controlled key', () => {
+    expect(dfeJsonColumnPath(['_json', 'a`b'])).toBe('toString(_json.`a``b`)');
   });
 });
 
@@ -62,6 +83,14 @@ describe('dfeJsonExtractQuery - native JSON root (our delta)', () => {
     expect(
       dfeJsonExtractQuery(['j', 'count'], ['j'], ['j'], 'JSONExtractFloat'),
     ).toBe("JSONExtractFloat(toString(j), 'count')");
+  });
+
+  // Key names come from ingest, so an unescaped quote closes the literal and
+  // the rest of the key lands in the WHERE clause as SQL.
+  it('escapes a quote in a key rather than breaking out of the literal', () => {
+    expect(dfeJsonExtractQuery(['j', "x') OR 1=1 --"], ['j'], ['j'])).toBe(
+      "JSONExtractString(toString(j), 'x\\') OR 1=1 --')",
+    );
   });
 });
 

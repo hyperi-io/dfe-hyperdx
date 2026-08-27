@@ -217,9 +217,7 @@ export async function syncDashboards(
   }
 }
 
-export default class ProvisionDashboardsTask
-  implements HdxTask<ProvisionDashboardsTaskArgs>
-{
+export default class ProvisionDashboardsTask implements HdxTask {
   constructor(private args: ProvisionDashboardsTaskArgs) {}
 
   name(): string {

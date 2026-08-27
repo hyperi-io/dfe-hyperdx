@@ -4,12 +4,15 @@ import {
   Field,
   parseKeyPath,
   TableConnection,
-  tcFromSource,
 } from '@hyperdx/common-utils/dist/core/metadata';
 import { BuilderChartConfigWithDateRange } from '@hyperdx/common-utils/dist/types';
 
-import { useFetchFacets } from '@/components/DBSearchPageFilters/hooks';
+import {
+  resolveTableConnection,
+  useFetchFacets,
+} from '@/components/DBSearchPageFilters/hooks';
 import { NOW } from '@/config';
+import { dfeJsonColumnsFromFields } from '@/dfe/jsonColumns';
 import { deduplicate2dArray } from '@/hooks/useMetadata';
 import { useSource } from '@/source';
 import { mergePath, useDebounce } from '@/utils';
@@ -209,7 +212,7 @@ export function useAutoCompleteOptions(
   const chartConfig = useMemo<BuilderChartConfigWithDateRange>(
     () =>
       chartConfigFromTableConnection(
-        tableConnection ? tableConnection : tcFromSource(source),
+        resolveTableConnection(source, tableConnection),
         source?.timestampValueExpression ?? '',
         effectiveDateRange,
       ),
@@ -223,6 +226,7 @@ export function useAutoCompleteOptions(
   } = useFetchFacets({
     chartConfig,
     sourceId: sourceId ?? null,
+    tableConnection,
     dateRange: effectiveDateRange,
     mode: 'all',
     disableValues: true,
@@ -281,11 +285,17 @@ export function useAutoCompleteOptions(
     [fields],
   );
 
+  // DFE: without these, a JSON sub-path falls into mergePath's array branch and
+  // emits the illegal `col['a.b']`, so the facet fetch silently returns nothing.
+  const jsonColumns = useMemo(() => dfeJsonColumnsFromFields(fields), [fields]);
+
   useEffect(() => {
     if (searchField && !searchField.type.startsWith('Map')) {
-      loadMoreFacetsForKey(mergePath(searchField.path, [], mapColumns));
+      loadMoreFacetsForKey(
+        mergePath(searchField.path, jsonColumns, mapColumns),
+      );
     }
-  }, [searchField, loadMoreFacetsForKey, mapColumns]);
+  }, [searchField, loadMoreFacetsForKey, jsonColumns, mapColumns]);
 
   // Build key-value pair suggestions
   const keyValCompleteOptions = useMemo<

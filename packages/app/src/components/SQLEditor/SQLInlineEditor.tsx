@@ -31,9 +31,11 @@ import CodeMirror, {
 } from '@uiw/react-codemirror';
 
 import InputLanguageSwitch from '@/components/SearchInput/InputLanguageSwitch';
+import { dfeJsonColumnsFromFields } from '@/dfe/jsonColumns';
+import { deriveMapColumnsFromFields } from '@/hooks/useAutoCompleteOptions';
 import { useMultipleAllFields } from '@/hooks/useMetadata';
 import { useSource } from '@/source';
-import { useQueryHistory } from '@/utils';
+import { mergePath, useQueryHistory } from '@/utils';
 import { clickhouseSql } from '@/utils/codeMirror';
 
 import { KEYWORDS_FOR_WHERE_OR_ORDER_BY } from './constants';
@@ -42,6 +44,11 @@ import {
   createCodeMirrorStyleTheme,
   DEFAULT_CODE_MIRROR_BASIC_SETUP,
 } from './utils';
+import { useVariableCompletions } from './variableCompletions';
+import {
+  useVariableValidation,
+  VariableIssueIndicator,
+} from './variableValidation';
 
 import styles from './SQLInlineEditor.module.scss';
 
@@ -69,6 +76,9 @@ type SQLInlineEditorProps = {
   // (intersection) rather than the union — for an expression that must be valid
   // against every connection, e.g. a chart-level Group By over multiple series.
   intersectFields?: boolean;
+  // Whether the dashboard variables in scope apply to this expression: offer
+  // them as completions, and warn about the references that won't work.
+  enableVariables?: boolean;
 };
 
 const MAX_EDITOR_HEIGHT = '150px';
@@ -96,6 +106,7 @@ export default function SQLInlineEditor({
   dateRange,
   sourceId,
   intersectFields,
+  enableVariables = false,
 }: SQLInlineEditorProps & TableConnectionChoice) {
   const { colorScheme } = useMantineColorScheme();
   const _tableConnections = tableConnection
@@ -110,6 +121,17 @@ export default function SQLInlineEditor({
   const filteredFields = useMemo(() => {
     return filterField ? fields?.filter(filterField) : fields;
   }, [fields, filterField]);
+
+  // DFE: which roots take dot access and which take a subscript. Derived once
+  // per field list, not per field.
+  const jsonColumns = useMemo(
+    () => dfeJsonColumnsFromFields(filteredFields),
+    [filteredFields],
+  );
+  const mapColumns = useMemo(
+    () => deriveMapColumnsFromFields(filteredFields),
+    [filteredFields],
+  );
 
   // query search history
   const [queryHistory, setQueryHistory] = useQueryHistory(queryHistoryType);
@@ -153,6 +175,17 @@ export default function SQLInlineEditor({
     };
   }, [queryHistory, onSelectSearchHistory]);
 
+  // Dashboard variables in scope, offered alongside the column identifiers, and
+  // checked for the references that won't expand. This editor's content is
+  // always SQL — `language` only drives the switch.
+  const variableCompletions = useVariableCompletions({
+    enabled: enableVariables,
+  });
+  const variableIssues = useVariableValidation(value, {
+    enabled: enableVariables,
+    language: 'sql',
+  });
+
   const [isFocused, setIsFocused] = useState(false);
 
   const ref = useRef<ReactCodeMirrorRef>(null);
@@ -164,12 +197,11 @@ export default function SQLInlineEditor({
   const updateAutocompleteColumns = useCallback(
     (viewRef: EditorView) => {
       const identifiers = [
-        ...(filteredFields?.map(column => {
-          if (column.path.length > 1) {
-            return `${column.path[0]}['${column.path[1]}']`;
-          }
-          return column.path[0];
-        }) ?? []),
+        // DFE: `col['key']` is arrayElement, which a JSON column rejects, so a
+        // nested path has to know whether its root is a Map or a JSON column.
+        ...(filteredFields?.map(column =>
+          mergePath(column.path, jsonColumns, mapColumns),
+        ) ?? []),
         ...(additionalSuggestions ?? []),
       ];
 
@@ -177,6 +209,7 @@ export default function SQLInlineEditor({
         identifiers,
         keywords: KEYWORDS_FOR_WHERE_OR_ORDER_BY,
         includeRegularFunctions: !disableKeywordAutocomplete,
+        additionalCompletions: variableCompletions,
       });
 
       const queryHistoryList = autocompletion({
@@ -193,7 +226,10 @@ export default function SQLInlineEditor({
     },
     [
       filteredFields,
+      jsonColumns,
+      mapColumns,
       additionalSuggestions,
+      variableCompletions,
       disableKeywordAutocomplete,
       createHistoryList,
       hasNonEmptyValue,
@@ -311,6 +347,9 @@ export default function SQLInlineEditor({
 
   // Only apply expanded styling when multiline is enabled and focused
   const isExpanded = allowMultiline && isFocused;
+
+  const isVariableWarningOnly =
+    variableIssues.errors.length === 0 && variableIssues.warnings.length > 0;
   const baseHeight = size === 'xs' ? 30 : 36;
 
   return (
@@ -325,7 +364,8 @@ export default function SQLInlineEditor({
         shadow="none"
         className={cx(
           styles.paper,
-          error ? styles.error : undefined,
+          error || variableIssues.errors.length > 0 ? styles.error : undefined,
+          isVariableWarningOnly ? styles.warning : undefined,
           isExpanded ? styles.expanded : undefined,
           allowMultiline && !isExpanded ? styles.collapseFade : undefined,
         )}
@@ -377,6 +417,7 @@ export default function SQLInlineEditor({
             onClick={onClickCodeMirror}
           />
         </div>
+        <VariableIssueIndicator issues={variableIssues} />
         {onLanguageChange != null && language != null && (
           <div className={styles.languageSwitchWrapper}>
             <InputLanguageSwitch

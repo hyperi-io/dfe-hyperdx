@@ -34,8 +34,10 @@
 .gitignore
 .prettierignore
 .prettierrc
+.yarnrc.yml
 CLAUDE.md
 LOCAL.md
+knip.json
 README.md
 agent_docs/tech_stack.md
 docker/hyperdx/entry.prod.sh
@@ -55,6 +57,7 @@ packages/api/src/utils/logger.ts
 packages/app/.env.development
 packages/app/.storybook/public/mockServiceWorker.js
 packages/app/CHANGELOG.md
+packages/app/eslint.config.mjs
 packages/app/next.config.mjs
 packages/app/package.json
 packages/app/pages/_app.tsx
@@ -90,6 +93,8 @@ packages/app/src/theme/types.ts
 packages/app/src/utils.ts
 packages/app/styles/LogTable.module.scss
 packages/app/styles/globals.css
+packages/app/src/components/SQLEditor/SQLInlineEditor.tsx
+packages/app/src/hooks/useAutoCompleteOptions.tsx
 packages/app/tests/e2e/README.md
 packages/app/tsconfig.build.json
 packages/common-utils/CHANGELOG.md
@@ -97,5 +102,7 @@ packages/common-utils/README.md
 packages/common-utils/package.json
 packages/common-utils/src/__tests__/clickhouse.test.ts
 packages/common-utils/src/core/metadata.ts
+packages/common-utils/src/core/renderChartConfig.ts
 packages/otel-collector/CHANGELOG.md
+scripts/ci/ratchet-baseline.json
 yarn.lock

@@ -31,6 +31,8 @@
  * outright. Better still, upstream it - this is a real defect against the JSON
  * type they already support (#969), not a DFE preference.
  */
+import { renderJsonStringExpression } from '@hyperdx/common-utils/dist/dfe/jsonPath';
+
 import { mergePath } from '@/utils';
 
 export type JSONExtractFn =
@@ -38,8 +40,12 @@ export type JSONExtractFn =
   | 'JSONExtractFloat'
   | 'JSONExtractBool';
 
+// JSON key names are ingest-controlled, so a key carrying a quote or a backslash
+// would otherwise break out of the literal and into the WHERE clause.
 const quoteArgs = (path: string[]): string =>
-  path.map(p => `'${p}'`).join(', ');
+  path
+    .map(p => `'${p.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`)
+    .join(', ');
 
 /**
  * Path expression for a value inside a native JSON column, outside the
@@ -49,6 +55,12 @@ const quoteArgs = (path: string[]): string =>
  * a native JSON column here. For a bare root this returns exactly what upstream
  * emits (`toString(col)`); only the nested case diverges, because that is the
  * only case upstream gets wrong.
+ *
+ * The nested case renders the SAME expression the query-render seam emits for a
+ * facet, so a filter added from a row and one ticked in the sidebar address the
+ * field identically and merge. `JSONExtractString` would not: it returns the
+ * empty string for any value that is not a JSON string, so a numeric or boolean
+ * field silently matched nothing.
  */
 export function dfeJsonColumnPath(keyPath: string[]): string {
   const root = keyPath[0];
@@ -56,7 +68,62 @@ export function dfeJsonColumnPath(keyPath: string[]): string {
   if (nested.length === 0) {
     return `toString(${root})`;
   }
-  return `JSONExtractString(toString(${root}), ${quoteArgs(nested)})`;
+  return renderJsonStringExpression(root, nested);
+}
+
+/**
+ * The physical expression to filter a JSON-viewer line on.
+ *
+ * Covers all three shapes the viewer sees: a value inside parsed JSON from a
+ * String column, a native JSON sub-path, and an ordinary column.
+ *
+ * Only the exclude action calls this. Upstream's include action inlines the same
+ * logic in `DBRowJsonViewer`, so the two agree by duplication rather than by
+ * construction -- `__tests__/clickhouseJsonPath.test.ts` is what holds them
+ * together.
+ */
+export function dfeFilterFieldPath({
+  keyPath,
+  fieldPath,
+  value,
+  isInParsedJson,
+  parsedJsonRootPath,
+  jsonColumns = [],
+  mapColumns = [],
+}: {
+  keyPath: string[];
+  fieldPath: string;
+  value: unknown;
+  isInParsedJson?: boolean;
+  parsedJsonRootPath?: string[];
+  jsonColumns?: string[];
+  mapColumns?: string[];
+}): string {
+  const isJsonColumn = keyPath.length > 0 && jsonColumns.includes(keyPath[0]);
+
+  if (isInParsedJson && parsedJsonRootPath) {
+    const jsonExtractFn: JSONExtractFn =
+      typeof value === 'number'
+        ? 'JSONExtractFloat'
+        : typeof value === 'boolean'
+          ? 'JSONExtractBool'
+          : 'JSONExtractString';
+
+    const jsonQuery = dfeJsonExtractQuery(
+      keyPath,
+      parsedJsonRootPath,
+      jsonColumns,
+      jsonExtractFn,
+      mapColumns,
+    );
+    if (jsonQuery) {
+      return jsonQuery;
+    }
+    // At the root of the parsed JSON, so treat the whole value as a string.
+    return isJsonColumn ? `toString(${fieldPath})` : fieldPath;
+  }
+
+  return isJsonColumn ? dfeJsonColumnPath(keyPath) : fieldPath;
 }
 
 /**

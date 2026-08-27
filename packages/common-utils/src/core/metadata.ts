@@ -14,6 +14,7 @@ import {
   tableExpr,
 } from '@/clickhouse';
 import { renderChartConfig, timeFilterExpr } from '@/core/renderChartConfig';
+import { dfeJsonPathRoot } from '@/dfe/jsonPath';
 import {
   FilterState,
   filterStateToPredicate,
@@ -990,9 +991,12 @@ export class Metadata {
         const where = whereConditions.length
           ? chSql`WHERE ${concatChSql(' AND ', ...whereConditions)}`
           : '';
+        // DFE: All, not Dynamic. JSONDynamicPathsWithTypes omits paths declared
+        // as typed hints and any path past max_dynamic_paths (default 1024,
+        // which wide telemetry crosses), so those fields never reach the UI.
         const sql = chSql`WITH all_paths AS
         (
-            SELECT DISTINCT JSONDynamicPathsWithTypes(${{ Identifier: column }}) as paths
+            SELECT DISTINCT JSONAllPathsWithTypes(${{ Identifier: column }}) as paths
             FROM ${tableExpr({ database: databaseName, table: tableName })} ${where}
             LIMIT ${{ Int32: maxKeys }}
             SETTINGS timeout_overflow_mode = 'break', max_execution_time = 2
@@ -1182,9 +1186,15 @@ export class Metadata {
         for (const [columnName, info] of queryOptions.entries()) {
           const orChain = concatChSql(
             ' OR ',
+            // Inline keys as SQL-escaped literals, not bind params: ~100
+            // per-key params exceed the web client's URL param budget and
+            // silently switch the request to a multipart body that proxies
+            // may reject. Keys are ingest-controlled, hence SqlString.escape.
             info.keys.map(
               k =>
-                chSql`startsWith(token, ${{ String: `${k}${info.separator}` }})`,
+                chSql`startsWith(token, ${{
+                  UNSAFE_RAW_SQL: SqlString.escape(`${k}${info.separator}`),
+                }})`,
             ),
           );
           const partsFilter = await this.partsOverlapFilter({
@@ -1356,17 +1366,22 @@ export class Metadata {
         // this should only be one mv... but we have a for loop in case
         const branch: ChSql[] = [];
         for (const [columnName, keys] of entry) {
-          const sql = chSql`(ColumnIdentifier = ${{ String: columnName }} AND Key IN (${concatChSql(
-            ',',
-            keys.map(key => chSql`${{ String: key }}`),
-          )}))`;
+          // Inline keys as SQL-escaped literals, not bind params: ~100
+          // per-key params exceed the web client's URL param budget and
+          // silently switch the request to a multipart body that proxies
+          // may reject. Keys are ingest-controlled, hence SqlString.escape.
+          const sql = chSql`(ColumnIdentifier = ${{ String: columnName }} AND Key IN (${{
+            UNSAFE_RAW_SQL: keys.map(key => SqlString.escape(key)).join(','),
+          }}))`;
           branch.push(sql);
         }
+        // Parenthesize the OR chain: `a OR b AND timeFilter` would bind the
+        // time filter (and notEmpty) to the last branch only.
         const sql = chSql`
           SELECT * FROM (
             SELECT ColumnIdentifier, Key, groupUniqArray(${{ Int32: maxValuesPerKey }})(Value) as Values
             FROM ${tableExpr({ database: databaseName, table: mvName })}
-            WHERE ${concatChSql(' OR ', branch)}
+            WHERE (${concatChSql(' OR ', branch)})
               AND ${timeFilter}
               AND notEmpty(Value)
             GROUP BY ColumnIdentifier, Key
@@ -2266,6 +2281,14 @@ export class Metadata {
         metadataMVs,
       });
 
+    // DFE: the table's native JSON columns, for the sub-path branch below.
+    // getColumns is cached, so this costs no extra query.
+    const dfeJsonColumns = (
+      await this.getColumns({ databaseName, tableName, connectionId })
+    )
+      .filter(c => convertCHDataTypeToJSType(c.type) === JSDataType.JSON)
+      .map(c => c.name);
+
     // build expressions for each query type
     const mapTextIndexQueryOptions: TextIndexMapColumnQueryOptions = new Map();
     const nativeTextIndexQueryOptions: TextIndexColumnQueryOptions = new Map();
@@ -2332,7 +2355,19 @@ export class Metadata {
       // from callers like the MCP describeSource tool), so they must be
       // SQL-escaped before being embedded as a literal — `SqlString.escape`
       // returns a fully-quoted, safely-escaped ClickHouse string literal.
-      if (keyValueFetchingStrategies.rawTable.includes(key.column)) {
+      // DFE: a native JSON sub-path arrives as one opaque segment, because
+      // parseKeyPath splits bracket form only. It matches no rawTable column
+      // and would be dropped here with neither a facet nor an error, so match
+      // on its ROOT column instead and hand the path through intact.
+      // A bracket subscript or the bare column is skipped: arrayElement is
+      // illegal on JSON, and one illegal expression fails the whole batch,
+      // taking every other facet down with it.
+      if (dfeJsonPathRoot(key.keyExpression, dfeJsonColumns)) {
+        rawQueryOptions.push(key.keyExpression);
+      } else if (
+        !dfeJsonColumns.includes(key.column) &&
+        keyValueFetchingStrategies.rawTable.includes(key.column)
+      ) {
         const quotedColumn = quoteIdentifierIfNeeded(key.column);
         if (key.mapKey) {
           rawQueryOptions.push(

@@ -89,12 +89,3 @@ export async function findOrCreateTeamByName(name: string) {
 
   return { team, created: true };
 }
-
-/**
- * Find a team by its MongoDB ObjectId.
- * Unlike the upstream getTeam() which does Team.findOne({}),
- * this always filters by _id.
- */
-export async function getTeamById(teamId: string) {
-  return Team.findById(teamId);
-}

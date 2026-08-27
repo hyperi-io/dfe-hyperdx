@@ -1,0 +1,31 @@
+# dfe-hyperdx deletion catalogue - upstream files we deliberately do NOT carry.
+# Format: one path or glob per line, '#' comments, blank lines ignored.
+# Checked by .githooks/fork-surface-check.py (pre-commit + CI): a listed path
+# that EXISTS is a failure.
+#
+# .fork-surface cannot cover these. It catalogues files we modify, and its check
+# reads `git diff --diff-filter=ACMR <merge-base>...HEAD` - a file we deleted is
+# unchanged against the merge base, so an upstream merge hands it back and every
+# gate stays green. See docs/fork/security-sync.md, 2026-08-27.
+#
+# To take upstream's version of one, remove its line in the same commit that
+# reinstates the file.
+#
+# Upstream's CI is not ours - we run hyperi-ci via .github/workflows/ci.yml plus
+# the fork machinery beside it. Removed in 3d08d465; upstream has added more
+# since, and each new one lands here as a sync finds it.
+.github/workflows/claude-code-review.yml
+.github/workflows/claude.yml
+.github/workflows/deep-resolve.yml
+.github/workflows/deep-review.yml
+.github/workflows/e2e-tests.yml
+.github/workflows/external-contributor-alerts.yml
+.github/workflows/knip.yml
+.github/workflows/main.yml
+.github/workflows/pr-triage.yml
+.github/workflows/push.yml
+.github/workflows/pushv1.yml
+.github/workflows/release-nightly.yml
+.github/workflows/release.yml
+.github/workflows/security-audit.yml
+.github/workflows/vouch.yml

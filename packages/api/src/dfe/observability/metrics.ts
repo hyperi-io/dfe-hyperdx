@@ -39,7 +39,7 @@ function buildRegistry(): Registry {
   return reg;
 }
 
-export function getRegistry(): Registry {
+function getRegistry(): Registry {
   registry ??= buildRegistry();
   return registry;
 }

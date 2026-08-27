@@ -70,6 +70,10 @@ jest.mock('@/dfe/middleware/oidc-identity', () => ({
   oidcIdentityMiddleware: jest.fn((_req, _res, next) => next()),
 }));
 
+// The config module exports consts, so a test that varies them has to write
+// through a mutable view. One alias rather than a cast per assignment.
+const config = dfeConfig as Record<string, unknown>;
+
 const ISSUER = 'https://engine.example.test';
 const TEAM = { _id: 'team-oid', name: 'sre' };
 const USER = { _id: 'user-oid', email: 'jo@example.test' };
@@ -120,9 +124,9 @@ describe('engineJwtMiddleware', () => {
       created: false,
     });
     (findOrCreateUserFromOIDC as jest.Mock).mockResolvedValue({ user: USER });
-    (dfeConfig as any).DFE_ENGINE_JWKS_URL = `${ISSUER}/.well-known/jwks.json`;
-    (dfeConfig as any).DFE_ENGINE_ISSUER = ISSUER;
-    (dfeConfig as any).DFE_AUTH_DEFAULT_TEAM = undefined;
+    config.DFE_ENGINE_JWKS_URL = `${ISSUER}/.well-known/jwks.json`;
+    config.DFE_ENGINE_ISSUER = ISSUER;
+    config.DFE_AUTH_DEFAULT_TEAM = undefined;
   });
 
   it('accepts a valid ES384 bearer token and logs the user in', async () => {
@@ -207,7 +211,7 @@ describe('engineJwtMiddleware', () => {
     });
 
     it('falls back to DFE_AUTH_DEFAULT_TEAM when there are no groups', async () => {
-      (dfeConfig as any).DFE_AUTH_DEFAULT_TEAM = 'house-team';
+      config.DFE_AUTH_DEFAULT_TEAM = 'house-team';
       const token = await sign({ sub: USER.email });
       await engineJwtMiddleware(
         makeReq({ authorization: `Bearer ${token}` }),
@@ -330,7 +334,7 @@ describe('engineJwtMiddleware', () => {
       .setIssuer(ISSUER)
       .setIssuedAt()
       .setExpirationTime('5m')
-      .sign(hmac as CryptoKey);
+      .sign(hmac);
 
     const req = makeReq({ authorization: `Bearer ${token}` });
     const next = jest.fn();
@@ -360,7 +364,7 @@ describe('engineJwtMiddleware', () => {
     const svcClaims = { sub: 'svc:dfe-engine', aud: 'dfe-hyperdx' };
 
     beforeEach(() => {
-      (dfeConfig as any).DFE_AUTH_DEFAULT_TEAM = 'dfe';
+      config.DFE_AUTH_DEFAULT_TEAM = 'dfe';
     });
 
     it.each(['/team', '/sources', '/connections/abc123'])(
@@ -388,7 +392,7 @@ describe('engineJwtMiddleware', () => {
     );
 
     it("JIT-creates the 'default' team when DFE_AUTH_DEFAULT_TEAM is unset", async () => {
-      (dfeConfig as any).DFE_AUTH_DEFAULT_TEAM = undefined;
+      config.DFE_AUTH_DEFAULT_TEAM = undefined;
       const token = await sign(svcClaims);
       const req = makeReq({ authorization: `Bearer ${token}` }, '/team');
 
@@ -475,12 +479,12 @@ describe('engineJwtMiddleware', () => {
 describe('dfeIdentityMiddleware dispatch', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (dfeConfig as any).DFE_ENGINE_JWKS_URL = `${ISSUER}/.well-known/jwks.json`;
-    (dfeConfig as any).DFE_ENGINE_ISSUER = ISSUER;
+    config.DFE_ENGINE_JWKS_URL = `${ISSUER}/.well-known/jwks.json`;
+    config.DFE_ENGINE_ISSUER = ISSUER;
   });
 
   it('uses the unverified header path ONLY in header-dev mode', async () => {
-    (dfeConfig as any).DFE_AUTH_MODE = 'header-dev';
+    config.DFE_AUTH_MODE = 'header-dev';
     const next = jest.fn();
 
     await dfeIdentityMiddleware(makeReq(), res, next as NextFunction);
@@ -489,7 +493,7 @@ describe('dfeIdentityMiddleware dispatch', () => {
   });
 
   it('verifies the engine JWT in the default oidc-proxy mode', async () => {
-    (dfeConfig as any).DFE_AUTH_MODE = 'oidc-proxy';
+    config.DFE_AUTH_MODE = 'oidc-proxy';
     const next = jest.fn();
 
     await dfeIdentityMiddleware(makeReq(), res, next as NextFunction);
@@ -501,7 +505,7 @@ describe('dfeIdentityMiddleware dispatch', () => {
   it('does NOT trust identity headers when the mode is unset', async () => {
     // Unset means DFE middleware is disabled and upstream behaviour applies -
     // it must never silently degrade to the dev header path.
-    (dfeConfig as any).DFE_AUTH_MODE = undefined;
+    config.DFE_AUTH_MODE = undefined;
     const next = jest.fn();
 
     await dfeIdentityMiddleware(

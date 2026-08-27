@@ -33,7 +33,7 @@
 
 import type { Request, Response } from 'express';
 
-export type HealthBody = { status: string };
+type HealthBody = { status: string };
 
 const OK = 200;
 const UNAVAILABLE = 503;

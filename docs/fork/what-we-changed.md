@@ -146,6 +146,124 @@ upstream behaviour and tests are unchanged. The service flag is set by
   `JSONExtract*` also rejects, so that ONE case is wrapped in `toString()`.
   Narrow by design - wrapping unconditionally changed the SQL for String and Map
   columns too.
+- `packages/common-utils/src/dfe/jsonPath.ts` - native ClickHouse JSON for
+  charts and filters. A JSON sub-path is `Dynamic`, which ClickHouse refuses in
+  `IN`, aggregates, `GROUP BY` and `ORDER BY`, so it needs an explicit coercion.
+  All the logic is here; **`core/renderChartConfig.ts` (catalogued)** carries
+  three added calls and nothing else - one in `renderWhereExpressionStr`, the
+  seam every SQL filter already passes through, one in `renderSelectList`'s
+  raw-string early return, which `renderSelect` and `renderGroupBy` BOTH feed,
+  so the SELECT list and the GROUP BY key cannot disagree, and one wrapping the
+  `renderOrderBy` argument. Coercion is `toString()`, NOT the `.:String`
+  sub-column upstream #2549 proposes - see the module header for the measurement
+  that rules it out.
+
+  Aggregate arguments are left alone: `aggFnExpr` already emits
+  `toFloat64OrDefault(toString(expr))` around them, which our idempotence check
+  recognises.
+
+  ORDER BY was left alone until 2026-08-26 and now coerces via
+  `dfeCoerceOrderBy`, which walks both the string and the `valueExpression[]`
+  forms. This is a deliberate reversal, and it trades one wrong answer for
+  another: previously a JSON sub-path was `Dynamic`, which ClickHouse refuses in
+  ORDER BY, so the chart failed with a Code 44 that at least named its own fix.
+  It now sorts, but `toString` sorts lexically - "99.5" above "1000.25". Sorting
+  a numeric JSON path correctly needs the path's concrete TYPE, and
+  `getJSONKeys` keeps only `typeArr[0]`, which for a mixed-type path is whatever
+  ClickHouse happened to list first. That decision is still open and is tracked
+  with max/min and facet values in the plan, since all three are the same
+  question.
+
+  Two shapes the seam must handle, both found by e2e and pinned by tests. A
+  trailing `.:String` is a TYPE, not a path segment: quoting it as one reads a
+  JSON key literally named `:String`, empty for every row. And
+  `findJsonExpressions` returns the ENCLOSING call's closing paren attached when
+  a path ends in a type specifier, so consuming it unbalances the aggregate
+  around it - a syntax error that fails the whole facet batch and empties every
+  other column's filter values with it.
+
+  Stripping that suffix also settles the facet-value question without touching
+  upstream's `renderJsonStringSubcolumn`: values coerce with `toString()`, so a
+  mixed-type path stops under-matching, and upstream's six assertions on that
+  function still pass.
+
+  `dfeJsonPathRoot` in the same module serves a second catalogued call site, the
+  facet dispatch in **`core/metadata.ts`**'s `getAllKeyValues`. That dispatch
+  matches a key against the table's physical column names, and `parseKeyPath`
+  splits BRACKET form only - so a JSON dot path arrives as one opaque segment,
+  matches nothing, and falls out of the loop with neither a facet nor an error.
+  That is why the filter sidebar listed no JSON sub-path at all. We match on the
+  path's ROOT column instead and hand the path through intact. The same branch
+  drops a bracket subscript on a JSON column, which is `arrayElement`: one
+  illegal expression fails the whole batch and takes every other facet with it.
+
+  Facet VALUES still render through upstream's `.:String`, so a path storing a
+  non-String type in some rows lists an incomplete value set. Selecting a value
+  is unaffected - the WHERE seam coerces with `toString()`, which matches a
+  superset - so this costs completeness, never correctness. Changing it means
+  editing upstream's own `metadata.test.ts` assertions, which is the most
+  expensive delta shape we have.
+
+- `packages/app/src/dfe/jsonColumns.ts` - which roots take dot access. Two
+  catalogued call sites read it: **`components/SQLEditor/SQLInlineEditor.tsx`**
+  (the chart-builder autocomplete rendered every nested path as `col['key']`,
+  which is `arrayElement` on a JSON column) and
+  **`hooks/useAutoCompleteOptions.tsx`** (passed an empty `jsonColumns` to
+  `mergePath`, so the search bar's facet fetch silently returned nothing). Both
+  now call `mergePath` with the JSON roots derived from the field list they
+  already hold, so neither adds a query.
+- `packages/app/jest.dfe.config.js` + `jest.dfe.setup.js` - pins
+  `NEXT_PUBLIC_THEME=hyperdx` for app unit tests, so upstream's suite passes
+  unchanged instead of us editing their test files to accommodate the rebrand.
+  Mirrors `packages/api/jest.dfe.config.js`. The setup file is loaded by the
+  jest config rather than compiled, so no tsconfig project covers it and typed
+  linting cannot parse it; **`packages/app/eslint.config.mjs`** carries one
+  added `ignores` entry for it, beside upstream's own `global-setup.js` line.
+- `packages/app/src/dfe/defaultSource.ts` - which source `/search` opens on
+  cold. DFE analysts work from hunt detections, so `hunts` is the landing view
+  rather than whichever source sorts first. **`DBSearchPage.tsx` (catalogued)**
+  carries the whole delta: one `??` on the existing fallback return in
+  `getDefaultSourceId`, plus `& { name?: string }` on its parameter type. The
+  name stays OPTIONAL so upstream's own tests, whose fixtures carry no name,
+  still typecheck - and it is what makes them still pass, since a nameless
+  fixture never matches a preference.
+
+  Upstream's precedence is untouched and still wins: an explicit `?source=`, a
+  saved search, and the user's last selection all take priority. dfe-ui's "Hunt
+  Results" entry links `?source=hunts` for that reason - it must beat the last
+  selection, which a bare `/search` deliberately does not. Upstream already
+  resolves `?source=` by NAME as well as id (`useResolvedSourceParam`), so
+  linking by name needs nothing here.
+
+- `packages/app/playwright.dfe.config.ts` +
+  `tests/e2e/dfe-global-setup-chrome.ts` - run e2e against the system Chrome.
+  Playwright 1.57.0 ships no bundled Chromium for Ubuntu 26.04 and
+  `playwright install chromium` refuses for that platform, so a DFE dev host can
+  never fetch the pinned revision. The config sets `channel: 'chrome'` per
+  project and raises the webServer budget (`E2E_APP_SERVER_TIMEOUT_MS`); the
+  setup file exists because global setup calls `chromium.launch()` directly and
+  so never sees the project config, and Playwright 1.57 honours no environment
+  override for that call.
+
+  The setup file sits BESIDE upstream's rather than under `src/dfe/`, because
+  `@/` resolves to `src/` and cannot reach `tests/`, and the eslint config bans
+  parent-relative imports. A `dfe-` prefix carries the ownership instead.
+
+  It also seeds the stored WHERE language to Lucene in the saved storage state.
+  The fork defaults that language to SQL (`6cf72984`), and upstream's
+  `search-input` test id is rendered ONLY on the Lucene input -- the SQL branch
+  renders `SQLInlineEditorControlled` and never receives it. Without the seed
+  every upstream spec calling `performSearch` waits for an element that does not
+  exist. Realigning the TEST environment leaves what a real DFE user gets
+  unchanged, and rewriting upstream's specs is the alternative fork discipline
+  rules out.
+
+  Opt-in by construction: both apply only to a run passing
+  `--config=playwright.dfe.config.ts`, so upstream's default path and CI, which
+  do have a bundled Chromium, are untouched. Neither a dependency bump nor an
+  edit to `playwright.config.ts` was needed. Mirrors the `jest.dfe.config.js`
+  pattern.
+
 - `packages/app/src/dfe/embedFeatures.ts` + `EmbedThemeSync.tsx` - chromeless
   embed mode: feature gating by route, and live theme sync from the host UI.
   `pages/_document.tsx` carries one added inline head script
@@ -217,6 +335,48 @@ upstream behaviour and tests are unchanged. The service flag is set by
   temporary security layer
 - `.gitattributes` - ONE added line routing `yarn.lock` to
   `scripts/merge-lockfile.sh`
+- `knip.json` - added ignores so the pre-commit hook can run. Two classes, and
+  neither is ours to fix. Upstream page components orphaned because this fork
+  removed their routes (`pages/{benchmark,clickhouse,join-team,kubernetes,`
+  `service-map,services,sessions,team}.tsx`), and upstream's own debris - the
+  `jsonwebtoken` dependency they left declared after removing its code in
+  `f34cfaed`. Ignored rather than deleted: dead upstream files are never
+  imported so Next never bundles them, and removing 5,000 lines of upstream code
+  buys a delete/modify conflict on every sync for no runtime gain. Worth raising
+  upstream.
+- `.yarnrc.yml` - one added `npmAuditIgnoreAdvisories` block. The audit gate
+  runs `yarn npm audit` against the lockfile, so it reports on upstream's whole
+  tree including devDependencies, and there is no line of code to tag. Excluded
+  by advisory id, never by package name - `npmAuditExcludePackages` would mute
+  the next advisory against the same package too. Each id carries its reason and
+  the traces are in [security-sync.md](security-sync.md). Upstream churns this
+  file rarely, so the conflict is small.
+- `.fork-deleted` + the deletion check in `.githooks/fork-surface-check.py` -
+  the 15 upstream workflows we do not carry. `.fork-surface` cannot cover a
+  deletion: it reads `--diff-filter=ACMR` against the merge base, where a file
+  we removed is unchanged and therefore invisible, so a sync reinstates it in
+  silence. The check simply fails when a listed path exists.
+- `scripts/ci/__tests__/**` in `knip.json` - upstream's ratchet test. Only
+  upstream's `main.yml` ever ran it, and we do not carry that workflow, so knip
+  is correct that nothing uses it. Ignored rather than deleted, on the same
+  reasoning as the orphaned upstream pages: removing an upstream file buys a
+  delete/modify conflict on every sync. **`scripts/ci/ratchet.mjs` itself is
+  therefore not wired into our CI either** - run it by hand, or give it a home.
+- `scripts/ci/ratchet-baseline.json` - upstream's escape-hatch ratchet, our
+  numbers. The baseline is the floor for `as any` and `eslint-disable` counts
+  per package, so every hatch we remove has to be locked in here or the ratchet
+  nags on every run and the improvement is free to be undone. Upstream has
+  touched the file four times, and the conflict is trivial either way: take
+  ours, then re-run `yarn ratchet:update` after the sync so the numbers match
+  the merged tree.
+- `package.json` `resolutions` - one generated fork pin,
+  `systeminformation ^5.31.7`, raising upstream's own `^5.24.0`. It is generated
+  from `security/overrides.yaml` by `scripts/security-override.py --apply`, so
+  edit the register, never this line. The vector is in the register entry.
+  `--check` currently reports it REDUNDANT: it compares our floor against the
+  lockfile resolution our own pin produced, so it cannot tell an upstream fix
+  from ours. The pin is real - the lockfile moved 5.30.7 to 5.33.1 when it was
+  applied. `--verify`, which is what CI gates on, passes.
 
 ## Docs
 
@@ -237,6 +397,13 @@ The fork version in `package.json` is the **HyperI** version, independent of the
 upstream HyperDX app version. When pinning this fork in dfe-infra, use the image
 tag this repo's CI publishes, NOT the upstream HyperDX version.
 
+That image is `ghcr.io/hyperi-io/dfe-hyperdx`, built by hyperi-ci from
+`publish.container` in `.hyperi-ci.yaml` using the root `Dockerfile` (amd64
+only - the arm64 half runs under qemu and Next's build-time font fetch times
+out). GHCR is the only registry hyperi-ci publishes to. Upstream's `release.yml`
+pushes to Docker Hub under `hyperdx/*` and `clickhouse/*`, which are not ours -
+that workflow is deliberately absent from `main`.
+
 `git show <our-tag>:.upstream-version` answers "which upstream is release X
 built on" for any release we have cut.
 
@@ -246,6 +413,8 @@ built on" for any release we have cut.
 
 - [design.md](design.md) - why the fork is shaped this way
 - [sync-cycle.md](sync-cycle.md) - how to move to a newer upstream
+- [security-sync.md](security-sync.md) - what we have learnt about the inherited
+  dependency tree, one dated section per sync
 - [leaving-upstream.md](leaving-upstream.md) - how this ends
 - The `x-oidc-*` contract is the universal seam shared with the rest of DFE -
   see the dfe-engine OIDC dual-mode design

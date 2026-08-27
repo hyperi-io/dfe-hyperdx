@@ -5,33 +5,21 @@
  * (which runs with DFE auth unset and must be unaffected); here DFE mode is on so
  * the enforcing behaviour is asserted directly.
  */
-/* eslint-disable @typescript-eslint/no-unsafe-type-assertion --
- * Building minimal express Request/Response doubles asserts narrower types than
- * the real ones; scoped here rather than relaxed in upstream's eslint config.
- */
-import type { Request, Response } from 'express';
-
 jest.mock('@/dfe/config', () => ({ isDfeEnabled: true }));
 
+import { makeRequest, makeResponse as res } from '@/dfe/__tests__/doubles';
 import {
   allowReadElseServicePrincipal,
   blockClickhouseProxyTest,
   requireServicePrincipal,
 } from '@/dfe/middleware/admin-lockdown';
 
-function res(): Response {
-  const r: Partial<Response> = {};
-  r.status = jest.fn(() => r as Response);
-  r.json = jest.fn(() => r as Response);
-  return r as Response;
-}
-
 describe('requireServicePrincipal (DFE mode on)', () => {
   test('403s a non-service principal', () => {
     const r = res();
     const next = jest.fn();
     requireServicePrincipal(
-      { dfeIsServicePrincipal: false } as Request,
+      makeRequest({ dfeIsServicePrincipal: false }),
       r,
       next,
     );
@@ -43,7 +31,7 @@ describe('requireServicePrincipal (DFE mode on)', () => {
     const r = res();
     const next = jest.fn();
     requireServicePrincipal(
-      { dfeIsServicePrincipal: true } as Request,
+      makeRequest({ dfeIsServicePrincipal: true }),
       r,
       next,
     );
@@ -57,7 +45,7 @@ describe('blockClickhouseProxyTest (DFE mode on)', () => {
     const r = res();
     const next = jest.fn();
     blockClickhouseProxyTest(
-      { path: '/test', dfeIsServicePrincipal: false } as Request,
+      makeRequest({ path: '/test', dfeIsServicePrincipal: false }),
       r,
       next,
     );
@@ -69,7 +57,7 @@ describe('blockClickhouseProxyTest (DFE mode on)', () => {
     const r = res();
     const next = jest.fn();
     blockClickhouseProxyTest(
-      { path: '/', dfeIsServicePrincipal: false } as Request,
+      makeRequest({ path: '/', dfeIsServicePrincipal: false }),
       r,
       next,
     );
@@ -81,7 +69,7 @@ describe('blockClickhouseProxyTest (DFE mode on)', () => {
     const r = res();
     const next = jest.fn();
     blockClickhouseProxyTest(
-      { path: '/test', dfeIsServicePrincipal: true } as Request,
+      makeRequest({ path: '/test', dfeIsServicePrincipal: true }),
       r,
       next,
     );
@@ -94,7 +82,7 @@ describe('allowReadElseServicePrincipal (DFE mode on)', () => {
     const r = res();
     const next = jest.fn();
     allowReadElseServicePrincipal(
-      { method: 'GET', dfeIsServicePrincipal: false } as Request,
+      makeRequest({ method: 'GET', dfeIsServicePrincipal: false }),
       r,
       next,
     );
@@ -106,7 +94,7 @@ describe('allowReadElseServicePrincipal (DFE mode on)', () => {
     const r = res();
     const next = jest.fn();
     allowReadElseServicePrincipal(
-      { method: 'POST', dfeIsServicePrincipal: false } as Request,
+      makeRequest({ method: 'POST', dfeIsServicePrincipal: false }),
       r,
       next,
     );
@@ -118,7 +106,7 @@ describe('allowReadElseServicePrincipal (DFE mode on)', () => {
     const r = res();
     const next = jest.fn();
     allowReadElseServicePrincipal(
-      { method: 'POST', dfeIsServicePrincipal: true } as Request,
+      makeRequest({ method: 'POST', dfeIsServicePrincipal: true }),
       r,
       next,
     );

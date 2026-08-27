@@ -1,4 +1,4 @@
-import { useCallback, useContext, useMemo, useState } from 'react';
+import { use, useCallback, useMemo, useState } from 'react';
 import router from 'next/router';
 import { useAtom, useAtomValue } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
@@ -36,6 +36,7 @@ import {
   dfeJsonColumnPath,
   dfeJsonExtractQuery,
 } from '@/dfe/clickhouseJsonPath';
+import { dfeExcludeAction } from '@/dfe/rowExcludeAction';
 import { useFormatTime } from '@/useFormatTime';
 import { mergePath } from '@/utils';
 import {
@@ -364,7 +365,7 @@ export function DBRowJsonViewer({
     generateChartUrl,
     displayedColumns,
     toggleColumn,
-  } = useContext(RowSidePanelContext);
+  } = use(RowSidePanelContext);
 
   const [filter, setFilter] = useState<string>('');
   const [debouncedFilter] = useDebouncedValue(filter, 100);
@@ -482,6 +483,20 @@ export function DBRowJsonViewer({
             });
           },
         });
+
+        // DFE: the negation of upstream's action above. See dfe/rowExcludeAction.
+        actions.push(
+          dfeExcludeAction({
+            keyPath,
+            fieldPath,
+            value,
+            isInParsedJson,
+            parsedJsonRootPath,
+            jsonColumns,
+            mapColumns,
+            onPropertyAddClick,
+          }),
+        );
       }
 
       if (generateSearchUrl && typeof value !== 'object') {
