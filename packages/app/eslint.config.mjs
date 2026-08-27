@@ -107,9 +107,10 @@ export default [
       'public/__ENV.js',
       'public/pyodide/**',
       'global-setup.js',
-      // Loaded by jest.dfe.config.js, so no tsconfig project covers it and
-      // typed linting cannot parse it. Same treatment as global-setup.js above.
-      'jest.dfe.setup.js',
+      // Loaded by jest.dfe.config.js, so no tsconfig project covers them and
+      // typed linting cannot parse them. Same treatment as global-setup.js
+      // above. Globbed so a further setup file does not have to rediscover it.
+      'jest.dfe.setup*.js',
       'scripts/**',
     ],
   },
