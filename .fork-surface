@@ -30,6 +30,7 @@
 # top of every session, and keep their line intact at the bottom. Low churn -
 # upstream rarely touches that single line - so rerere replays it cleanly.
 # want to be managing small fry on top of it. Everything we do must work with
+.github/workflows/docker-build.yml
 .gitattributes
 .gitignore
 .prettierignore

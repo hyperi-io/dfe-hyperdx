@@ -17,7 +17,7 @@ jobs:
   # OTel Collector image (Go build via OCB) — docker/otel-collector/Dockerfile.
   otel-collector-image:
     name: Build OTel Collector Image
-    runs-on: ubuntu-24.04
+    runs-on: arc-native-16cpu
     timeout-minutes: 25
     steps:
       - name: Checkout
@@ -29,6 +29,14 @@ jobs:
           files: |
             docker/otel-collector/**
             packages/otel-collector/**
+      # The bundled collector compiles the full OTel contrib set. The assert is
+      # the point: a short runner fails here naming the number, not 941s into a
+      # Go compile with an error naming neither the disk nor the job.
+      - name: Free disk space
+        if:
+          steps.changed-files.outputs.any_changed == 'true' || github.event_name
+          == 'workflow_dispatch'
+        run: scripts/ci/free-disk-space.sh 40
       - name: Setup Docker Buildx
         if:
           steps.changed-files.outputs.any_changed == 'true' || github.event_name
@@ -55,7 +63,7 @@ jobs:
   # stage backs the all-in-one targets below.
   app-image:
     name: Build App Image
-    runs-on: ubuntu-24.04
+    runs-on: arc-native-16cpu
     timeout-minutes: 25
     steps:
       - name: Checkout
@@ -121,7 +129,7 @@ jobs:
   # and they can't break the bundling layers, which only COPY the prod output.
   all-in-one-image:
     name: Build All-in-One Image
-    runs-on: ubuntu-24.04
+    runs-on: arc-native-16cpu
     timeout-minutes: 40
     steps:
       - name: Checkout
@@ -136,6 +144,14 @@ jobs:
             docker/clickhouse/**
             docker/otel-collector/**
             .vex/**
+      # The bundled collector compiles the full OTel contrib set. The assert is
+      # the point: a short runner fails here naming the number, not 941s into a
+      # Go compile with an error naming neither the disk nor the job.
+      - name: Free disk space
+        if:
+          steps.changed-files.outputs.any_changed == 'true' || github.event_name
+          == 'workflow_dispatch'
+        run: scripts/ci/free-disk-space.sh 40
       - name: Setup Docker Buildx
         if:
           steps.changed-files.outputs.any_changed == 'true' || github.event_name

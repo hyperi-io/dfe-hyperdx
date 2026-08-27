@@ -351,6 +351,24 @@ upstream behaviour and tests are unchanged. The service flag is set by
   the next advisory against the same package too. Each id carries its reason and
   the traces are in [security-sync.md](security-sync.md). Upstream churns this
   file rarely, so the conflict is small.
+- `.github/workflows/docker-build.yml` - two deltas, both for the same failure
+  (#51). A `Free disk space` step calling `scripts/ci/free-disk-space.sh 40` in
+  each of the two jobs that run OCB, and all three jobs moved from
+  `ubuntu-24.04` to `arc-native-16cpu`.
+
+  The bundled collector compiles the full OTel contrib set and does not fit in
+  the 14 GB a hosted runner guarantees, so the build died 941 seconds in with
+  `no space left on device` inside a Go compile, naming neither the disk nor the
+  job that wanted it. The assert is the half that pays - freeing space alone
+  just moves the cliff.
+
+  `arc-native-16cpu` buys 16 cores and 16Gi against 4 and 16 on a hosted runner,
+  which is what a 941-second Go compile actually wants. It does NOT obviously
+  buy disk: the ARC nodes carry 62 GB shared across pods, where a cleaned hosted
+  runner sits near 57 GB to itself. That is what the assert is for - if the pod
+  is short it says so in seconds. Revisit the runner if it fails the floor.
+  Gated exactly like the steps around it, so a skipped run pays nothing.
+
 - `.fork-deleted` + the deletion check in `.githooks/fork-surface-check.py` -
   the 15 upstream workflows we do not carry. `.fork-surface` cannot cover a
   deletion: it reads `--diff-filter=ACMR` against the merge base, where a file
