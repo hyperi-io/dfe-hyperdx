@@ -2,14 +2,15 @@
 
 ## Before you report a dependency alert
 
-This is a long-lived fork of [hyperdxio/hyperdx](https://github.com/hyperdxio/hyperdx).
-We inherit upstream's whole dependency tree, so a scanner pointed at this repo
-returns a large number of findings. Most of them are not real here, and we have
-already been through them one at a time.
+This is a long-lived fork of
+[hyperdxio/hyperdx](https://github.com/hyperdxio/hyperdx). We inherit upstream's
+whole dependency tree, so a scanner pointed at this repo returns a large number
+of findings. Most of them are not real here, and we have already been through
+them one at a time.
 
 **Read [docs/fork/security-sync.md](docs/fork/security-sync.md) first.** It
-records every advisory we have triaged, the version we actually resolve, and
-why the vulnerable code is or is not reachable in what we ship. It is dated and
+records every advisory we have triaged, the version we actually resolve, and why
+the vulnerable code is or is not reachable in what we ship. It is dated and
 appended to on every upstream sync.
 
 At the last pass: 99 open alerts, **1** of them real.
@@ -36,22 +37,21 @@ tooling as `runtime`.
 
 ## What we do fix
 
-An advisory gets a pin when it is HIGH or CRITICAL **and** we can write down
-how an attacker reaches it in how this fork actually runs. The bar and the
-register are in [security/overrides.yaml](security/overrides.yaml).
+An advisory gets a pin when it is HIGH or CRITICAL **and** we can write down how
+an attacker reaches it in how this fork actually runs. The bar and the register
+are in [security/overrides.yaml](security/overrides.yaml).
 
-Upstream-tree fixes are pooled as a declaration there rather than committed
-into upstream's files, so they are stripped before a merge and rebuilt after
-and never reach rerere. Anything in our own `packages/*/dfe/**` is fixed
-directly and permanently.
+Upstream-tree fixes are pooled as a declaration there rather than committed into
+upstream's files, so they are stripped before a merge and rebuilt after and
+never reach rerere. Anything in our own `packages/*/dfe/**` is fixed directly
+and permanently.
 
 ## Reporting something we have missed
 
-Open a private security advisory on this repository, or contact the
-maintainers. Include the advisory id, the resolved version you observed, and
-the call path you believe is reachable - that last part is what we will check
-first.
+Open a private security advisory on this repository, or contact the maintainers.
+Include the advisory id, the resolved version you observed, and the call path
+you believe is reachable - that last part is what we will check first.
 
 Findings against upstream's own code are best reported to
-[hyperdxio/hyperdx](https://github.com/hyperdxio/hyperdx) directly. We pick
-them up on the next sync.
+[hyperdxio/hyperdx](https://github.com/hyperdxio/hyperdx) directly. We pick them
+up on the next sync.

@@ -42,7 +42,7 @@ overrides:
   - package: systeminformation
     # Narrowest range that clears every open advisory against this package.
     # ^ rather than >= so a major bump cannot arrive silently.
-    range: "^5.31.7"
+    range: '^5.31.7'
     advisory: GHSA-5xpp-75jx-m839
     severity: high
     vector: >-
