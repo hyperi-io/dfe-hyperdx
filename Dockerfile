@@ -32,7 +32,7 @@ COPY .yarn ./.yarn
 COPY .yarnrc.yml yarn.lock package.json nx.json .prettierrc .prettierignore ./tsconfig.base.json ./
 COPY ./packages/common-utils ./packages/common-utils
 COPY ./packages/api/jest.config.js ./packages/api/tsconfig.json ./packages/api/tsconfig.build.json ./packages/api/package.json ./packages/api/
-COPY ./packages/app/jest.config.js ./packages/app/tsconfig.json ./packages/app/tsconfig.build.json ./packages/app/package.json ./packages/app/next.config.mjs ./packages/app/mdx.d.ts ./packages/app/eslint.config.mjs ./packages/app/
+COPY ./packages/app/jest.config.js ./packages/app/tsconfig.json ./packages/app/tsconfig.build.json ./packages/app/package.json ./packages/app/next.config.mjs ./packages/app/mdx.d.ts ./packages/app/css.d.ts ./packages/app/eslint.config.mjs ./packages/app/
 
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
 RUN apk add --no-cache libc6-compat
@@ -53,6 +53,9 @@ COPY ./packages/app/pages ./packages/app/pages
 COPY ./packages/app/public ./packages/app/public
 COPY ./packages/app/styles ./packages/app/styles
 COPY ./packages/app/types ./packages/app/types
+# next.config.mjs copies this into public/ for the in-app "What's new" viewer
+# and THROWS when it is absent, so the app build needs it in the context.
+COPY ./CHANGELOG.md ./CHANGELOG.md
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_OUTPUT_STANDALONE=true
