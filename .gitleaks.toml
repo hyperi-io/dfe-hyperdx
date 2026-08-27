@@ -64,6 +64,12 @@ regexes = [
   # and docker/hyperdx/entry.local.base.sh. Matched by VALUE, deliberately, so those
   # files stay scanned for anything that IS a secret. Verified 2026-07-17.
   '''^otel_\w+_key_rollup_\w+$''',
+
+  # The literal in upstream's OIDC smoke test asserting that a garbage bearer
+  # token is REJECTED (smoke-tests/otel-collector/oidc-auth.bats:36). Matched by
+  # value, not by path, so the rest of that suite stays scanned. Only shows up on
+  # a PR: the push scan does not deepen history far enough to reach the commit.
+  '''not-a-real-jwt''',
   #     '''YOUR_.*_TOKEN''',
   #     '''your-.*-token''',
   #     '''test-token''',

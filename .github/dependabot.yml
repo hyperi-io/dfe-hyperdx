@@ -29,6 +29,12 @@
 #
 # Functionality updates for the files we DO own are Renovate's job, scoped by
 # includePaths in renovate.json. The two tools do not overlap.
+#
+# The cooldown on every ecosystem is the house 7-day release-age policy, the
+# same one renovate.json inherits from the org preset. It governs nothing while
+# the PR limit is 0, and it is declared anyway so raising that limit cannot
+# quietly adopt a package published minutes ago. Security updates are exempt by
+# design, which is the behaviour we want.
 
 version: 2
 updates:
@@ -37,21 +43,29 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: gomod
     directory: /packages/otel-collector
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 0
+    cooldown:
+      default-days: 7
