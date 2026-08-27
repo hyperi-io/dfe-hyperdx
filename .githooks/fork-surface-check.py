@@ -14,7 +14,7 @@ the worst case - it rewrites lines we do not own, so upstream's next change no
 longer matches and you hand-resolve again, every sync.
 
 So: editing an upstream file in place is an EXCEPTION that must be identified,
-documented (FORK.md) and tooled (listed in `.fork-surface`).
+documented (docs/fork/what-we-changed.md) and tooled (listed in `.fork-surface`).
 
 Classification of each changed path:
   - under a ``dfe/`` directory        -> OK, additive, cannot conflict
@@ -41,7 +41,7 @@ Usage::
     # what is catalogued that should not be?
     .githooks/fork-surface-check.py --audit
 
-    # land a new exception: add it to .fork-surface + FORK.md, or
+    # land a new exception: add it to .fork-surface + docs/fork/what-we-changed.md, or
     FORK_SURFACE_WARN=1 git commit ...
 """
 
