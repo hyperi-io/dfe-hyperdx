@@ -22,6 +22,11 @@ Classification of each changed path:
   - listed in ``.fork-surface``       -> OK, sanctioned exception
   - otherwise                         -> VIOLATION
 
+Deletions need their own catalogue, ``.fork-deleted``. An upstream file we
+removed is unchanged against the merge base, so no diff above can see it and a
+sync reinstates it in silence - the check there is simply that a listed path
+must not exist.
+
 Usage::
 
     # pre-commit (staged changes)
@@ -51,6 +56,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CATALOGUE = REPO_ROOT / ".fork-surface"
+DELETIONS = REPO_ROOT / ".fork-deleted"
 UPSTREAM_REF = "upstream/main"
 
 
@@ -81,6 +87,31 @@ def load_catalogue() -> list[str]:
         if line and not line.startswith("#"):
             patterns.append(line)
     return patterns
+
+
+def load_deletions() -> list[str]:
+    """Read `.fork-deleted` - one upstream path we removed per line."""
+    if not DELETIONS.exists():
+        return []
+    paths: list[str] = []
+    for raw in DELETIONS.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if line and not line.startswith("#"):
+            paths.append(line)
+    return paths
+
+
+def resurrected(paths: list[str]) -> list[str]:
+    """Return catalogued deletions that are tracked again.
+
+    A deletion is invisible to every diff this tool reads, because the file is
+    unchanged against the merge base - so an upstream sync reinstates it and
+    nothing else here notices.
+    """
+    if not paths:
+        return []
+    tracked = set(_git("ls-files", "--", *paths).splitlines())
+    return [path for path in paths if path in tracked]
 
 
 def merge_in_progress() -> bool:
@@ -353,6 +384,28 @@ def main() -> int:
         )
         return 0
 
+    warn_only = os.environ.get("FORK_SURFACE_WARN", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+    back = resurrected(load_deletions())
+    if back:
+        label = "WARNING" if warn_only else "BLOCKED"
+        print(f"\n{label}: upstream file(s) we deleted are back:\n", file=sys.stderr)
+        for path in back:
+            print(f"  {path}", file=sys.stderr)
+        print(
+            "\nA sync reinstated them. They are unchanged against the merge base,\n"
+            "so no diff .fork-surface reads can see them - hence .fork-deleted.\n"
+            "\nDelete them again, or drop the path from .fork-deleted in the same\n"
+            "commit if we now want upstream's version.\n",
+            file=sys.stderr,
+        )
+        if not warn_only:
+            return 1
+
     files = changed_files(args.base)
     if not files:
         return 0
@@ -375,11 +428,6 @@ def main() -> int:
     if not violations:
         return 0
 
-    warn_only = os.environ.get("FORK_SURFACE_WARN", "").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-    )
     label = "WARNING" if warn_only else "BLOCKED"
     print(f"\n{label}: edit to uncatalogued upstream file(s):\n", file=sys.stderr)
     for path in violations:

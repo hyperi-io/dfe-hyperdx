@@ -53,6 +53,7 @@
   },
   "ignore": [
     "scripts/dev-portal/**",
+    "scripts/ci/__tests__/**",
     ".github/scripts/**",
     ".github/actions/**",
     "docker/hyperdx/**",

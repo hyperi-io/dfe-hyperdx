@@ -351,6 +351,17 @@ upstream behaviour and tests are unchanged. The service flag is set by
   the next advisory against the same package too. Each id carries its reason and
   the traces are in [security-sync.md](security-sync.md). Upstream churns this
   file rarely, so the conflict is small.
+- `.fork-deleted` + the deletion check in `.githooks/fork-surface-check.py` -
+  the 15 upstream workflows we do not carry. `.fork-surface` cannot cover a
+  deletion: it reads `--diff-filter=ACMR` against the merge base, where a file
+  we removed is unchanged and therefore invisible, so a sync reinstates it in
+  silence. The check simply fails when a listed path exists.
+- `scripts/ci/__tests__/**` in `knip.json` - upstream's ratchet test. Only
+  upstream's `main.yml` ever ran it, and we do not carry that workflow, so knip
+  is correct that nothing uses it. Ignored rather than deleted, on the same
+  reasoning as the orphaned upstream pages: removing an upstream file buys a
+  delete/modify conflict on every sync. **`scripts/ci/ratchet.mjs` itself is
+  therefore not wired into our CI either** - run it by hand, or give it a home.
 - `scripts/ci/ratchet-baseline.json` - upstream's escape-hatch ratchet, our
   numbers. The baseline is the floor for `as any` and `eslint-disable` counts
   per package, so every hatch we remove has to be locked in here or the ratchet
