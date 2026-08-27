@@ -4,36 +4,48 @@
 # The OTel contrib set does not fit in the 14 GB a hosted runner guarantees, and
 # without the assert the shortfall surfaces inside a Go compile 900 seconds in.
 #
-# The cleanup targets a GitHub-hosted image and is skipped anywhere it cannot
-# run as root, because the toolcache on a self-hosted runner is shared state
-# rather than per-job scratch. The assert still runs everywhere - a runner with
-# the headroom passes on its own merits, one without fails here naming the
-# number instead of dying in a Go compile.
+# Measures the filesystem holding docker's data-root, NOT `/`. On a hosted
+# runner they are the same; on ARC the daemon's storage can be a separate mount,
+# where checking `/` reports headroom the build cannot use.
+#
+# Two levers, because the runners differ. A hosted runner carries ~8 GB of
+# toolchains for languages this repo never builds, and a fresh builder with
+# nothing to prune. A shared ARC daemon has no such toolchains and a builder
+# cache that is the whole problem.
 set -euo pipefail
 
 REQUIRED_GB="${1:-40}"
 
+docker_root() {
+  docker info --format '{{.DockerRootDir}}' 2> /dev/null || true
+}
+
+TARGET="$(docker_root)"
+[ -d "${TARGET:-}" ] || TARGET=/
+
 free_gb() {
-  df --output=avail --block-size=1G / | tail -1 | tr -d ' '
+  df --output=avail --block-size=1G "$TARGET" | tail -1 | tr -d ' '
 }
 
 if [ "$(id -u)" -eq 0 ]; then
   as_root=()
-elif command -v sudo > /dev/null 2>&1 && sudo -n true 2>/dev/null; then
+elif command -v sudo > /dev/null 2>&1 && sudo -n true 2> /dev/null; then
   as_root=(sudo)
 else
   as_root=()
-  skip_cleanup=1
+  skip_toolchains=1
 fi
 
 before="$(free_gb)"
-echo "Free on / before cleanup: ${before} GB"
+echo "Measuring ${TARGET} (docker data-root)"
+echo "Free before cleanup: ${before} GB"
 
-if [ -n "${skip_cleanup:-}" ]; then
-  echo "Not root and no passwordless sudo - skipping cleanup, asserting only."
+# Preinstalled toolchains for languages this repo does not build. Absent on ARC,
+# and skipped without root because a self-hosted toolcache is shared state
+# rather than per-job scratch.
+if [ -n "${skip_toolchains:-}" ]; then
+  echo "Not root and no passwordless sudo - skipping toolchain removal."
 else
-  # Preinstalled toolchains for languages this repo does not build; the callers
-  # use only docker, curl and the runner's own node.
   "${as_root[@]}" rm -rf \
     /usr/local/lib/android \
     /usr/share/dotnet \
@@ -44,17 +56,22 @@ else
     /usr/local/share/boost \
     /usr/local/lib/node_modules \
     /opt/hostedtoolcache \
-    "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}" 2>/dev/null || true
-
-  "${as_root[@]}" docker image prune --all --force > /dev/null 2>&1 || true
+    "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}" 2> /dev/null || true
 fi
 
+# The buildkit cache is what a previous multi-stage build left behind, so it is
+# the lever that pays on a shared daemon. The gha cache this build reads is
+# remote and unaffected.
+docker builder prune --all --force > /dev/null 2>&1 || true
+docker image prune --all --force > /dev/null 2>&1 || true
+
 after="$(free_gb)"
-echo "Free on / after cleanup:  ${after} GB (reclaimed $((after - before)) GB)"
+echo "Free after cleanup:  ${after} GB (reclaimed $((after - before)) GB)"
 
 if [ "${after}" -lt "${REQUIRED_GB}" ]; then
-  echo "::error::Only ${after} GB free on / after cleanup, need ${REQUIRED_GB} GB." \
+  echo "::error::Only ${after} GB free on ${TARGET}, need ${REQUIRED_GB} GB." \
     "The build would fail inside a Go compile rather than here."
-  df -h /
+  df -h "$TARGET"
+  docker system df || true
   exit 1
 fi

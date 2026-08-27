@@ -363,11 +363,18 @@ upstream behaviour and tests are unchanged. The service flag is set by
   just moves the cliff.
 
   `arc-native-16cpu` buys 16 cores and 16Gi against 4 and 16 on a hosted runner,
-  which is what a 941-second Go compile actually wants. It does NOT obviously
-  buy disk: the ARC nodes carry 62 GB shared across pods, where a cleaned hosted
-  runner sits near 57 GB to itself. That is what the assert is for - if the pod
-  is short it says so in seconds. Revisit the runner if it fails the floor.
-  Gated exactly like the steps around it, so a skipped run pays nothing.
+  which is what a 941-second Go compile actually wants. It does NOT buy disk:
+  the ARC nodes carry 62 GB shared across pods, where a cleaned hosted runner
+  sits near 57 GB to itself.
+
+  So the script carries a lever for each. A hosted runner has ~8 GB of
+  toolchains for languages we never build and a fresh builder with nothing to
+  prune; a shared ARC daemon has no such toolchains and a buildkit cache that is
+  the whole problem. It measures the filesystem holding docker's data-root
+  rather than `/` - the same mount on a hosted runner, not necessarily on ARC,
+  where checking `/` would report headroom the build cannot use. Revisit the
+  runner if it still fails the floor. Gated exactly like the steps around it, so
+  a skipped run pays nothing.
 
 - `.fork-deleted` + the deletion check in `.githooks/fork-surface-check.py` -
   the 15 upstream workflows we do not carry. `.fork-surface` cannot cover a
