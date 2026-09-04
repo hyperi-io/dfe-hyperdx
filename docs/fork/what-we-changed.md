@@ -298,6 +298,7 @@ upstream behaviour and tests are unchanged. The service flag is set by
   deliberately: neither is built by our CI or by dfe-docker, so a COPY line in
   each would buy two more conflict points for images nobody here builds. An
   image built from either sends no framing header.
+
 - **Alerting is disabled, not removed.** HyperDX's alert checker is not started
   and its routes are hidden by the embed nav gating. Detection is the DFE rules
   engine's job. Rationale:
