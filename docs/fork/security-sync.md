@@ -519,3 +519,48 @@ The repo is `hyperi-io/dfe-hyperdx`, renamed from `hyperi-hyperdx`. The image is
 name. GHCR is the only registry hyperi-ci publishes to - Docker Hub login exists
 in the reusable workflow purely to dodge anonymous pull limits. Upstream's
 `release.yml` Docker Hub path is not ours and never was.
+
+## 2026-09-04 - the audit gate cannot pass, and it is npm's end
+
+Every open PR went red on `ci / Quality` with the same two lines, while
+`ci / Test` stayed green:
+
+    audit: failed
+    YN0001: RequestError: Timeout awaiting 'socket' for 60000ms
+
+dfe-ui hit it first and put it down to the self-hosted runners (dfe-ui#210
+guesses path MTU on arc-native). The measurements say otherwise: the same
+command fails from an ordinary Linux box on a home network, and so does plain
+`curl` with an empty body.
+
+Measured on desktop-derek, 2026-09-04:
+
+| Request                                              | Result              |
+| ---------------------------------------------------- | ------------------- |
+| `GET registry.npmjs.org/lodash`                      | 200 in 0.078s       |
+| `GET /-/npm/v1/security/advisories/bulk`             | 405 in 0.197s       |
+| `POST /-/npm/v1/security/advisories/bulk`, body `{}` | 0 bytes in 45s      |
+| `POST /-/npm/v1/security/audits/quick`               | 0 bytes in 45s      |
+| `yarn npm audit --severity moderate`                 | socket timeout, 61s |
+| same, `npmAuditRegistry: https://registry.npmjs.org` | socket timeout, 62s |
+
+The registry is up and the path is routable - the 405 on GET proves the endpoint
+is there. It accepts the POST connection and then answers nothing.
+`registry.yarnpkg.com` and `registry.npmjs.org` fail alike, and `{}` hangs as
+long as this repo's whole tree does, so it is not body size either. No setting
+on our side makes that POST return.
+
+`.hyperi-ci.yaml` therefore holds `quality.typescript.audit: warn`. What that
+does and does not cost:
+
+- The triaged advisory exclusions in `.yarnrc.yml` are untouched and apply again
+  the moment the step runs.
+- osv-scanner reads the same `yarn.lock` against osv.dev, which is answering,
+  and already reports on every run (66 packages, 127 advisories, non-blocking).
+- Dependabot stays enabled and the alerts keep arriving.
+
+Revert to `blocking` as soon as this returns a body instead of hanging:
+
+    curl -sS -o /dev/null -w '%{http_code} %{time_total}s\n' --max-time 45 \
+      -X POST -H 'Content-Type: application/json' --data '{}' \
+      https://registry.npmjs.org/-/npm/v1/security/advisories/bulk
