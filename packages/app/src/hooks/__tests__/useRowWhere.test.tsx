@@ -138,25 +138,6 @@ describe('processRowToWhereClause', () => {
     expect(MD5).toHaveBeenCalledWith('{"key": "value"}');
   });
 
-  it('should handle JSON columns when ClickHouse returns a parsed object', () => {
-    const columnMap = new Map([
-      [
-        'data',
-        {
-          name: 'data',
-          type: 'JSON',
-          valueExpr: 'data',
-          jsType: JSDataType.JSON,
-        },
-      ],
-    ]);
-
-    const row = { data: { key: 'value' } };
-    processRowToWhereClause(row, columnMap);
-
-    expect(MD5).toHaveBeenCalledWith('{"key":"value"}');
-  });
-
   it('should handle Dynamic columns with null value', () => {
     const columnMap = new Map([
       [

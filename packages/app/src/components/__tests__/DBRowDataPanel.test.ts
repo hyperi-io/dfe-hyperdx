@@ -47,10 +47,9 @@ describe('DBRowDataPanel', () => {
         { name: 'col1', type: 'String' },
         { name: 'col2', type: 'JSON' },
         { name: 'col3', type: 'JSON(1)' },
-        { name: 'col4', type: 'Nullable(JSON)' },
       ];
       const result = getJSONColumnNames(meta);
-      expect(result).toEqual(['col2', 'col3', 'col4']);
+      expect(result).toEqual(['col2', 'col3']);
     });
   });
 

@@ -81,9 +81,7 @@ packages/app/src/components/DBRowJsonViewer.tsx
 packages/app/src/components/DBRowTable.tsx
 packages/app/src/components/OnboardingModal.tsx
 packages/app/src/components/SearchInput/SearchWhereInput.tsx
-packages/app/src/components/__tests__/DBRowDataPanel.test.ts
 packages/app/src/config.ts
-packages/app/src/hooks/__tests__/useRowWhere.test.tsx
 packages/app/src/hooks/useRowWhere.tsx
 packages/app/src/layout.tsx
 packages/app/src/theme/ThemeProvider.tsx
@@ -101,7 +99,6 @@ packages/app/tsconfig.build.json
 packages/common-utils/CHANGELOG.md
 packages/common-utils/README.md
 packages/common-utils/package.json
-packages/common-utils/src/__tests__/clickhouse.test.ts
 packages/common-utils/src/core/metadata.ts
 packages/common-utils/src/core/renderChartConfig.ts
 packages/otel-collector/CHANGELOG.md
