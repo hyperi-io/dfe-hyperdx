@@ -519,3 +519,69 @@ The repo is `hyperi-io/dfe-hyperdx`, renamed from `hyperi-hyperdx`. The image is
 name. GHCR is the only registry hyperi-ci publishes to - Docker Hub login exists
 in the reusable workflow purely to dodge anonymous pull limits. Upstream's
 `release.yml` Docker Hub path is not ours and never was.
+
+## 2026-09-04 - npm's advisory endpoint is browning out, so the gate is a coin toss
+
+Five open PRs went red on `ci / Quality` overnight with the same two lines,
+while `ci / Test` stayed green:
+
+    audit: failed
+    YN0001: RequestError: Timeout awaiting 'socket' for 60000ms
+
+dfe-ui hit it first and put it down to the self-hosted runners (dfe-ui#210
+guesses path MTU on arc-native). It is neither the runners nor us. The same
+command fails from an ordinary Linux box on a home network, and so does plain
+`curl` with a one-package body.
+
+The endpoint is not down. It is answering less than half the time. Twelve
+identical `curl` POSTs from dragonfly at 14:29 AEST, two seconds apart, body
+`{"lodash":["4.17.20"]}`:
+
+| Attempts | Result                           |
+| -------- | -------------------------------- |
+| 5 of 12  | 200, between 3.2s and 8.9s       |
+| 7 of 12  | zero bytes, never answers at 25s |
+
+A run that draws a hang gets a hard CI failure, and a blocking gate on a 42%
+pass rate gates nothing except whoever pushed at the wrong minute.
+
+The rest of the picture, measured the same afternoon on desktop-derek and on
+dragonfly, which is a separate network path:
+
+| Request                                              | Result              |
+| ---------------------------------------------------- | ------------------- |
+| `GET /lodash`                                        | 200 in 0.078s       |
+| `POST /-/v1/login`, body `{}`                        | 401 in 0.211s       |
+| `POST /-/npm/v1/user`, body `{}`                     | 401 in 0.199s       |
+| `GET /-/npm/v1/security/advisories/bulk`             | 405 in 0.197s       |
+| `POST /-/npm/v1/security/audits/quick`               | 0 bytes in 45s      |
+| `yarn npm audit --severity moderate`                 | socket timeout, 61s |
+| same, `npmAuditRegistry: https://registry.npmjs.org` | socket timeout, 62s |
+
+So the registry is fine, the path is routable (the 405 on GET says so), and
+POSTs to npm are answered in a fifth of a second on every other endpoint.
+`registry.yarnpkg.com` behaves the same as `registry.npmjs.org`, so
+`npmAuditRegistry` is no help, and `{}` hangs as often as a real body does, so
+it is not request size. Nothing on our side changes the odds.
+
+For the record, `/-/npm/v1/security/audits/quick` was retired after 2026-07-15
+and should answer 410. It hangs as well, so it is the whole security-advisory
+path in this state rather than one endpoint.
+
+`.hyperi-ci.yaml` therefore holds `quality.typescript.audit: warn`. What that
+does and does not cost:
+
+- The triaged advisory exclusions in `.yarnrc.yml` are untouched and apply on
+  every run the endpoint does answer.
+- osv-scanner reads the same `yarn.lock` against osv.dev, which is answering,
+  and already reports on every run (66 packages, 127 advisories, non-blocking).
+- Dependabot stays enabled and the alerts keep arriving.
+
+Revert to `blocking` once this comes back clean rather than one in two:
+
+    for i in $(seq 1 12); do
+      curl -sS -o /dev/null -w '%{http_code} %{time_total}s\n' --max-time 25 \
+        -X POST -H 'Content-Type: application/json' --data '{"lodash":["4.17.20"]}' \
+        https://registry.npmjs.org/-/npm/v1/security/advisories/bulk
+      sleep 2
+    done
