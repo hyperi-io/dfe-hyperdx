@@ -44,7 +44,6 @@ agent_docs/tech_stack.md
 docker/hyperdx/entry.prod.sh
 docker/nginx/README.md
 docker/otel-collector/config.standalone.auth.yaml
-docker/otel-collector/config.standalone.yaml
 docker/otel-collector/custom.config.yaml
 docker/otel-collector/schema/README.md
 nx.json
@@ -52,9 +51,7 @@ package.json
 packages/api/CHANGELOG.md
 packages/api/package.json
 packages/api/src/api-app.ts
-packages/api/src/routers/api/root.ts
 packages/api/src/tasks/provisionDashboards/index.ts
-packages/api/src/utils/logger.ts
 packages/app/.env.development
 packages/app/.storybook/public/mockServiceWorker.js
 packages/app/CHANGELOG.md
@@ -81,9 +78,7 @@ packages/app/src/components/DBRowJsonViewer.tsx
 packages/app/src/components/DBRowTable.tsx
 packages/app/src/components/OnboardingModal.tsx
 packages/app/src/components/SearchInput/SearchWhereInput.tsx
-packages/app/src/components/__tests__/DBRowDataPanel.test.ts
 packages/app/src/config.ts
-packages/app/src/hooks/__tests__/useRowWhere.test.tsx
 packages/app/src/hooks/useRowWhere.tsx
 packages/app/src/layout.tsx
 packages/app/src/theme/ThemeProvider.tsx
@@ -101,7 +96,6 @@ packages/app/tsconfig.build.json
 packages/common-utils/CHANGELOG.md
 packages/common-utils/README.md
 packages/common-utils/package.json
-packages/common-utils/src/__tests__/clickhouse.test.ts
 packages/common-utils/src/core/metadata.ts
 packages/common-utils/src/core/renderChartConfig.ts
 packages/otel-collector/CHANGELOG.md
