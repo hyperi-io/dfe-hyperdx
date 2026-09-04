@@ -113,6 +113,25 @@ describe('ensureOrgConnection', () => {
     expect(hunts?.[1].defaultTableSelectExpression).not.toContain('_org_id');
   });
 
+  test('both DFE sources sit in the engine data database', async () => {
+    // The engine builds `detection` in the data database, so a `dfe_hunts`
+    // database exists nowhere and Hunt Results queried a missing table.
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([]);
+    okFetch(ORG_CONN);
+
+    await ensureOrgConnection('tok', 'team-1');
+
+    const from = (name: string) =>
+      mockCreateSource.mock.calls.find(c => c[1].name === name)?.[1].from;
+    expect(from('hunts')).toEqual({
+      databaseName: 'dfe',
+      tableName: 'detection',
+    });
+    expect(from('hunts').databaseName).toBe(from('default').databaseName);
+  });
+
   test('the platform team ALSO gets the otel sources and the system database', async () => {
     mockConns.mockResolvedValue([]);
     mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
