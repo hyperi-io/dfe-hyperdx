@@ -53,6 +53,9 @@ COPY ./packages/app/pages ./packages/app/pages
 COPY ./packages/app/public ./packages/app/public
 COPY ./packages/app/styles ./packages/app/styles
 COPY ./packages/app/types ./packages/app/types
+# Next only finds the proxy file beside pages/, and it is what sends the embed
+# frame-ancestors CSP; without it the image answers with no CSP at all.
+COPY ./packages/app/proxy.ts ./packages/app/proxy.ts
 # next.config.mjs copies this into public/ for the in-app "What's new" viewer
 # and THROWS when it is absent, so the app build needs it in the context.
 COPY ./CHANGELOG.md ./CHANGELOG.md
