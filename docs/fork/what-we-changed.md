@@ -272,6 +272,32 @@ upstream behaviour and tests are unchanged. The service flag is set by
   hydration; `styles/globals.css` hides `.dfe-appnav-slot` (the layout.tsx
   wrapper) under that class, so the full chrome sidebar never flashes before
   React removes it.
+- `packages/app/src/dfe/embedCsp.ts` + **`packages/app/proxy.ts`** - who may put
+  this app in an iframe. A CSP `frame-ancestors` allowlist replaces upstream's
+  blanket `X-Frame-Options: DENY`, which blocks every embed, and the origins
+  come from `DFE_EMBED_FRAME_ANCESTORS` per deployment.
+
+  It is composed per request because Next evaluates `next.config.mjs`
+  `headers()` during `next build`: a policy built there is fixed at whatever the
+  build saw, which is why the published image answered `frame-ancestors 'self'`
+  however the container was started. **`next.config.mjs` (catalogued)** now
+  returns no CSP at all, since a browser given two CSP headers enforces their
+  intersection. Upstream's `NEXT_PUBLIC_NOINDEX` branch is all that block still
+  carries, and Next rejects an empty `headers` array, so the route object is now
+  the conditional rather than the header list.
+
+  `proxy.ts` is the ONE file of ours outside a `dfe/` directory: Next looks for
+  the proxy file (`middleware` before Next 16, now deprecated) beside `pages/`
+  and nowhere else. It holds no logic beyond the delegation, does not exist
+  upstream - so it is not a catalogued exception, only an add/add risk if
+  upstream ships its own - and runs on the Node runtime, which is what makes
+  `process.env` the container's environment rather than the build's.
+
+  Our `Dockerfile` copies it in, as it does every other app source path.
+  Upstream's `packages/app/Dockerfile` and `docker/hyperdx/Dockerfile` do not,
+  deliberately: neither is built by our CI or by dfe-docker, so a COPY line in
+  each would buy two more conflict points for images nobody here builds. An
+  image built from either sends no framing header.
 - **Alerting is disabled, not removed.** HyperDX's alert checker is not started
   and its routes are hidden by the embed nav gating. Detection is the DFE rules
   engine's job. Rationale:

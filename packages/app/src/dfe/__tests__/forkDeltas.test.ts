@@ -1,11 +1,13 @@
 /**
- * Guards for DFE deltas that live INSIDE upstream files.
+ * Guards for DFE deltas that jest cannot reach any other way.
  *
  * Most fork code sits under `dfe/` and is tested directly. A handful of deltas
  * cannot: they are single lines wired into upstream modules (`_app.tsx`,
  * `layout.tsx`, `AppNav.tsx`, `next.config.mjs`) that are far too heavy to
  * import here - `next.config.mjs` is ESM with build plugins, `_app.tsx` pulls
- * the whole telemetry SDK.
+ * the whole telemetry SDK. `proxy.ts` sits outside `roots: ['<rootDir>/src']`,
+ * so jest cannot import it either; the logic it delegates to is a `dfe/` module
+ * with its own tests.
  *
  * Those are exactly the deltas `git rerere` can drop silently: it replays a
  * recorded resolution TEXTUALLY, so an upstream refactor of the surrounding
@@ -13,9 +15,9 @@
  * source text - a blunt instrument, but it fails loudly at the moment the
  * wiring disappears instead of months later in production.
  *
- * Each path here is catalogued in `.fork-surface` and described in docs/fork/what-we-changed.md.
- * The live behaviour is separately asserted post-deploy by dfe-infra's
- * hyperdx-embed smoke check.
+ * Every upstream path here is catalogued in `.fork-surface`, and all of them are
+ * described in docs/fork/what-we-changed.md. The live behaviour is separately
+ * asserted post-deploy by dfe-infra's hyperdx-embed smoke check.
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -27,17 +29,6 @@ const read = (relative: string) =>
 describe('next.config.mjs - embed framing policy', () => {
   const nextConfig = read('next.config.mjs');
 
-  it('allows dfe-ui to frame the app via a CSP frame-ancestors allowlist', () => {
-    expect(nextConfig).toContain("frame-ancestors 'self'");
-    expect(nextConfig).toContain('Content-Security-Policy');
-  });
-
-  it('takes extra framing origins from DFE_EMBED_FRAME_ANCESTORS', () => {
-    // Per-deployment config: an external org embeds from its own origin, so
-    // this must never be hardcoded to a HyperI host.
-    expect(nextConfig).toContain('DFE_EMBED_FRAME_ANCESTORS');
-  });
-
   it('does NOT send X-Frame-Options, which would defeat the allowlist', () => {
     // X-Frame-Options: DENY is all-or-nothing and, where both are sent,
     // browsers that honour it block the embed regardless of the CSP. Match the
@@ -46,8 +37,29 @@ describe('next.config.mjs - embed framing policy', () => {
     expect(nextConfig).not.toMatch(/key:\s*['"]X-Frame-Options['"]/i);
   });
 
-  it('applies the policy to every route, not just the embedded ones', () => {
-    expect(nextConfig).toMatch(/source:\s*'\/\(\.\*\)\?'/);
+  it('sets no build-time CSP, which would intersect with the proxy one', () => {
+    // A browser given two CSP headers enforces the intersection, so a
+    // frame-ancestors fixed at build time narrows what proxy.ts sends.
+    expect(nextConfig).not.toMatch(/key:\s*['"]Content-Security-Policy['"]/i);
+    // And the allowlist is not read here at all: this file runs under `next
+    // build`, where a deployment's value does not exist yet.
+    expect(nextConfig).not.toContain('DFE_EMBED_FRAME_ANCESTORS');
+  });
+});
+
+describe('proxy.ts - the request-time framing policy', () => {
+  const proxy = read('proxy.ts');
+
+  it('is wired to the fork allowlist rather than a literal origin', () => {
+    // An external org embeds from its own origin, so no host is hardcoded.
+    expect(proxy).toContain("from '@/dfe/embedCsp'");
+    expect(proxy).toContain('response.headers.set(');
+  });
+
+  it('scopes to every request, not just the embedded routes', () => {
+    // Next defaults to /:path*, the scope the build-time header's `/(.*)?`
+    // source had; declaring a matcher would narrow it.
+    expect(proxy).not.toMatch(/matcher\s*:/);
   });
 });
 
