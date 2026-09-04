@@ -86,8 +86,12 @@ if (!config.IS_LOCAL_APP_MODE) {
   const { isDfeEnabled } = require('./dfe/config');
   if (isDfeEnabled) {
     const { dfeIdentityMiddleware } = require('./dfe/middleware/jwt-verify');
+    const {
+      blockLegacyAuthRoutes,
+    } = require('./dfe/middleware/legacy-auth-lockdown');
 
     app.use(dfeIdentityMiddleware);
+    app.use(blockLegacyAuthRoutes);
     logger.info('DFE: identity middleware enabled');
   }
 }
