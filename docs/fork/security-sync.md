@@ -533,22 +533,31 @@ guesses path MTU on arc-native). The measurements say otherwise: the same
 command fails from an ordinary Linux box on a home network, and so does plain
 `curl` with an empty body.
 
-Measured on desktop-derek, 2026-09-04:
+Measured 2026-09-04 against `registry.npmjs.org`, on desktop-derek and again on
+dragonfly, which is a separate network path:
 
 | Request                                              | Result              |
 | ---------------------------------------------------- | ------------------- |
-| `GET registry.npmjs.org/lodash`                      | 200 in 0.078s       |
+| `GET /lodash`                                        | 200 in 0.078s       |
+| `POST /-/v1/login`, body `{}`                        | 401 in 0.211s       |
+| `POST /-/npm/v1/user`, body `{}`                     | 401 in 0.199s       |
 | `GET /-/npm/v1/security/advisories/bulk`             | 405 in 0.197s       |
 | `POST /-/npm/v1/security/advisories/bulk`, body `{}` | 0 bytes in 45s      |
+| same, body `{"lodash":["4.17.20"]}`                  | 0 bytes in 45s      |
 | `POST /-/npm/v1/security/audits/quick`               | 0 bytes in 45s      |
 | `yarn npm audit --severity moderate`                 | socket timeout, 61s |
 | same, `npmAuditRegistry: https://registry.npmjs.org` | socket timeout, 62s |
 
-The registry is up and the path is routable - the 405 on GET proves the endpoint
-is there. It accepts the POST connection and then answers nothing.
-`registry.yarnpkg.com` and `registry.npmjs.org` fail alike, and `{}` hangs as
-long as this repo's whole tree does, so it is not body size either. No setting
-on our side makes that POST return.
+The registry is up, the path is routable (the 405 on GET says so), and POSTs to
+npm are answered in a fifth of a second on every other endpoint. Only the
+security-advisory path accepts the connection and then returns nothing.
+`registry.yarnpkg.com` behaves the same as `registry.npmjs.org`, so
+`npmAuditRegistry` is no help, and `{}` hangs as long as this repo's whole tree
+does, so it is not body size. No setting on our side makes that POST return.
+
+For the record, `/-/npm/v1/security/audits/quick` was retired after 2026-07-15
+and should answer 410. It hangs too, which puts the whole security-audit path in
+the same state rather than just the bulk endpoint.
 
 `.hyperi-ci.yaml` therefore holds `quality.typescript.audit: warn`. What that
 does and does not cost:
