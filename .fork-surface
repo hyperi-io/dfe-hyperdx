@@ -44,7 +44,6 @@ agent_docs/tech_stack.md
 docker/hyperdx/entry.prod.sh
 docker/nginx/README.md
 docker/otel-collector/config.standalone.auth.yaml
-docker/otel-collector/config.standalone.yaml
 docker/otel-collector/custom.config.yaml
 docker/otel-collector/schema/README.md
 nx.json
@@ -52,9 +51,7 @@ package.json
 packages/api/CHANGELOG.md
 packages/api/package.json
 packages/api/src/api-app.ts
-packages/api/src/routers/api/root.ts
 packages/api/src/tasks/provisionDashboards/index.ts
-packages/api/src/utils/logger.ts
 packages/app/.env.development
 packages/app/.storybook/public/mockServiceWorker.js
 packages/app/CHANGELOG.md
