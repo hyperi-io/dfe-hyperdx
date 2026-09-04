@@ -93,10 +93,9 @@ teams. It falls back to upstream session auth when the headers are absent.
 - `packages/api/src/dfe/controllers/user-provisioning.ts` - JIT user creation
 - `packages/api/src/dfe/controllers/team-provisioning.ts` - group-to-team
   mapping
-- `packages/api/src/api-app.ts` - wires the middleware behind `AUTH_MODE`
-- `packages/api/src/routers/api/root.ts` - once gated the legacy login and
-  invite routes in OIDC mode; an upstream sync replaced the file and the gate is
-  gone (#59 puts it back under `dfe/`)
+- `packages/api/src/dfe/middleware/legacy-auth-lockdown.ts` - 404s HyperDX's own
+  password login, registration and invite-acceptance routes in OIDC mode
+- `packages/api/src/api-app.ts` - wires both middlewares behind `AUTH_MODE`
 
 Detail:
 [../architecture/oidc-authentication.md](../architecture/oidc-authentication.md).
