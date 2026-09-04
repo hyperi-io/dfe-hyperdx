@@ -219,6 +219,16 @@ upstream behaviour and tests are unchanged. The service flag is set by
   jest config rather than compiled, so no tsconfig project covers it and typed
   linting cannot parse it; **`packages/app/eslint.config.mjs`** carries one
   added `ignores` entry for it, beside upstream's own `global-setup.js` line.
+  The env pin does not reach the CHART palette or `getTheme`'s fallback, both of
+  which resolve the brand without reading `NEXT_PUBLIC_THEME`, so three upstream
+  test files still carry a corrected expectation and stay catalogued:
+  **`src/__tests__/ChartUtils.test.ts`** and **`src/__tests__/utils.test.ts`**
+  (`detectActiveTheme` in `utils.ts` returns `dfe` for a jsdom document with no
+  theme class, never upstream's `hyperdx`) and
+  **`src/theme/__tests__/index.test.ts`** (`getTheme` on an unknown name falls
+  back to `FALLBACK_THEME`, which is `dfe`). Each is one assertion. Shrinking
+  them further is a product decision about what an unbranded document and an
+  unknown theme name should resolve to, not a test move - see #64.
 - `packages/app/src/dfe/defaultSource.ts` - which source `/search` opens on
   cold. DFE analysts work from hunt detections, so `hunts` is the landing view
   rather than whichever source sorts first. **`DBSearchPage.tsx` (catalogued)**
