@@ -96,6 +96,11 @@ async function fetchOrgConnection(
 // per-org dfe_org_<org> readers) is a tenant, row-policy fenced to one org.
 const PLATFORM_READER_USERNAME = 'dfe_query_reader';
 
+// The engine's data database (DFE_CLICKHOUSE_DATA_DATABASE, default `dfe`).
+// Everything the engine writes lands in it - `default` and `detection` alike -
+// so both seeded DFE sources resolve from this one constant.
+const DATA_DATABASE = 'dfe';
+
 // The OTel database. Renamed from `default` to `dfe`, so every otel_* table is
 // dfe.otel_*. Kept as one constant so the rename lands in a single place.
 const OTEL_DATABASE = 'dfe';
@@ -119,7 +124,7 @@ function defaultSource(connectionId: string) {
     name: 'default',
     kind: 'log',
     connection: connectionId,
-    from: { databaseName: 'dfe', tableName: 'default' },
+    from: { databaseName: DATA_DATABASE, tableName: 'default' },
     timestampValueExpression: '_timestamp',
     displayedTimestampValueExpression: '_timestamp',
     // DFE data lands in the structured `_json` column; `_raw` is the exception
@@ -131,17 +136,17 @@ function defaultSource(connectionId: string) {
   };
 }
 
-// The hunt-detection source over dfe_hunts.detection (security-hunt matches).
-// Seeded on EVERY team like `default`, and org-fenced the same way: the tenant
-// row policy on dfe_hunts.detection scopes a tenant to its own _org_id while the
-// platform reader sees every org. Interim hard-coding per the source-manifest
-// TODO below - hunts is one of the DFE tables the engine will later own.
+// The hunt-detection source over `detection` in the data database - the engine
+// builds that table alongside `default`, not in a hunts database of its own.
+// Seeded on EVERY team, and org-fenced the same way: the tenant row policy
+// scopes a tenant to its own _org_id while the platform reader sees every org.
+// Interim hard-coding per the source-manifest TODO below.
 function huntsSource(connectionId: string) {
   return {
     name: 'hunts',
     kind: 'log',
     connection: connectionId,
-    from: { databaseName: 'dfe_hunts', tableName: 'detection' },
+    from: { databaseName: DATA_DATABASE, tableName: 'detection' },
     timestampValueExpression: '_timestamp',
     displayedTimestampValueExpression: '_timestamp',
     implicitColumnExpression: 'rule_name',
