@@ -94,8 +94,9 @@ teams. It falls back to upstream session auth when the headers are absent.
 - `packages/api/src/dfe/controllers/team-provisioning.ts` - group-to-team
   mapping
 - `packages/api/src/api-app.ts` - wires the middleware behind `AUTH_MODE`
-- `packages/api/src/routers/api/root.ts` - gates the legacy login and invite
-  routes in OIDC mode
+- `packages/api/src/routers/api/root.ts` - once gated the legacy login and
+  invite routes in OIDC mode; an upstream sync replaced the file and the gate
+  is gone (#59 puts it back under `dfe/`)
 
 Detail:
 [../architecture/oidc-authentication.md](../architecture/oidc-authentication.md).
