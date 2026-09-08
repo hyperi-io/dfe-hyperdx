@@ -35,17 +35,25 @@ jest.mock('@/dfe/config', () => ({
   DFE_ENGINE_JWKS_URL: 'http://engine.test:8000/.well-known/jwks.json',
 }));
 
+jest.mock('@/tasks/provisionDashboards', () => ({
+  syncDashboards: jest.fn(),
+}));
+
 import {
   createConnection,
   getConnectionsByTeam,
 } from '@/controllers/connection';
 import { createSource, getSources } from '@/controllers/sources';
 import { ensureOrgConnection } from '@/dfe/controllers/org-connection';
+import { syncDashboards } from '@/tasks/provisionDashboards';
+import logger from '@/utils/logger';
 
 const mockConns = getConnectionsByTeam as jest.Mock;
 const mockCreateConn = createConnection as jest.Mock;
 const mockSources = getSources as jest.Mock;
 const mockCreateSource = createSource as jest.Mock;
+const mockSyncDashboards = syncDashboards as jest.Mock;
+const mockWarn = logger.warn as jest.Mock;
 
 const ORG_CONN = {
   name: 'acme',
@@ -57,6 +65,14 @@ const ORG_CONN = {
 beforeEach(() => {
   jest.clearAllMocks();
   global.fetch = jest.fn();
+  // A copy, so a test can set the provisioner env and restoreAllMocks undoes it.
+  jest.replaceProperty(process, 'env', { ...process.env });
+  delete process.env.DASHBOARD_PROVISIONER_DIR;
+  delete process.env.DASHBOARD_PROVISIONER_REQUIRE_REFS;
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
 });
 
 function okFetch(body: unknown) {
@@ -203,6 +219,93 @@ describe('ensureOrgConnection', () => {
     await ensureOrgConnection('tok', 'team-1');
 
     expect(mockCreateSource).not.toHaveBeenCalled();
+  });
+
+  test('provisions the shipped dashboards when a new team is seeded', async () => {
+    // The provisioner cron fires once a minute with no run at start, so the
+    // page's first GET /dashboards, one second after the team is created, saw
+    // [] and the SPA cached it.
+    process.env.DASHBOARD_PROVISIONER_DIR = '/dashboards';
+    process.env.DASHBOARD_PROVISIONER_REQUIRE_REFS = 'true';
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([]);
+    okFetch(ORG_CONN);
+
+    await ensureOrgConnection('tok', 'team-1');
+
+    expect(mockSyncDashboards).toHaveBeenCalledTimes(1);
+    expect(mockSyncDashboards).toHaveBeenCalledWith(
+      'team-1',
+      '/dashboards',
+      true,
+    );
+    // Sources land before the sync so the dashboard refs can resolve.
+    expect(mockCreateSource).toHaveBeenCalledTimes(2);
+    const syncOrder = mockSyncDashboards.mock.invocationCallOrder[0];
+    for (const order of mockCreateSource.mock.invocationCallOrder) {
+      expect(order).toBeLessThan(syncOrder);
+    }
+  });
+
+  test('passes the require-refs flag as false when it is unset', async () => {
+    process.env.DASHBOARD_PROVISIONER_DIR = '/dashboards';
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([]);
+    okFetch(ORG_CONN);
+
+    await ensureOrgConnection('tok', 'team-1');
+
+    expect(mockSyncDashboards).toHaveBeenCalledWith(
+      'team-1',
+      '/dashboards',
+      false,
+    );
+  });
+
+  test('provisions no dashboards when no provisioner directory is set', async () => {
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([]);
+    okFetch(ORG_CONN);
+
+    await ensureOrgConnection('tok', 'team-1');
+
+    expect(mockCreateSource).toHaveBeenCalledTimes(2);
+    expect(mockSyncDashboards).not.toHaveBeenCalled();
+  });
+
+  test('provisions no dashboards for a team that already has sources', async () => {
+    // An existing team must not be re-synced on every login.
+    process.env.DASHBOARD_PROVISIONER_DIR = '/dashboards';
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([{ _id: 'existing-source' }]);
+    okFetch(ORG_CONN);
+
+    await ensureOrgConnection('tok', 'team-1');
+
+    expect(mockSyncDashboards).not.toHaveBeenCalled();
+  });
+
+  test('a dashboard sync failure is logged and never blocks seeding', async () => {
+    process.env.DASHBOARD_PROVISIONER_DIR = '/dashboards';
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([]);
+    okFetch(ORG_CONN);
+    const boom = new Error('dashboard dir unreadable');
+    mockSyncDashboards.mockRejectedValue(boom);
+
+    await expect(ensureOrgConnection('tok', 'team-1')).resolves.toBeUndefined();
+
+    expect(mockCreateConn).toHaveBeenCalledTimes(1);
+    expect(mockCreateSource).toHaveBeenCalledTimes(2);
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ err: boom, teamId: 'team-1' }),
+      'DFE: org connection provisioning failed (non-fatal)',
+    );
   });
 
   test('refuses connection material with no password', async () => {

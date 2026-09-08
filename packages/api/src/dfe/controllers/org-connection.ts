@@ -20,6 +20,7 @@ import {
 } from '@/controllers/connection';
 import { createSource, getSources } from '@/controllers/sources';
 import * as dfeConfig from '@/dfe/config';
+import { syncDashboards } from '@/tasks/provisionDashboards';
 import logger from '@/utils/logger';
 
 /**
@@ -324,6 +325,16 @@ export async function ensureOrgConnection(
 
       for (const spec of sourceSpecs) {
         await createSource(teamId, spec as Parameters<typeof createSource>[1]);
+      }
+
+      // The cron would otherwise leave the new team's first page load empty.
+      const dashboardDir = process.env.DASHBOARD_PROVISIONER_DIR;
+      if (dashboardDir) {
+        await syncDashboards(
+          teamId,
+          dashboardDir,
+          process.env.DASHBOARD_PROVISIONER_REQUIRE_REFS === 'true',
+        );
       }
     }
   } catch (err) {

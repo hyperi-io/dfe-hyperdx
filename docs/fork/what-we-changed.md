@@ -132,6 +132,10 @@ upstream behaviour and tests are unchanged. The service flag is set by
   for the platform team alone, since operator telemetry and ClickHouse's own
   `system` database must never reach an org_viewer. That source set is also the
   RBAC fence for the pre-canned dashboards - see the provisioner note below.
+  Seeding a NEW team also runs `syncDashboards` for it when
+  `DASHBOARD_PROVISIONER_DIR` is set: the provisioner cron fires once a minute
+  with no run at start, so the page's first `GET /dashboards`, a second after
+  the team is created, saw `[]` and the SPA cached it until a reload.
 - `packages/api/src/dfe/routers/query-export.ts` - export a saved search or SQL
   to a DFE rule
 - `packages/app/src/dfe/components/CreateRuleFromSearch/` - the button that
