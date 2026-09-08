@@ -50,7 +50,8 @@ services:
       - internal
     restart: on-failure
     healthcheck:
-      test: pg_isready -U ${POSTGRES_USER}
+      # -d names the real database: without it libpq dials one named after the user.
+      test: pg_isready -U ${POSTGRES_USER} -d postgres
       interval: 5s
       timeout: 3s
       retries: 10
