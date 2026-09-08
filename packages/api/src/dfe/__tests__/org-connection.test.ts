@@ -90,7 +90,7 @@ const PLATFORM_CONN = {
 };
 
 describe('ensureOrgConnection', () => {
-  test('a tenant team is seeded with the org connection + ONLY the default source', async () => {
+  test('a tenant team is seeded with the org connection + ONLY the DFE sources', async () => {
     mockConns.mockResolvedValue([]);
     mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
     mockSources.mockResolvedValue([]);
@@ -106,17 +106,17 @@ describe('ensureOrgConnection', () => {
       'team-1',
       expect.objectContaining({ username: 'dfe_org_acme', name: 'acme' }),
     );
-    // A tenant gets `default` + `hunts` only - never the otel sources.
+    // A tenant gets `main` + `hunts` only - never the otel sources.
     const seeded = mockCreateSource.mock.calls.map(c => c[1].name);
-    expect(seeded).toEqual(['default', 'hunts']);
+    expect(seeded).toEqual(['main', 'hunts']);
     // DFE sources surface the structured `_json`, never `_raw` or the header
     // plumbing (_org_id/_source/_uuid/_tags): `_json` is the body, implicit
-    // column and the default view for `default`.
+    // column and the default view for `main`.
     expect(mockCreateSource).toHaveBeenCalledWith(
       'team-1',
       expect.objectContaining({
         connection: 'conn-1',
-        name: 'default',
+        name: 'main',
         bodyExpression: '_json',
         implicitColumnExpression: '_json',
         defaultTableSelectExpression: '_timestamp,_json',
@@ -145,7 +145,7 @@ describe('ensureOrgConnection', () => {
       databaseName: 'dfe',
       tableName: 'detection',
     });
-    expect(from('hunts').databaseName).toBe(from('default').databaseName);
+    expect(from('hunts').databaseName).toBe(from('main').databaseName);
   });
 
   test('the platform team ALSO gets the otel sources and the system database', async () => {
@@ -156,10 +156,10 @@ describe('ensureOrgConnection', () => {
 
     await ensureOrgConnection('tok', 'team-1');
 
-    // default + hunts (every team) then the platform-only set, all on one connection.
+    // main + hunts (every team) then the platform-only set, all on one connection.
     const seeded = mockCreateSource.mock.calls.map(c => c[1].name);
     expect(seeded).toEqual([
-      'default',
+      'main',
       'hunts',
       'otel_logs',
       'otel_traces',
