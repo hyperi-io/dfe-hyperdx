@@ -98,7 +98,7 @@ async function fetchOrgConnection(
 const PLATFORM_READER_USERNAME = 'dfe_query_reader';
 
 // The engine's data database (DFE_CLICKHOUSE_DATA_DATABASE, default `dfe`).
-// Everything the engine writes lands in it - `default` and `detection` alike -
+// Everything the engine writes lands in it - `main` and `detection` alike -
 // so both seeded DFE sources resolve from this one constant.
 const DATA_DATABASE = 'dfe';
 
@@ -108,24 +108,21 @@ const OTEL_DATABASE = 'dfe';
 
 // A team is the platform/admin team iff its connection reads as the unrestricted
 // platform reader. Anything else (including the dfe_org_<org> tenant readers, or
-// an unrecognised username) is treated as a tenant and gets ONLY `events` - otel
+// an unrecognised username) is treated as a tenant and gets ONLY `main` and `hunts` - otel
 // is unfenced operator telemetry and must never reach an org_viewer.
 function isPlatformReader(username: string): boolean {
   return username === PLATFORM_READER_USERNAME;
 }
 
-// One generic log source over dfe.default, pointed at the team's single
-// connection - the per-team equivalent of the DEFAULT_SOURCES template. EVERY
-// team gets this, platform and tenant alike. NAMED `default` to match the CH
-// table (dfe.default) and the receiver/engine `default_source: default`
-// convention - one name for the catch-all source across the whole suite. A
-// future suite-wide rename to `events` is a separate coordinated change.
+// One generic log source over dfe.main, the per-team equivalent of the
+// DEFAULT_SOURCES template. EVERY team gets this, platform and tenant alike.
+// Named for the table the engine bootstraps from `clickhouse.landing_table`.
 function defaultSource(connectionId: string) {
   return {
-    name: 'default',
+    name: 'main',
     kind: 'log',
     connection: connectionId,
-    from: { databaseName: DATA_DATABASE, tableName: 'default' },
+    from: { databaseName: DATA_DATABASE, tableName: 'main' },
     timestampValueExpression: '_timestamp',
     displayedTimestampValueExpression: '_timestamp',
     // DFE data lands in the structured `_json` column; `_raw` is the exception
@@ -138,7 +135,7 @@ function defaultSource(connectionId: string) {
 }
 
 // The hunt-detection source over `detection` in the data database - the engine
-// builds that table alongside `default`, not in a hunts database of its own.
+// builds that table alongside `main`, not in a hunts database of its own.
 // Seeded on EVERY team, and org-fenced the same way: the tenant row policy
 // scopes a tenant to its own _org_id while the platform reader sees every org.
 // Interim hard-coding per the source-manifest TODO below.
@@ -267,7 +264,7 @@ function clickhouseSystemSource(connectionId: string) {
 
 /**
  * Ensure the caller's team holds ONLY its own org connection, plus its seed
- * sources: `events` for every team, and the otel sources as well for the
+ * sources: `main` and `hunts` for every team, and the otel sources as well for the
  * platform/admin team (see the source builders above for the RBAC split).
  *
  * Idempotent and non-fatal: a team that already has a connection is left alone
@@ -300,7 +297,7 @@ export async function ensureOrgConnection(
     if (sources.length === 0) {
       const connectionId = String(conn._id);
 
-      // EVERY team gets `default` and `hunts` (both org-fenced by their tenant
+      // EVERY team gets `main` and `hunts` (both org-fenced by their tenant
       // row policies). The platform/admin team ALSO gets the otel sources and
       // ClickHouse's own system database; tenant teams never do.
       //
