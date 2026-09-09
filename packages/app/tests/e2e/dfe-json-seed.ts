@@ -3,7 +3,7 @@
  *
  * Upstream's seed covers JSON parsed out of a String column and a couple of
  * native JSON attribute columns. It does not cover a source whose body IS a
- * JSON column, which is the shape every DFE source uses (`dfe.default._json`).
+ * JSON column, which is the shape every DFE source uses (`dfe.main._json`).
  *
  * Seeded from here rather than by extending `seed-clickhouse.ts`, so upstream's
  * seed stays pristine.
