@@ -302,7 +302,7 @@ export async function ensureOrgConnection(
       // ClickHouse's own system database; tenant teams never do.
       //
       // TODO(dfe-engine): the seeded source SET is hard-coded here for now -
-      // default + hunts + the three otel kinds. The engine will later own the
+      // main + hunts + the three otel kinds. The engine will later own the
       // canonical reserved-source-name list (validation) AND the per-deployment
       // source manifest (hunts/rules/other DFE tables, meta-schema ingest) as its
       // SSoT; when that endpoint exists, fetch the list from the engine and seed
