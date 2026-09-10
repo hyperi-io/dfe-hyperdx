@@ -2,11 +2,9 @@
 
 ## Frontend (`packages/app`)
 
-- **Framework**: Next.js 14 with TypeScript
-- **UI Components**: Mantine UI library (`@mantine/core`, `@mantine/dates`,
-  `@mantine/hooks`)
-- **State Management**: Jotai (global client state), TanStack Query (server
-  state), URL params (filters)
+- **Framework**: Next.js 16 with TypeScript
+- **UI Components**: Mantine UI library (`@mantine/core`, `@mantine/dates`, `@mantine/hooks`)
+- **State Management**: Jotai (global client state), TanStack Query (server state), URL params (filters)
 - **Charts/Visualization**: Recharts, uPlot
 - **Code Editor**: CodeMirror (for SQL/JSON editing)
 - **Styling**: Mantine's built-in system, SCSS modules when needed
