@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "_comment": [
+  "description": [
     "FORK POSTURE. This repo is a long-lived fork of hyperdxio/hyperdx, so the",
     "house default is inverted: dependency management covers ONLY the files WE",
     "added. We do not own upstream's dependency tree, and bumping a transitive",
