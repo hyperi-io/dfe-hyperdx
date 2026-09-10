@@ -83,10 +83,14 @@ The fork keeps upstream HyperDX code pristine; DFE behaviour is additive
 
 dfe-docker layers the SAME `docker-compose.caps.yml` (or copies the table above)
 onto the HyperDX service. Pin the fork image by `tag@sha256` (per the DFE
-SHA-pin rule) once the fork CI publishes to `ghcr.io/hyperi-io/dfe-hyperdx`. NB:
-the fork Makefile currently publishes to `docker.hyperdx.io/hyperdx/hyperdx` -
-reconcile the publish target before first deploy (see
-docs/fork/what-we-changed.md).
+SHA-pin rule).
+
+`ghcr.io/hyperi-io/dfe-hyperdx` is the one registry path the fork publishes to.
+hyperi-ci builds it from the root `Dockerfile` (`.hyperi-ci.yaml`, `publish.container`),
+and `dfe-infra/helm/charts/hyperdx/values.yaml` deploys that same name. The
+`docker.hyperdx.io/hyperdx/hyperdx` targets in the Makefile are upstream's own
+release targets: we never run them, and rewriting them would buy a merge conflict
+on every sync for nothing.
 
 ## Notes
 
