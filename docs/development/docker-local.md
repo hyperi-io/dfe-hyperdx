@@ -86,11 +86,11 @@ onto the HyperDX service. Pin the fork image by `tag@sha256` (per the DFE
 SHA-pin rule).
 
 `ghcr.io/hyperi-io/dfe-hyperdx` is the one registry path the fork publishes to.
-hyperi-ci builds it from the root `Dockerfile` (`.hyperi-ci.yaml`, `publish.container`),
-and `dfe-infra/helm/charts/hyperdx/values.yaml` deploys that same name. The
-`docker.hyperdx.io/hyperdx/hyperdx` targets in the Makefile are upstream's own
-release targets: we never run them, and rewriting them would buy a merge conflict
-on every sync for nothing.
+hyperi-ci builds it from the root `Dockerfile` (`.hyperi-ci.yaml`,
+`publish.container`), and `dfe-infra/helm/charts/hyperdx/values.yaml` deploys
+that same name. The `docker.hyperdx.io/hyperdx/hyperdx` targets in the Makefile
+are upstream's own release targets: we never run them, and rewriting them would
+buy a merge conflict on every sync for nothing.
 
 ## Notes
 
