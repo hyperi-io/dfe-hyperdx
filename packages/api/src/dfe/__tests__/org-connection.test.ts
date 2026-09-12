@@ -39,11 +39,16 @@ jest.mock('@/tasks/provisionDashboards', () => ({
   syncDashboards: jest.fn(),
 }));
 
+jest.mock('@/dfe/controllers/dfe-sources', () => ({
+  seedDfeSources: jest.fn(),
+}));
+
 import {
   createConnection,
   getConnectionsByTeam,
 } from '@/controllers/connection';
 import { createSource, getSources } from '@/controllers/sources';
+import { seedDfeSources } from '@/dfe/controllers/dfe-sources';
 import { ensureOrgConnection } from '@/dfe/controllers/org-connection';
 import { syncDashboards } from '@/tasks/provisionDashboards';
 import logger from '@/utils/logger';
@@ -53,6 +58,7 @@ const mockCreateConn = createConnection as jest.Mock;
 const mockSources = getSources as jest.Mock;
 const mockCreateSource = createSource as jest.Mock;
 const mockSyncDashboards = syncDashboards as jest.Mock;
+const mockSeedDfeSources = seedDfeSources as jest.Mock;
 const mockWarn = logger.warn as jest.Mock;
 
 const ORG_CONN = {
@@ -325,5 +331,35 @@ describe('ensureOrgConnection', () => {
     mockConns.mockRejectedValue(new Error('db down'));
 
     await expect(ensureOrgConnection('tok', 'team-1')).resolves.toBeUndefined();
+  });
+
+  test('a team created later gets the sources the engine already registered', async () => {
+    // The engine's PUT /dfe/sources/:name reaches the teams present when it ran;
+    // a team created afterwards picks the rest up here.
+    process.env.DASHBOARD_PROVISIONER_DIR = '/dashboards';
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([]);
+    okFetch(ORG_CONN);
+
+    await ensureOrgConnection('tok', 'team-1');
+
+    expect(mockSeedDfeSources).toHaveBeenCalledWith('team-1', 'conn-1');
+    // Sources land before the sync, registered ones included, or a dashboard
+    // over a registered source fails its ref check and is skipped.
+    expect(mockSeedDfeSources.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSyncDashboards.mock.invocationCallOrder[0],
+    );
+  });
+
+  test('an existing team is never re-seeded', async () => {
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([{ _id: 'existing-source' }]);
+    okFetch(ORG_CONN);
+
+    await ensureOrgConnection('tok', 'team-1');
+
+    expect(mockSeedDfeSources).not.toHaveBeenCalled();
   });
 });

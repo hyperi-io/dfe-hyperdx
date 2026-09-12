@@ -20,6 +20,7 @@ import {
 } from '@/controllers/connection';
 import { createSource, getSources } from '@/controllers/sources';
 import * as dfeConfig from '@/dfe/config';
+import { seedDfeSources } from '@/dfe/controllers/dfe-sources';
 import { syncDashboards } from '@/tasks/provisionDashboards';
 import logger from '@/utils/logger';
 
@@ -301,12 +302,10 @@ export async function ensureOrgConnection(
       // row policies). The platform/admin team ALSO gets the otel sources and
       // ClickHouse's own system database; tenant teams never do.
       //
-      // TODO(dfe-engine): the seeded source SET is hard-coded here for now -
-      // main + hunts + the three otel kinds. The engine will later own the
-      // canonical reserved-source-name list (validation) AND the per-deployment
-      // source manifest (hunts/rules/other DFE tables, meta-schema ingest) as its
-      // SSoT; when that endpoint exists, fetch the list from the engine and seed
-      // from it rather than extending this array. This loop is the extension point.
+      // This set is the deployment's fixed floor - the tables the engine
+      // bootstraps whether or not an operator ever defines a source. Everything
+      // an operator DOES define arrives through PUT /dfe/sources/:name and is
+      // seeded below from the manifest, so it is not added to this array.
       const sourceSpecs: Record<string, unknown>[] = [
         defaultSource(connectionId),
         huntsSource(connectionId),
@@ -323,6 +322,11 @@ export async function ensureOrgConnection(
       for (const spec of sourceSpecs) {
         await createSource(teamId, spec as Parameters<typeof createSource>[1]);
       }
+
+      // Sources the engine registered before this team existed. The engine's
+      // PUT /dfe/sources/:name only reaches the teams present when it ran, so a
+      // team created later picks the rest up here.
+      await seedDfeSources(teamId, connectionId);
 
       // The cron would otherwise leave the new team's first page load empty.
       const dashboardDir = process.env.DASHBOARD_PROVISIONER_DIR;

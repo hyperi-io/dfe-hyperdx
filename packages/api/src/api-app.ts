@@ -12,6 +12,7 @@ import {
 } from './dfe/middleware/admin-lockdown';
 import { blockProvisionedWrites } from './dfe/middleware/provisioned-lockdown';
 import { mountObservability } from './dfe/observability';
+import dfeSourcesRouter from './dfe/routers/dfe-sources';
 import queryExportRouter from './dfe/routers/query-export';
 import mcpRouter from './mcp/app';
 import { isUserAuthenticated } from './middleware/auth';
@@ -199,6 +200,14 @@ if (config.IS_PROMQL_ENABLED) {
 
 // --- DFE ROUTES START ---
 
+// DFE: the cross-team source fan-out spans every team, so it is engine-only.
+// Mounted before /dfe so the more specific path wins.
+app.use(
+  '/dfe/sources',
+  isUserAuthenticated,
+  requireServicePrincipal,
+  dfeSourcesRouter,
+);
 app.use('/dfe', isUserAuthenticated, queryExportRouter);
 // --- DFE ROUTES END ---
 // ---------------------------------------------------------------------

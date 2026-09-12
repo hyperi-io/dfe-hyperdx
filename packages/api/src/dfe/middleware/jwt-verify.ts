@@ -92,8 +92,14 @@ const SERVICE_SUBJECT = 'svc:dfe-engine';
 const SERVICE_AUDIENCE = 'dfe-hyperdx';
 // Synthetic principal the service identity acts as; unique-email safe.
 const SERVICE_PRINCIPAL_EMAIL = 'svc-dfe-engine@dfe.internal';
-// The only surface a service token may touch: team/source/connection control.
-const SERVICE_CONTROL_PREFIXES = ['/team', '/sources', '/connections'];
+// The only surface a service token may touch: team/source/connection control,
+// plus the cross-team source fan-out the engine drives.
+const SERVICE_CONTROL_PREFIXES = [
+  '/team',
+  '/sources',
+  '/connections',
+  '/dfe/sources',
+];
 
 function hasServiceAudience(payload: JWTPayload): boolean {
   const aud = payload.aud;
