@@ -340,6 +340,15 @@ describe('the /dfe/sources routes', () => {
     expect(mockManifestUpsert).not.toHaveBeenCalled();
   });
 
+  test('PUT refuses a kind the fork has no model for', async () => {
+    const res = await request(app)
+      .put('/dfe/sources/filebeat')
+      .send({ ...SPEC, kind: 'journal' });
+
+    expect(res.status).toBe(400);
+    expect(mockManifestUpsert).not.toHaveBeenCalled();
+  });
+
   test('PUT refuses a body with no timestamp expression', async () => {
     // The fork rejects a source whose timestamp expression is empty, and the
     // failure would otherwise surface per team rather than at the request.

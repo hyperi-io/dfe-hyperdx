@@ -11,6 +11,7 @@
 //
 // This is a NEW file - it does not modify any upstream HyperDX files.
 
+import { SourceKind } from '@hyperdx/common-utils/dist/types';
 import express from 'express';
 import { z } from 'zod';
 import { validateRequest } from 'zod-express-middleware';
@@ -39,7 +40,9 @@ const nameSchema = z.object({
 // so a field the engine adds must reach the source document unaltered.
 const specSchema = z
   .object({
-    kind: z.string().min(1),
+    // The kind picks the discriminator model; an unknown one throws per team
+    // rather than answering the request, so it is refused here.
+    kind: z.nativeEnum(SourceKind),
     from: z.object({
       databaseName: z.string().min(1),
       tableName: z.string().min(1),
