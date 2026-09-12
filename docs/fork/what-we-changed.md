@@ -127,15 +127,24 @@ upstream behaviour and tests are unchanged. The service flag is set by
 
 - `packages/api/src/dfe/controllers/org-connection.ts` - a team holds ONLY its
   own org's ClickHouse connection, fetched from the engine, plus its seed
-  sources. `default` and `hunts` for every team (org-fenced by their row
-  policies); `otel_logs`, `otel_traces`, `otel_metrics` and `clickhouse_system`
-  for the platform team alone, since operator telemetry and ClickHouse's own
-  `system` database must never reach an org_viewer. That source set is also the
-  RBAC fence for the pre-canned dashboards - see the provisioner note below.
-  Seeding a NEW team also runs `syncDashboards` for it when
-  `DASHBOARD_PROVISIONER_DIR` is set: the provisioner cron fires once a minute
-  with no run at start, so the page's first `GET /dashboards`, a second after
-  the team is created, saw `[]` and the SPA cached it until a reload.
+  sources. `main` and `hunts` for every team (org-fenced by their row policies);
+  `otel_logs`, `otel_traces`, `otel_metrics` and `clickhouse_system` for the
+  platform team alone, since operator telemetry and ClickHouse's own `system`
+  database must never reach an org_viewer. That source set is also the RBAC
+  fence for the pre-canned dashboards - see the provisioner note below. Seeding
+  a NEW team also runs `syncDashboards` for it when `DASHBOARD_PROVISIONER_DIR`
+  is set: the provisioner cron fires once a minute with no run at start, so the
+  page's first `GET /dashboards`, a second after the team is created, saw `[]`
+  and the SPA cached it until a reload.
+- `packages/api/src/dfe/routers/dfe-sources.ts` +
+  `packages/api/src/dfe/controllers/dfe-sources.ts` -
+  `PUT`/`DELETE`/`GET /dfe/sources`, engine-only. The team-scoped `/sources`
+  surface writes to the CALLER's team, and the engine's service principal
+  resolves to a team no human is in, so a source it deployed was invisible to
+  everyone. These routes write the source to every team instead, each over that
+  team's own connection, and record it in the `DfeSource` manifest so a team
+  created later is seeded with it too. The fork writes only names the manifest
+  claims, so the seeded set above is never replaced or deleted by a deploy.
 - `packages/api/src/dfe/routers/query-export.ts` - export a saved search or SQL
   to a DFE rule
 - `packages/app/src/dfe/components/CreateRuleFromSearch/` - the button that
