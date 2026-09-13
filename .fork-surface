@@ -73,6 +73,9 @@ packages/app/src/__tests__/ChartUtils.test.ts
 packages/app/src/__tests__/utils.test.ts
 packages/app/src/components/AppNav/AppNav.tsx
 packages/app/src/components/ContextSidePanel.tsx
+# One import plus one element, mounting the restore-shipped control in the
+# dashboards list toolbar - see docs/fork/what-we-changed.md.
+packages/app/src/components/Dashboards/DashboardsListPage.tsx
 packages/app/src/components/DBRowDataPanel.tsx
 packages/app/src/components/DBRowJsonViewer.tsx
 packages/app/src/components/DBRowTable.tsx

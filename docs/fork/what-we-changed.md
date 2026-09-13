@@ -327,11 +327,30 @@ upstream behaviour and tests are unchanged. The service flag is set by
   engine's job. Rationale:
   [../decisions/0002-alerting-disabled-for-dfe-rules.md](../decisions/0002-alerting-disabled-for-dfe-rules.md).
 - `packages/api/src/dfe/middleware/provisioned-lockdown.ts` - 403 on PATCH and
-  DELETE against a dashboard the provisioner owns. Not polish: the provisioner
-  runs on a one-minute cron and `$set`s tiles every pass, so an unguarded edit
-  is reverted within 60s with no error. Users take their own copy through Export
-  Dashboard -> Import Dashboard, which needed no change.
-- **`packages/api/src/tasks/provisionDashboards/index.ts` - the one edit to a
+  PUT against a dashboard the provisioner owns. Not polish: the provisioner runs
+  on a one-minute cron and `$set`s tiles every pass, so an unguarded edit is
+  reverted within 60s with no error.
+- **A shipped dashboard is read-only, and can be duplicated or deleted.** The
+  app saves on every interaction and has no Save button, so the 403 arrived as
+  "Unable to save dashboard" for something the user never asked to do.
+  `packages/app/src/dfe/shippedDashboard.tsx` holds the predicate `isDfeManaged`
+  and `useDfeDashboard`, which keeps upstream's `useDashboard` signature and
+  drops the write, so no request is made and no toast can fire.
+  `DBDashboardPage.tsx` swaps that one identifier, gates the grid and tile
+  toolbar on the flag, disables the edit-only controls, and gains a Duplicate
+  item that POSTs a team-owned copy through the existing create call.
+- **Delete is allowed, and tombstoned.** `blockProvisionedWrites` lets DELETE
+  through and records `{name, team, deletedAt}` in
+  `dfe/models/dashboard-tombstone.ts` once the route has actually deleted the
+  row; `syncDashboards` skips a tombstoned name, so the delete survives the next
+  cron tick AND an upgrade that ships a newer version of that dashboard.
+  `dfe/routers/shipped-dashboards.ts` (`POST /dfe/dashboards/restore-shipped`)
+  is the way back - it clears the team's tombstones and reprovisions inside the
+  request, driven from `app/src/dfe/components/RestoreShippedDashboards/`. Team
+  membership is the whole authorisation for all three: the engine JWT carries
+  `sub` and `groups`, groups select the team, and no role claim exists to gate
+  on.
+- **`packages/api/src/tasks/provisionDashboards/index.ts` - an edit to a
   pristine upstream file** (catalogued in `.fork-surface`). `syncDashboards`
   wrote tiles verbatim, so a file naming a source by name stored a name where an
   ObjectId belongs and the tile rendered dead; upstream's own

@@ -153,6 +153,11 @@ import {
   useDashboards,
   useDeleteDashboard,
 } from '@/dashboard';
+import {
+  ShippedDashboardTitle,
+  useDfeDashboard,
+  useDuplicateShippedDashboard,
+} from '@/dfe/shippedDashboard';
 import { useAlertAnnotations } from '@/hooks/useAlertAnnotations';
 import useDashboardContainers, {
   TabDeleteAction,
@@ -191,7 +196,6 @@ import {
   DEFAULT_CHART_CONFIG,
 } from './ChartUtils';
 import { useConnections } from './connection';
-import { useDashboard } from './dashboard';
 import DashboardFilters from './DashboardFilters';
 import DashboardFiltersModal from './DashboardFiltersModal';
 import { EditablePageName } from './EditablePageName';
@@ -1780,10 +1784,13 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
     isLocalDashboard,
     isFetching: isFetchingDashboard,
     isSetting: isSavingDashboard,
-  } = useDashboard({
+    isDfeManaged,
+  } = useDfeDashboard({
     dashboardId: dashboardId as string | undefined,
     presetConfig,
   });
+  const { duplicate: duplicateDashboard, isPending: isDuplicatingDashboard } =
+    useDuplicateShippedDashboard();
 
   const { data: sources } = useSources();
   const { data: connections } = useConnections();
@@ -2249,7 +2256,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
   } = useTileSelection({
     dashboard,
     setDashboard,
-    enabled: !isKioskMode,
+    enabled: !isKioskMode && !isDfeManaged,
   });
 
   const handleMoveTileToGroup = useCallback(
@@ -2295,7 +2302,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
           chart={chart}
           dateRange={searchedTimeRange}
           onEditClick={() => setEditedTile(chart)}
-          readOnly={isKioskMode}
+          readOnly={isKioskMode || isDfeManaged}
           isLive={isRefreshEnabled}
           granularity={
             isRefreshEnabled ? granularityOverride : (granularity ?? undefined)
@@ -2417,6 +2424,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
       selectedTileIds,
       handleToggleTileSelect,
       isKioskMode,
+      isDfeManaged,
     ],
   );
 
@@ -2803,6 +2811,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
             variant="secondary"
             px="xs"
             size="xs"
+            disabled={isDfeManaged}
             style={{ flexShrink: 0 }}
           >
             <IconTags size={14} className="me-2" />
@@ -2950,10 +2959,23 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
           >
             {hasTiles ? 'Import New Dashboard' : 'Import Dashboard'}
           </Menu.Item>
+          {/* A shipped dashboard cannot be edited, so the way to change one is
+              to take a team-owned copy. */}
+          {isDfeManaged && dashboard && (
+            <Menu.Item
+              data-testid="duplicate-dashboard-menu-item"
+              leftSection={<IconCopy size={16} />}
+              disabled={isDuplicatingDashboard}
+              onClick={() => duplicateDashboard(dashboard)}
+            >
+              Duplicate Dashboard
+            </Menu.Item>
+          )}
           <Menu.Divider />
           <Menu.Item
             data-testid="save-default-query-filters-menu-item"
             leftSection={<IconDeviceFloppy size={16} />}
+            disabled={isDfeManaged}
             onClick={handleSaveQuery}
           >
             {hasSavedQueryAndFilterDefaults
@@ -2965,6 +2987,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
               data-testid="remove-default-query-filters-menu-item"
               leftSection={<IconX size={16} />}
               color="red"
+              disabled={isDfeManaged}
               onClick={handleRemoveSavedQuery}
             >
               Remove Default Query & Filters
@@ -2985,7 +3008,11 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
 
   const titleRow = (
     <Flex justify="space-between" align="flex-start" gap="sm">
-      {dashboardName}
+      {isDfeManaged ? (
+        <ShippedDashboardTitle name={dashboard?.name ?? ''} />
+      ) : (
+        dashboardName
+      )}
       {dashboardActions}
     </Flex>
   );
@@ -3064,6 +3091,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
       >
         <ActionIcon
           variant="secondary"
+          disabled={isDfeManaged}
           onClick={() => setShowFiltersModal(true)}
           data-testid="edit-filters-button"
           size="input-sm"
@@ -3228,8 +3256,8 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
                       onLayoutChange={
                         isKioskMode ? undefined : onUngroupedLayoutChange
                       }
-                      isDraggable={!isKioskMode}
-                      isResizable={!isKioskMode}
+                      isDraggable={!isKioskMode && !isDfeManaged}
+                      isResizable={!isKioskMode && !isDfeManaged}
                       cols={24}
                       rowHeight={32}
                     >
@@ -3290,7 +3318,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
                           makeLayoutChangeHandler={makeOnLayoutChange}
                           tileToLayoutItem={tileToLayoutItem}
                           renderTileComponent={renderTileComponent}
-                          readOnly={isKioskMode}
+                          readOnly={isKioskMode || isDfeManaged}
                         />
                       )}
                     </SortableContainerWrapper>
@@ -3310,6 +3338,7 @@ function DBDashboardPage({ presetConfig }: { presetConfig?: Dashboard }) {
                   mt="sm"
                   fw={400}
                   w="100%"
+                  disabled={isDfeManaged}
                   leftSection={<IconPlus size={16} />}
                 >
                   Add
