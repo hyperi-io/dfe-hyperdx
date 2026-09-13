@@ -87,6 +87,36 @@ describe('_app.tsx - route guard and font pin', () => {
   });
 });
 
+describe('DBDashboardPage.tsx - shipped dashboards are read-only', () => {
+  const page = read('src/DBDashboardPage.tsx');
+
+  it('reads the dashboard through the fork hook, not upstream useDashboard', () => {
+    // The hook is the ONE place the save is dropped. Lose this swap and every
+    // interaction on a shipped dashboard PATCHes again and 403s in the user's face.
+    expect(page).toContain('useDfeDashboard({');
+    expect(page).not.toMatch(/=\s*useDashboard\(\{/);
+  });
+
+  it('gates the grid and the tile toolbar on the managed flag', () => {
+    expect(page).toContain('readOnly={isKioskMode || isDfeManaged}');
+    expect(page).toContain('isDraggable={!isKioskMode && !isDfeManaged}');
+    expect(page).toContain('isResizable={!isKioskMode && !isDfeManaged}');
+  });
+
+  it('offers Duplicate as the way to get an editable copy', () => {
+    expect(page).toContain('duplicate-dashboard-menu-item');
+    expect(page).toContain('duplicateDashboard(dashboard)');
+  });
+});
+
+describe('DashboardsListPage.tsx - restoring the shipped set', () => {
+  it('mounts the restore control', () => {
+    expect(read('src/components/Dashboards/DashboardsListPage.tsx')).toContain(
+      '<RestoreShippedDashboards />',
+    );
+  });
+});
+
 describe('layout.tsx and AppNav.tsx - chromeless embed', () => {
   it('renders no hyperdx nav when embedded, so dfe-ui owns the only nav', () => {
     expect(read('src/layout.tsx')).toContain('isEmbedChrome');

@@ -43,6 +43,7 @@ import {
   useDashboards,
   useDeleteDashboard,
 } from '@/dashboard';
+import RestoreShippedDashboards from '@/dfe/components/RestoreShippedDashboards';
 import { useFavorites } from '@/favorites';
 import { withAppNav } from '@/layout';
 import { useBrandDisplayName } from '@/theme/ThemeProvider';
@@ -281,6 +282,7 @@ export default function DashboardsListPage() {
                 <IconList size={16} />
               </ActionIcon>
             </ActionIcon.Group>
+            <RestoreShippedDashboards />
             <Button
               component={Link}
               href="/dashboards/import"

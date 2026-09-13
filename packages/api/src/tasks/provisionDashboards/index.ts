@@ -9,6 +9,7 @@ import path from 'path';
 
 import { getConnectionsByTeam } from '@/controllers/connection';
 import { getSources } from '@/controllers/sources';
+import { suppressedDashboardNames } from '@/dfe/models/dashboard-tombstone';
 import { connectDB, mongooseConnection } from '@/models';
 import Dashboard from '@/models/dashboard';
 import Team from '@/models/team';
@@ -170,7 +171,11 @@ export async function syncDashboards(
     .map(d => resolveDashboardRefs(d, sources, connections, requireResolvable))
     .filter((d): d is DashboardWithoutId => d !== undefined);
 
+  // A shipped dashboard this team deleted stays deleted until it is restored.
+  const suppressed = await suppressedDashboardNames(teamId);
+
   for (const dashboard of dashboards) {
+    if (suppressed.has(dashboard.name)) continue;
     try {
       const userDashboard = await Dashboard.exists({
         name: dashboard.name,
