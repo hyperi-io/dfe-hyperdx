@@ -211,6 +211,8 @@ export async function engineJwtMiddleware(
   try {
     const groups = extractGroups(payload);
     const teamName = groups[0] || dfeConfig.DFE_AUTH_DEFAULT_TEAM || 'default';
+    // Absent today; dfe/middleware/role-claim gates on the claim's presence.
+    req.dfeRole = typeof payload.role === 'string' ? payload.role : undefined;
 
     const { team, created: teamCreated } =
       await findOrCreateTeamByName(teamName);

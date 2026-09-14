@@ -116,12 +116,53 @@ Rationale:
 **Admin surfaces are engine-only (`dfe/middleware/admin-lockdown.ts`).** HyperDX
 is embedded-only, so a human uses it for search, saved searches, dashboards and
 charts - nothing else. `requireServicePrincipal` 403s any non-service principal
-on the admin surfaces wired in `api-app.ts` (`/team`, `/connections`,
-`/sources`, `/webhooks`, `/alerts`, the external `/api/v2`, and `/mcp`), and
+on the admin surfaces wired in `api-app.ts` (`/connections`, `/sources`,
+`/webhooks`, `/alerts`, the external `/api/v2`, and `/mcp`), and
 `blockClickhouseProxyTest` closes the connection-tester sub-route while leaving
 the query proxy open. Both are a no-op when `DFE_AUTH_MODE` is unset, so
 upstream behaviour and tests are unchanged. The service flag is set by
 `jwt-verify.ts` for the `svc:dfe-engine` identity.
+
+**`/team` opens one read to a member (`allowTeamReadElseServicePrincipal`).**
+The console calls `GET /api/team` on every page load for one flag, so a blanket
+403 there logged an `HTTPError 403` on every Observe load - on a read the
+lockdown exists to protect WRITES on. A signed-in member now gets the team
+record with `apiKey` (a credential) and `allowedAuthMethods` (the engine's
+policy to set) stripped. Every mutation keeps its 403, as does every sub-path:
+`/members`, `/invitations`, `/apiKey`, `/tags`. The delta in **`api-app.ts`** is
+one identifier on the `/team` mount.
+
+**`requireDfeMode`** takes a DFE-only router out of the app when `DFE_AUTH_MODE`
+is unset - `next('router')`, so the request 404s as it would upstream.
+`dfe/routers/shipped-dashboards.ts` mounts it, inside our own router rather than
+at the `api-app.ts` mount, which keeps the gate off the upstream file.
+
+**The role claim is honoured before it exists
+(`dfe/middleware/role-claim.ts`).** Deleting or restoring a shipped dashboard
+changes what the whole team sees, and team membership is the only thing
+authorising it: the engine JWT carries `sub` and `groups`, groups select the
+team, and dfe-engine issues no role claim - so a read-only console account can
+delete a shipped dashboard for everyone. That gap closes in the engine, not
+here. The check is gated on the claim's PRESENCE, so a token without one behaves
+exactly as today and a token carrying `role` is allowed only for `admin` or
+`owner`. `jwt-verify.ts` copies the claim across when the token has it;
+header-dev mode sets none, so local dev is unchanged.
+
+**Restore refuses a simple request (`dfe/middleware/cross-site.ts`).** A form
+post needs no CORS preflight and carries no header the posting page had to be
+allowed to set, so a hostile page could aim one at
+`POST /dfe/dashboards/restore-shipped` and reprovision a team's dashboards.
+`requireNonSimpleRequest` 403s a state-changing request carrying neither an
+`Origin` matching the host it was addressed to nor an `X-Requested-With` header.
+The console's button sends the header.
+
+It is the second layer, not the only one. dfe-ui plants the engine token in the
+`dfe_token` cookie from its own proxy (`apps/dfe-core-ui/src/proxy.ts`):
+`HttpOnly`, `Path=/`, `SameSite=Lax`, `Secure` whenever the UI is served over
+https, `Domain` set to `DFE_COOKIE_DOMAIN` so the cookie reaches the embedded
+HyperDX subdomain, and `Max-Age` from the token's own expiry. `SameSite=Lax`
+already keeps that cookie off a cross-site POST, so the exposure was thin; the
+header check is what holds when a deployment authenticates some other way.
 
 ## DFE integration features
 
@@ -243,12 +284,19 @@ upstream behaviour and tests are unchanged. The service flag is set by
   them further is a product decision about what an unbranded document and an
   unknown theme name should resolve to, not a test move - see #64.
 - `packages/app/src/dfe/defaultSource.ts` - which source `/search` opens on
-  cold. DFE analysts work from hunt detections, so `hunts` is the landing view
-  rather than whichever source sorts first. **`DBSearchPage.tsx` (catalogued)**
-  carries the whole delta: one `??` on the existing fallback return in
-  `getDefaultSourceId`, plus `& { name?: string }` on its parameter type. The
-  name stays OPTIONAL so upstream's own tests, whose fixtures carry no name,
-  still typecheck - and it is what makes them still pass, since a nameless
+  cold. The embed opens on `main`, the landing every record falls into, because
+  a first Observe load that shows an empty window reads as a broken deployment;
+  a standalone page opens on `hunts`, since an analyst working the console
+  directly is working detections. Both are matched by NAME, which is the
+  contract - the console never sees a HyperDX id - and both are overridable per
+  deployment (`NEXT_PUBLIC_DFE_EMBED_DEFAULT_SOURCE`,
+  `NEXT_PUBLIC_DFE_DEFAULT_SOURCE`). Embed mode is read from the same
+  `isEmbedChrome()` the rest of the chromeless path uses, through a default
+  parameter, so the resolver stays directly testable. **`DBSearchPage.tsx`
+  (catalogued)** carries the whole delta: one `??` on the existing fallback
+  return in `getDefaultSourceId`, plus `& { name?: string }` on its parameter
+  type. The name stays OPTIONAL so upstream's own tests, whose fixtures carry no
+  name, still typecheck - and it is what makes them still pass, since a nameless
   fixture never matches a preference.
 
   Upstream's precedence is untouched and still wins: an explicit `?source=`, a
@@ -347,9 +395,8 @@ upstream behaviour and tests are unchanged. The service flag is set by
   `dfe/routers/shipped-dashboards.ts` (`POST /dfe/dashboards/restore-shipped`)
   is the way back - it clears the team's tombstones and reprovisions inside the
   request, driven from `app/src/dfe/components/RestoreShippedDashboards/`. Team
-  membership is the whole authorisation for all three: the engine JWT carries
-  `sub` and `groups`, groups select the team, and no role claim exists to gate
-  on.
+  membership authorises all three until the engine issues a role claim - see the
+  role-claim and cross-site notes under Authorization for what gates them now.
 - **`packages/api/src/tasks/provisionDashboards/index.ts` - an edit to a
   pristine upstream file** (catalogued in `.fork-surface`). `syncDashboards`
   wrote tiles verbatim, so a file naming a source by name stored a name where an

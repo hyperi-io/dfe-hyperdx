@@ -7,6 +7,7 @@ import onHeaders from 'on-headers';
 import * as config from './config';
 import {
   allowReadElseServicePrincipal,
+  allowTeamReadElseServicePrincipal,
   blockClickhouseProxyTest,
   requireServicePrincipal,
 } from './dfe/middleware/admin-lockdown';
@@ -154,10 +155,13 @@ app.use(
   routers.dashboardRouter,
 );
 app.use('/me', isUserAuthenticated, routers.meRouter);
+// /team is READ-open to a member for the team record alone, with the API key and
+// the auth-method policy stripped; everything else on the surface stays
+// engine-only.
 app.use(
   '/team',
   isUserAuthenticated,
-  requireServicePrincipal,
+  allowTeamReadElseServicePrincipal,
   routers.teamRouter,
 );
 app.use(

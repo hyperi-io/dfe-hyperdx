@@ -17,6 +17,11 @@ const SOURCES = [
   { id: 'otel-id', kind: SourceKind.Log, name: 'otel_logs', disabled: false },
 ];
 
+const WITH_MAIN = [
+  { id: 'main-id', kind: SourceKind.Log, name: 'main', disabled: false },
+  ...SOURCES,
+];
+
 describe('dfePreferredSourceId', () => {
   it('finds the hunts source by name, whatever its id', () => {
     expect(dfePreferredSourceId(SOURCES)).toBe('hunts-id');
@@ -34,6 +39,41 @@ describe('dfePreferredSourceId', () => {
 
   it('yields on a source with no name', () => {
     expect(dfePreferredSourceId([{ id: 'a' }])).toBeUndefined();
+  });
+});
+
+/**
+ * The embed opens on the landing every record falls into. Opening on detections
+ * showed a fresh tester an empty window on a deployment that had data.
+ */
+describe('dfePreferredSourceId in the embed', () => {
+  it('prefers main over hunts', () => {
+    expect(dfePreferredSourceId(WITH_MAIN, true)).toBe('main-id');
+  });
+
+  it('falls back to hunts when the deployment has no main', () => {
+    expect(dfePreferredSourceId(SOURCES, true)).toBe('hunts-id');
+  });
+
+  it('yields when it has neither', () => {
+    expect(
+      dfePreferredSourceId([{ id: 'a', name: 'otel_logs' }], true),
+    ).toBeUndefined();
+  });
+
+  it('leaves the standalone page on hunts', () => {
+    expect(dfePreferredSourceId(WITH_MAIN, false)).toBe('hunts-id');
+  });
+
+  it('reads the embed flag off the page when the caller does not say', () => {
+    expect(dfePreferredSourceId(WITH_MAIN)).toBe('hunts-id');
+
+    window.sessionStorage.setItem('dfeEmbed', '1');
+    try {
+      expect(dfePreferredSourceId(WITH_MAIN)).toBe('main-id');
+    } finally {
+      window.sessionStorage.removeItem('dfeEmbed');
+    }
   });
 });
 

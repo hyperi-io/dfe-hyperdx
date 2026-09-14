@@ -55,8 +55,8 @@ function findsProvisioned(doc: { name: string; team: string } | null) {
   mockFindOne.mockReturnValue({ lean: jest.fn().mockResolvedValue(doc) });
 }
 
-function call(method: string, path: string) {
-  const req = { method, path } as Request;
+function call(method: string, path: string, dfeRole?: string) {
+  const req = { method, path, dfeRole } as Request;
   const json = jest.fn();
   const listeners: Record<string, () => void> = {};
   const res = {
@@ -217,6 +217,51 @@ describe('blockProvisionedWrites - delete and tombstone', () => {
     await blockProvisionedWrites(req, res, next);
 
     expect(next).toHaveBeenCalled();
+    expect(res.on).not.toHaveBeenCalled();
+    expect(mockRecordTombstone).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The engine issues no role claim yet, so a token without one keeps the
+ * team-membership rule. A deployment whose engine does issue one starts refusing
+ * everybody below admin, with no change here.
+ */
+describe('blockProvisionedWrites - the role claim', () => {
+  test.each(['admin', 'owner', 'ADMIN'])(
+    '%s may delete a shipped dashboard',
+    async role => {
+      findsProvisioned(SHIPPED);
+      const { req, res, next } = call('DELETE', PROVISIONED, role);
+
+      await blockProvisionedWrites(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    },
+  );
+
+  test('a claim that is neither is refused', async () => {
+    findsProvisioned(SHIPPED);
+    const { req, res, next, json } = call('DELETE', PROVISIONED, 'viewer');
+
+    await blockProvisionedWrites(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.stringContaining('admin or owner'),
+      }),
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('a refused delete tombstones nothing', async () => {
+    findsProvisioned(SHIPPED);
+    const { req, res, next } = call('DELETE', PROVISIONED, 'viewer');
+
+    await blockProvisionedWrites(req, res, next);
+
     expect(res.on).not.toHaveBeenCalled();
     expect(mockRecordTombstone).not.toHaveBeenCalled();
   });
