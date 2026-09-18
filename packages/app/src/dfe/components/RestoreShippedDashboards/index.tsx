@@ -22,6 +22,9 @@ export default function RestoreShippedDashboards() {
     mutationFn: () =>
       hdxServer('dfe/dashboards/restore-shipped', {
         method: 'POST',
+        // The route refuses a simple request, which is what a cross-site form
+        // post is; see api/src/dfe/middleware/cross-site.
+        headers: { 'X-Requested-With': 'dfe-console' },
       }).json<RestoreResponse>(),
     onSuccess: result => {
       queryClient.invalidateQueries({ queryKey: ['dashboards'] });

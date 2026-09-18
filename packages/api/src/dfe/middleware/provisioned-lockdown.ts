@@ -6,7 +6,9 @@
 // and a user takes their own editable copy with the Duplicate action.
 //
 // DELETE is allowed and tombstoned: the provisioner skips a name this team has
-// deleted, so the delete sticks until the team restores the shipped set.
+// deleted, so the delete sticks until the team restores the shipped set. Team
+// membership authorises it until the engine issues a role claim (see
+// dfe/middleware/role-claim).
 //
 // GET is untouched, and so is every non-provisioned dashboard.
 //
@@ -15,6 +17,7 @@
 import type { NextFunction, Request, Response } from 'express';
 
 import { isDfeEnabled } from '@/dfe/config';
+import { dfeRoleRefuses, ROLE_FORBIDDEN } from '@/dfe/middleware/role-claim';
 import { recordDashboardTombstone } from '@/dfe/models/dashboard-tombstone';
 import Dashboard from '@/models/dashboard';
 import logger from '@/utils/logger';
@@ -67,6 +70,12 @@ export async function blockProvisionedWrites(
 
   if (req.method !== 'DELETE') {
     return res.status(403).json(FORBIDDEN);
+  }
+
+  // A delete removes the dashboard for the whole team, so a role claim that is
+  // not a team-admin one refuses it.
+  if (dfeRoleRefuses(req)) {
+    return res.status(403).json(ROLE_FORBIDDEN);
   }
 
   const { name, team } = provisioned;
