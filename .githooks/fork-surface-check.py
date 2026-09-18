@@ -293,7 +293,7 @@ def report_drift(catalogue: list[str]) -> int:
     print(
         "\nEach of these is a probable conflict on the next sync. Cheapest fix is\n"
         "to shrink the delta BEFORE merging - move logic into a dfe/ module and\n"
-        "leave a one-token call-site swap behind. See FORK.md.\n"
+        "leave a one-token call-site swap behind. See CLAUDE.md.\n"
     )
     return 0
 
@@ -441,7 +441,7 @@ def main() -> int:
         "    .prettierignore / eslint ignores) if this is a formatting-only edit\n"
         "  - if the edit is genuinely required, land it as a documented\n"
         "    exception: add the path to .fork-surface AND describe the delta in\n"
-        "    FORK.md in this same commit, then re-run\n"
+        "    docs/fork/what-we-changed.md in this same commit, then re-run\n"
         "\nTo override for one commit: FORK_SURFACE_WARN=1 git commit ...\n",
         file=sys.stderr,
     )
