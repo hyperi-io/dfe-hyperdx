@@ -51,13 +51,17 @@ ABSENT = (
 #
 # 'not_used' is GitHub's reason for "the vulnerable code is not reachable
 # here", which covers both "the package is absent" and "the sink is never
-# called". 'tolerable_risk' would claim we accept a live risk, and none of
-# these are live.
+# called". 'tolerable_risk' says we reach the sink and accept it anyway, so it
+# is reserved for the entries that say so in their own reason - qs is the only
+# one today. Never reach for it to make an unread alert go away.
 VERDICTS: dict[str, tuple[str, str]] = {
     # Absent from the production image.
     "tar": ("not_used", f"{ABSENT} Reaches only via cacache and node-gyp."),
     "minimatch": ("not_used", ABSENT),
-    "js-yaml": ("not_used", ABSENT),
+    "js-yaml": (
+        "not_used",
+        f"{ABSENT} Both copies are dev - 3.15.0 via jest, 4.1.1 via cosmiconfig.",
+    ),
     "postcss": ("not_used", ABSENT),
     "nanoid": ("not_used", ABSENT),
     "image-size": ("not_used", ABSENT),
@@ -73,10 +77,45 @@ VERDICTS: dict[str, tuple[str, str]] = {
     "elliptic": ("not_used", ABSENT),
     "yaml": ("not_used", ABSENT),
     "@babel/runtime": ("not_used", ABSENT),
+    "smol-toml": ("not_used", f"{ABSENT} Reaches only via knip and nx."),
+    "csv-parse": (
+        "not_used",
+        "Dev only - @changesets/cli via tty-table. Absent from the production "
+        "image.",
+    ),
+    "@humanfs/node": (
+        "not_used",
+        "Dev only - eslint is its one parent. Absent from the production image.",
+    ),
+    "colord": (
+        "not_used",
+        "Dev only - stylelint is its one parent. Never reaches the image or the "
+        "browser bundle.",
+    ),
+    "@vitest/mocker": (
+        "not_used",
+        "Dev only - @storybook/builder-webpack5 is its one parent. GitHub's "
+        "scope field reads the lockfile, not the image, and calls this runtime.",
+    ),
+    # Build-time only: they shape the bundle, they do not run in it.
+    "browserslist": (
+        "not_used",
+        "Build-time only, via babel, webpack and next. Both advisories need an "
+        "untrusted browserslist-stats.json; ours is a repo file, never input.",
+    ),
+    "baseline-browser-mapping": (
+        "not_used",
+        "Build-time only, via browserslist and next target resolution. It never "
+        "runs at request time and never reaches the browser bundle.",
+    ),
+    "postcss-selector-parser": (
+        "not_used",
+        "Build-time CSS only - postcss-modules, postcss-nested, stylelint. "
+        "Selectors come from our own stylesheets, never from a request.",
+    ),
     # In the image, but the version we resolve is outside the advisory range.
     "ajv": ("not_used", "Resolves 8.20.0, above the < 8.18.0 range."),
     "cross-spawn": ("not_used", "Resolves 7.0.6, above the < 7.0.5 range."),
-    "fast-uri": ("not_used", "Resolves 3.1.4, above both 2.x ranges."),
     "semver": (
         "not_used",
         "Resolves 6.3.1, BELOW the >= 7.0.0 range rather than above it.",
@@ -87,6 +126,24 @@ VERDICTS: dict[str, tuple[str, str]] = {
         "Windows-only and the image is Alpine.",
     ),
     # In the image and in range, but nothing an attacker can drive.
+    "fast-uri": (
+        "not_used",
+        "Resolves 3.1.4, INSIDE the < 3.1.6 ranges. Reached only by ajv via the "
+        "MCP SDK, which parses URIs from our own schemas and fetches none, so "
+        "host confusion has no requester behind it. /mcp is service-only.",
+    ),
+    "fflate": (
+        "not_used",
+        "Ships in the browser bundle via rrweb and the session recorder, which "
+        "compress. The advisory is unzipSync on malformed ZIP64 and nothing "
+        "here unzips anything.",
+    ),
+    "@ai-sdk/provider-utils": (
+        "not_used",
+        "In the image, but /ai/assistant throws unless AI_PROVIDER or "
+        "ANTHROPIC_API_KEY is set and DFE sets neither. Request text is capped "
+        "at 10000 chars by zod before the SDK sees it.",
+    ),
     "path-to-regexp": (
         "not_used",
         "ReDoS is in route-pattern compilation. Route patterns are our own "
@@ -151,8 +208,19 @@ VERDICTS: dict[str, tuple[str, str]] = {
     ),
     "fast-xml-parser": ("not_used", "Upstream already pins ^4.5.6."),
     # Medium or low with no reachable sink.
-    "hono": ("not_used", "No reachable sink; the server does not route through hono."),
-    "qs": ("not_used", "No call site passes request-derived input to the sink."),
+    "hono": (
+        "not_used",
+        "In the image via @modelcontextprotocol/sdk, never imported. No Hono "
+        "app is constructed - api/src/mcp/app.ts runs "
+        "StreamableHTTPServerTransport on an express router.",
+    ),
+    # The one sink an attacker DOES reach. Medium, so below the pin bar.
+    "qs": (
+        "tolerable_risk",
+        "Reached: express parses req.query and body-parser urlencoded bodies "
+        "with qs 6.14.2/6.15.3. Both advisories are medium DoS, below the pin "
+        "bar, and the caller is an OIDC-authenticated tenant user.",
+    ),
     "uuid": ("not_used", "No call site reaches the vulnerable path."),
     "bn.js": ("not_used", "No call site reaches the vulnerable path."),
 }
