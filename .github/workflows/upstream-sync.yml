@@ -386,8 +386,27 @@ jobs:
             printf '%s\n' "$FILES"
             echo '```'
           } > issue-body.md
+          # The label has to EXIST before --label will take it, and this repo
+          # never had one. `gh issue create` failed on every conflicted run,
+          # `|| echo` swallowed the failure, and the step reported success - so
+          # five consecutive weekly runs went green while the fork drifted 116
+          # commits behind with nobody told. --force makes this idempotent.
+          gh label create upstream-sync \
+            --color B60205 \
+            --description 'An upstream merge rerere could not replay' \
+            --force
+          # An already-open issue for the same upstream ref is the ONLY tolerable
+          # reason not to create one. Anything else has to fail the run: a broken
+          # alarm that reports success is worse than no alarm, because the drift
+          # number is the one signal that says when re-forking beats merging.
+          existing="$(gh issue list --label upstream-sync --state open \
+            --search "hyperdxio/hyperdx@${SHORT} in:title" \
+            --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            echo "drift issue #${existing} is already open for ${SHORT}"
+            exit 0
+          fi
           gh issue create \
             --title "upstream-sync: manual merge needed for hyperdxio/hyperdx@${SHORT}" \
             --label 'upstream-sync' \
-            --body-file issue-body.md \
-            || echo "Issue may already exist."
+            --body-file issue-body.md

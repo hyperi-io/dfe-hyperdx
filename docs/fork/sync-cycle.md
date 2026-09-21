@@ -370,12 +370,13 @@ why it has to stay accurate.
 Sync cost over time is the evidence the [de-fork decision](leaving-upstream.md)
 should be taken against, so it gets recorded.
 
-|                        | 2026-07-23 (dry run) | 2026-08-04 (2.29.0 -> 2.33.0, full run) |
-| ---------------------- | -------------------- | --------------------------------------- |
-| upstream commits ahead | 122                  | 164                                     |
-| conflicting files      | 11                   | 12                                      |
-| `yarn.lock` conflicted | yes                  | **no**                                  |
-| delta gate             | 81 `src/dfe` tests   | 211 suites / 4795 tests                 |
+|                        | 2026-07-23 (dry run) | 2026-08-04 (2.29.0 -> 2.33.0, full run) | 2026-09-21 (2.36.0 -> 2.39.1, aborted) |
+| ---------------------- | -------------------- | --------------------------------------- | -------------------------------------- |
+| upstream commits ahead | 122                  | 164                                     | 116                                    |
+| conflicting files      | 11                   | 12                                      | 14                                     |
+| replayed by rerere     | n/a                  | n/a                                     | **0 of 9**                             |
+| `yarn.lock` conflicted | yes                  | **no**                                  | no                                     |
+| delta gate             | 81 `src/dfe` tests   | 211 suites / 4795 tests                 | not reached                            |
 
 What changed between the two rows is the merge driver and the generated security
 layer. The lockfile stopped conflicting outright: the driver took upstream's
@@ -392,6 +393,36 @@ remembering:
 - `packages/app/src/layout.tsx` - upstream added a kiosk mode that also hides
   the nav. Both conditions now sit side by side, and that convergence is the
   first real evidence for the de-fork path.
+
+### 2026-09-21 - rerere replayed nothing, and the alarm had been off for a month
+
+The 2.39.1 attempt produced 14 conflicts and rerere replayed **none** of them.
+It was enabled and configured, and it had 11 recorded resolutions sitting in
+`rr-cache`. Every one missed, because a preimage has to match EXACTLY and 116
+commits of upstream had moved the context around every hunk.
+
+That is the mechanism worth taking from this row: **rerere's value decays with
+backlog.** A resolution recorded against a 20-commit gap is worthless at 116.
+The weekly cadence is not a nicety, it is what keeps the preimages matching.
+
+Which is why the alarm mattered. `gh issue create --label 'upstream-sync'` needs
+the label to exist and this repo never had one, so the call failed on every
+conflicted run and `|| echo "Issue may already exist."` turned the failure into
+a success. Five consecutive Mondays reported green, no issue was filed, and the
+drift number nobody was reading is the number that decides when re-forking beats
+merging.
+
+The step now creates the label, tolerates only an already-open issue for the
+same ref, and fails the run otherwise.
+
+Of the 14: 5 are modify/delete on the upstream workflows that must stay deleted
+(see the 2026-08-27 entry in security-sync.md - `release.yml` would publish to
+hyperdxio's npm scopes and Docker Hub namespaces), and 9 carry content -
+`.gitignore`, `.prettierignore`,
+`docker/otel-collector/config.standalone.auth.yaml`, `DBChartPage.tsx` (2
+hunks), `DBDashboardPage.tsx` (2), `AppNav.tsx`, `SQLInlineEditor.tsx`,
+`useRowWhere.tsx` and `scripts/ci/ratchet-baseline.json` (2). Thirteen hunks in
+all.
 
 ### Expect `Build All-in-One Image` to fail on a sync PR
 

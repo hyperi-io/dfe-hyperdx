@@ -1,41 +1,48 @@
-#
-# (eslint-plugin-prettier), and nx runs eslint per package so the repo-root
-# .prettierignore is not seen - files there that we already modify stay
-# A TEST FILE is not a reason either. Our assertions go in a dfe/__tests__/
-# Agent entrypoint. Upstream ships a one-line CLAUDE.md ("@AGENTS.md"); we
-# Baseline merge-base at capture: e2103f78.
-# Checked by .githooks/fork-surface-check.py (pre-commit + CI).
-# Derived from: git diff --name-only --diff-filter=M <upstream-merge-base> HEAD
-# Every path below is an upstream file we modify in place, so it is permanent
-# Format: one path or glob per line, '#' comments, blank lines ignored.
-# Formatting is NOT a reason to be on this list. If a gate wants an upstream
-# GOVERNING PRINCIPLE (see CLAUDE.md): MINIMISE what we change in ANYTHING that
-# One added inline head script (EMBED_INIT_SCRIPT), mirroring upstream's own
-# One added line routing yarn.lock to the merge driver - see docs/fork/what-we-changed.md.
-# THEME_INIT_SCRIPT, to hide the chrome sidebar before first paint in embed mode.
-# The guard WARNS on any test path listed below. The remaining ones are inherited
-# The one unavoidable case: packages/{api,app} run prettier THROUGH eslint
-# and should be migrated out as they are touched.
-# comes from upstream. Upstream HyperDX moves fast enough on its own - we do not
-# deliberate act - do it in the same commit that documents the delta in docs/fork/what-we-changed.md.
-# delta there buys a hand-resolve every sync for tests upstream has no stake in.
 # dfe-hyperdx conflict surface - the catalogue of SANCTIONED exceptions.
-# directory - upstream test files churn harder than almost anything else, and a
-# file reformatted, exclude the path from the tool (.prettierignore) instead.
-# formatted, which costs no new surface.
+#
+# GOVERNING PRINCIPLE (see CLAUDE.md): MINIMISE what we change in ANYTHING that
+# comes from upstream. Upstream HyperDX moves fast enough on its own - we do not
+# want to be managing small fry on top of it. Everything we do must work with
 # git rerere, and editing a pristine upstream file is an EXCEPTION that must be
 # identified, documented (docs/fork/what-we-changed.md) and tooled (listed here).
+#
+# Every path below is an upstream file we modify in place, so it is permanent
 # merge-conflict surface on every upstream sync. Adding a line here is a
-# prepend the fork's governing rerere rule above it so it is unmissable at the
-# top of every session, and keep their line intact at the bottom. Low churn -
-# upstream rarely touches that single line - so rerere replays it cleanly.
-# want to be managing small fry on top of it. Everything we do must work with
+# deliberate act - do it in the same commit that documents the delta in docs/fork/what-we-changed.md.
+#
+# Formatting is NOT a reason to be on this list. If a gate wants an upstream
+# file reformatted, exclude the path from the tool (.prettierignore) instead.
+# The one unavoidable case: packages/{api,app} run prettier THROUGH eslint
+# (eslint-plugin-prettier), and nx runs eslint per package so the repo-root
+# .prettierignore is not seen - files there that we already modify stay
+# formatted, which costs no new surface.
+#
+# A TEST FILE is not a reason either. Our assertions go in a dfe/__tests__/
+# directory - upstream test files churn harder than almost anything else, and a
+# delta there buys a hand-resolve every sync for tests upstream has no stake in.
+# The guard WARNS on any test path listed below. The remaining ones are inherited
+# and should be migrated out as they are touched.
+#
+# Format: one path or glob per line, '#' comments, blank lines ignored.
+# Checked by .githooks/fork-surface-check.py (pre-commit + CI).
+# Derived from: git diff --name-only --diff-filter=M <upstream-merge-base> HEAD
+# Baseline merge-base at capture: e2103f78.
+#
+# A comment sits directly ABOVE the entry it explains. Never sort this file
+# whole: an alphabetical pass over the comment lines scrambles every multi-line
+# block into nonsense and tears each annotation off its path.
+
 .github/workflows/docker-build.yml
+# One added line routing yarn.lock to the merge driver - see docs/fork/what-we-changed.md.
 .gitattributes
 .gitignore
 .prettierignore
 .prettierrc
 .yarnrc.yml
+# Agent entrypoint. Upstream ships a one-line CLAUDE.md ("@AGENTS.md"); we
+# prepend the fork's governing rerere rule above it so it is unmissable at the
+# top of every session, and keep their line intact at the bottom. Low churn -
+# upstream rarely touches that single line - so rerere replays it cleanly.
 CLAUDE.md
 LOCAL.md
 knip.json
@@ -59,6 +66,8 @@ packages/app/eslint.config.mjs
 packages/app/next.config.mjs
 packages/app/package.json
 packages/app/pages/_app.tsx
+# One added inline head script (EMBED_INIT_SCRIPT), mirroring upstream's own
+# THEME_INIT_SCRIPT, to hide the chrome sidebar before first paint in embed mode.
 packages/app/pages/_document.tsx
 packages/app/pages/register.tsx
 packages/app/public/pyodide/pyodide.asm.js
