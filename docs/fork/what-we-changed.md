@@ -524,10 +524,20 @@ Our documentation lives under [docs/](../README.md) and follows HyperI
 standards. Upstream's docs - `AGENTS.md`, `agent_docs/`, `MCP.md`, `LOCAL.md`,
 `DEPLOY.md`, `CONTRIBUTING.md` - are left exactly as upstream ships them.
 
-`CLAUDE.md` is the one exception: upstream ships a one-line file, and we prepend
-the fork's governing rule above it so it is unmissable at the top of every agent
-session. Upstream rarely touches that line, so the conflict is small and rerere
-replays it.
+`CLAUDE.md` and `README.md` are the two shared files - both exist upstream, both
+carry a catalogued delta, both are listed in `.fork-surface`.
+
+- **`CLAUDE.md`** - upstream ships a one-line file, and we prepend the fork's
+  governing rule above it so it is unmissable at the top of every agent session.
+  Upstream rarely touches that line, so the conflict is small and rerere replays
+  it.
+- **`README.md`** - rewritten to describe this fork rather than the upstream
+  product, plus a `## Context` section carrying the working guide the HyperI doc
+  standard specifies. Its five subheadings are fixed and checked by
+  `hyperi-ai docs context --check`, so the shape cannot drift. The section is
+  APPENDED at end of file, which is the cheapest placement we have: upstream's
+  own README edits land above it, so an upstream change and ours rarely occupy
+  the same hunk.
 
 ---
 
