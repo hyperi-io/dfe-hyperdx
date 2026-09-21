@@ -405,12 +405,12 @@ That is the mechanism worth taking from this row: **rerere's value decays with
 backlog.** A resolution recorded against a 20-commit gap is worthless at 116.
 The weekly cadence is not a nicety, it is what keeps the preimages matching.
 
-Which is why the alarm mattered. `gh issue create --label 'upstream-sync'`
-needs the label to exist and this repo never had one, so the call failed on
-every conflicted run and `|| echo "Issue may already exist."` turned the
-failure into a success. Five consecutive Mondays reported green, no issue was
-filed, and the drift number nobody was reading is the number that decides when
-re-forking beats merging.
+Which is why the alarm mattered. `gh issue create --label 'upstream-sync'` needs
+the label to exist and this repo never had one, so the call failed on every
+conflicted run and `|| echo "Issue may already exist."` turned the failure into
+a success. Five consecutive Mondays reported green, no issue was filed, and the
+drift number nobody was reading is the number that decides when re-forking beats
+merging.
 
 The step now creates the label, tolerates only an already-open issue for the
 same ref, and fails the run otherwise.
