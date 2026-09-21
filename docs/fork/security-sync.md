@@ -585,3 +585,141 @@ Revert to `blocking` once this comes back clean rather than one in two:
         https://registry.npmjs.org/-/npm/v1/security/advisories/bulk
       sleep 2
     done
+
+## 2026-09-21 - a fresh 26, and two verdicts that had gone stale under us
+
+26 open alerts: 11 high, 12 moderate, 3 low. All 26 are dismissed. None clears
+the `security/overrides.yaml` bar, so nothing is pinned and the register is
+unchanged.
+
+The interesting part is not the tally. Two entries in
+`scripts/dismiss-triaged-alerts.py` were written against advisories that have
+since been superseded, and both would have re-dismissed a new alert with a
+reason that is no longer true.
+
+### fast-uri - the range moved up past us, not the other way round
+
+The old entry read "Resolves 3.1.4, above both 2.x ranges", and when it was
+written that was correct. Four new advisories (GHSA-jqff-g426-hqxp,
+GHSA-f65p-4m7j-42xc, GHSA-5jgf-p345-68v8, GHSA-fph4-wmhf-6fwf) are all
+`< 3.1.6`. We still resolve 3.1.4, so we went from above the range to inside it
+without moving.
+
+This is the `ip-address` failure mode in reverse. That entry carries a
+RE-CHECK EVERY SYNC note because a merge could drag the version DOWN into
+range. Nobody wrote the mirror note, which is that a new advisory can raise the
+ceiling over a version that never moved. A version-comparison verdict has a
+shelf life and the advisory, not the lockfile, decides when it expires.
+
+Still not reachable, for a different reason than before:
+
+    @hyperdx/api -> @modelcontextprotocol/sdk@1.29.0 -> ajv@8.20.0 -> fast-uri@3.1.4
+
+ajv is the only parent. It uses fast-uri to resolve `$id` and `$ref` and to
+validate `format: uri`, against schemas that are our own source, and it issues
+no request of its own. All four advisories are host confusion or SSRF, which
+need a requester downstream of the parse. There is none. The fork also puts
+`requireServicePrincipal` in front of `/mcp` (`api-app.ts:137`), so the
+transport that drags ajv in is not reachable by a human user at all.
+
+### qs - the old reason was simply wrong
+
+The old entry read "No call site passes request-derived input to the sink."
+Express's own query parser is a call site, and `req.query` is request-derived:
+
+    @hyperdx/api -> express@4.22.1 -> qs@6.14.2
+    @hyperdx/api -> express@4.22.1 -> body-parser@1.20.6 -> qs@6.15.3
+
+Every request that carries a query string or an urlencoded body reaches qs
+before any of our code does. GHSA-4mjr-xmp4-gh2g (DoS via attacker-controlled
+`isBuffer`) and GHSA-x5fp-wj9c-mxmx (array-limit bypass via bracket-key comma
+parsing) are both live against that path.
+
+It is dismissed as `tolerable_risk` rather than `not_used`, which is the first
+entry in that table to use it. Both advisories are moderate, so they do not
+clear THE BAR, and the caller is an OIDC-authenticated tenant user rather than
+the open internet - HyperDX sits behind Envoy or oauth2-proxy in every DFE
+deployment. What it buys an attacker is a self-inflicted DoS on the tenant they
+already have an account on.
+
+**Watch this one.** The parents pin `~6.14.0` and `~6.15.1`, so a
+`resolutions` bump to 6.16.0 is not free - express and body-parser would each
+be off their declared range. If a HIGH lands against the same qs code path, it
+IS reachable and it WILL clear the bar, and the fix is upstream's to make.
+
+### The rest, and the shape they fall into
+
+`dependency.scope` from Dependabot got two wrong again in the same direction
+the 2026-08-26 pass warned about - it reads the lockfile, not the image.
+`@vitest/mocker` (#284) and `js-yaml` 4.1.1 (#290) are both labelled runtime
+and both are dev.
+
+| Package | Alerts | Where it actually lives |
+| --- | --- | --- |
+| smol-toml | #292 | knip, nx |
+| js-yaml | #290, #291 | 3.15.0 via jest, 4.1.1 via cosmiconfig and swagger-jsdoc |
+| brace-expansion | #267, #268 | nodemon, tsup, minimatch |
+| csv-parse | #283 | @changesets/cli via tty-table |
+| @humanfs/node | #274 | eslint |
+| colord | #289 | stylelint |
+| @vitest/mocker | #284 | @storybook/builder-webpack5 |
+| browserslist | #279, #280 | babel, webpack, next - build-time target resolution |
+| baseline-browser-mapping | #285 | browserslist, next - same |
+| postcss-selector-parser | #269, #270 | postcss-modules, postcss-nested, stylelint |
+| fflate | #277, #278 | rrweb and the session recorder, in the browser bundle |
+| @ai-sdk/provider-utils | #282 | @ai-sdk/anthropic and @ai-sdk/openai, in the image |
+| hono | #286, #287, #288 | @modelcontextprotocol/sdk, in the image |
+| fast-uri | #272, #273, #275, #276 | ajv via the MCP SDK, in the image |
+| qs | #271, #281 | express and body-parser, on the request path |
+
+Four of those need more than a parent list.
+
+**browserslist** (both high) needs an untrusted `browserslist-stats.json` fed
+to `normalizeStats`. That file is a build input in the repo. An attacker who
+can write it has already won.
+
+**fflate** ships to the browser, via rrweb and
+`@hyperdx/otel-web-session-recorder`, both imported through `@hyperdx/browser`
+(`_app.tsx:9`, `DBSearchPage.tsx:28`, `AppNav.tsx:6`, `AppNavFeedback.tsx:3`).
+The advisory is an infinite loop in `unzipSync` on a malformed ZIP64 archive. A
+session recorder compresses; nothing in the bundle parses a ZIP. Grepping
+`packages/` for `unzipSync`, `unzlibSync`, `decompressSync` and `fflate`
+returns nothing, so no code of ours reaches it either. NOT VERIFIED against the
+library source: this clone has an empty `node_modules` and no `.yarn/cache`, so
+the recorder's own call sites were not read.
+
+**@ai-sdk/provider-utils** is in the image, reached from `@ai-sdk/anthropic`
+and `@ai-sdk/openai`, both direct api dependencies, behind
+`app.use('/ai', isUserAuthenticated, routers.aiRouter)` (`api-app.ts:140`). It
+is inert in a DFE deployment: `getAIModel()` (`controllers/ai.ts:43`) throws
+unless `AI_PROVIDER` or `ANTHROPIC_API_KEY` is set, and neither appears in
+`.env.dfe-example` or `docker-compose.dfe.yml`. The advisory is uncontrolled
+resource consumption, and the router caps `text` at 10000 characters with zod
+before the SDK sees it.
+
+**hono** is in the image via the MCP SDK and is never imported.
+`api/src/mcp/app.ts:3` takes `StreamableHTTPServerTransport` and mounts it on
+an express router, so no Hono app is ever constructed. `parseBody()`, the query
+parser and `toSSG()` all belong to one. Grepping `packages/` for `from 'hono'`
+and `@hono/node-server` returns nothing.
+
+### How the closure was read this time
+
+No `yarn workspaces focus` run - this clone has no installed tree and the
+working copy belongs to another branch. The production closure was walked out
+of `yarn.lock` instead, from `packages/api/package.json`'s `dependencies` only,
+following `dependencies` only.
+
+One trap in doing it that way, worth writing down: the root `package.json`
+`resolutions` rewrite a descriptor before it reaches the lockfile, so a naive
+walk loses whole subtrees. `express` is declared `^4.19.2` by the api and the
+lockfile only carries `express@npm:^4.20.0`, because `resolutions` forces it.
+The first pass silently dropped express, body-parser and both request-path
+copies of qs - which is exactly the finding that mattered. Apply the
+name-keyed resolutions before looking a descriptor up.
+
+The walk also crosses into sibling workspaces, and a workspace lockfile entry
+lists dev dependencies alongside runtime ones, so `@hyperdx/common-utils`
+drags in jest, nodemon, tsup and stryker. That is what put js-yaml,
+browserslist, brace-expansion and a third copy of qs in the first result. Trace
+the path before believing the membership.
