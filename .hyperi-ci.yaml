@@ -9,14 +9,15 @@
 # Reference: config/defaults.yaml in hyperi-ci.
 
 language: typescript
-# audit is `warn` because npm's advisory endpoint answers about 5 POSTs in 12
-# and hangs on the rest, so a blocking gate is a coin toss; revert to the house
-# default once the loop in docs/fork/security-sync.md comes back clean. The
-# triaged advisory exclusions in .yarnrc.yml apply whenever the step does run.
+# Revert to the house default once the loop in docs/fork/security-sync.md comes
+# back clean. The triaged advisory exclusions in .yarnrc.yml apply whenever the
+# step does run.
 quality:
   enabled: true
   typescript:
-    audit: warn
+    audit:
+      mode: warn
+      reason: "npm's advisory endpoint answers about 5 POSTs in 12 and hangs on the rest, so a blocking gate is a coin toss rather than a signal; triaged exclusions live in .yarnrc.yml"
 test:
   enabled: true
   coverage: true
