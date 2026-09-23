@@ -15,9 +15,16 @@ language: typescript
 quality:
   enabled: true
   typescript:
-    audit:
-      mode: warn
-      reason: "npm's advisory endpoint answers about 5 POSTs in 12 and hangs on the rest, so a blocking gate is a coin toss rather than a signal; triaged exclusions live in .yarnrc.yml"
+    # audit is `warn` because npm's advisory endpoint answers about 5 POSTs in 12
+    # and hangs on the rest, so a blocking gate is a coin toss rather than a
+    # signal. The triaged advisory exclusions in .yarnrc.yml apply whenever the
+    # step does run.
+    #
+    # The `reason:` mapping form hyperi-ci#250 adds is MERGED but NOT RELEASED.
+    # The wheel consumers install resolves the mapping to no known mode and fails
+    # closed as blocking -- it failed dfe-engine's Quality that way on the very
+    # advisory its warn exists to tolerate. Convert once it ships.
+    audit: warn
 test:
   enabled: true
   coverage: true
