@@ -7,8 +7,8 @@
 # License:   MIT - HYPERI PTY LIMITED
 # Copyright: (c) 2026 HYPERI PTY LIMITED
 #
-# WHY: our fork carries divergence merged into `main` (see FORK.md), so an
-# upstream bump is a real 3-way merge, not a clean rebase. `git rerere` records
+# WHY: our fork carries divergence merged into `main` (see docs/fork/design.md),
+# so an upstream bump is a real 3-way merge, not a clean rebase. `git rerere` records
 # each conflict resolution once and replays it on every later merge, so recurring
 # conflicts on the same upstream files resolve themselves. This job runs that
 # merge on a schedule against a bot branch and surfaces the result -- it NEVER
@@ -294,9 +294,10 @@ jobs:
           private-key: ${{ secrets.CONTAINER_MGT_APP_PRIVATE_KEY }}
 
       # The judgement calls, drafted for the reviewer. Never a gate: reachability
-      # is a human verdict (FORK.md), and a model that could clear its own
-      # findings would rebuild the alert queue the fork's posture exists to
-      # avoid. Degrades to the mechanical facts when no key is configured.
+      # is a human verdict (docs/fork/security-sync.md), and a model that could
+      # clear its own findings would rebuild the alert queue the fork's posture
+      # exists to avoid. Degrades to the mechanical facts when no key is
+      # configured.
       - name: Draft the security triage
         if:
           steps.merge.outputs.status == 'clean' || steps.merge.outputs.status ==
@@ -336,7 +337,7 @@ jobs:
             note="Build+test GREEN -- our DFE deltas survived this upstream bump."
           else
             draft="--draft"
-            note="WARNING: build+test FAILED after rerere replay -- an upstream change broke our DFE deltas. DO NOT MERGE until fixed; the fix (new resolution) will be recorded into rr-cache for future replay. See FORK.md."
+            note="WARNING: build+test FAILED after rerere replay -- an upstream change broke our DFE deltas. DO NOT MERGE until fixed; the fix (new resolution) will be recorded into rr-cache for future replay. See docs/fork/sync-cycle.md."
           fi
           if [ "$RELAYER" != "success" ]; then
             draft="--draft"
@@ -357,7 +358,7 @@ jobs:
             echo
             echo 'Full advisory triage is in the run summary. Reachability is a HUMAN verdict -- nothing in it has been applied.'
             echo
-            echo 'Review FORK.md deltas, re-derive any drifted upstream copies, then merge.'
+            echo 'Review the deltas in docs/fork/what-we-changed.md, re-derive any drifted upstream copies, then merge.'
           } > pr-body.md
           gh pr create $draft \
             --base main --head '${{ steps.merge.outputs.branch }}' \

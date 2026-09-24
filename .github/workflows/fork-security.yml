@@ -16,9 +16,9 @@
 #                security/overrides.yaml when one is severe AND reachable.
 #
 # This is the "retain the scanning, know what is whose" half of the posture in
-# FORK.md. The muting half (renovate scoping, org security config) covers the
-# DEPENDENCY axis, where authorship is not a useful question because the whole
-# tree is upstream's regardless of who pulled it in.
+# docs/fork/design.md. The muting half (renovate scoping, org security config)
+# covers the DEPENDENCY axis, where authorship is not a useful question because
+# the whole tree is upstream's regardless of who pulled it in.
 #
 # It found real bugs in its own first run - two shell-injection sites and three
 # mutable action pins in the workflows alongside it - which is the argument for
