@@ -723,3 +723,19 @@ lists dev dependencies alongside runtime ones, so `@hyperdx/common-utils` drags
 in jest, nodemon, tsup and stryker. That is what put js-yaml, browserslist,
 brace-expansion and a third copy of qs in the first result. Trace the path
 before believing the membership.
+
+## 2026-09-25 - npm's advisory endpoint answers again, so audit is blocking again
+
+The revert loop from the 2026-09-04 entry, run at 01:13 AEST, came back clean:
+
+| Attempts | Result                       |
+| -------- | ---------------------------- |
+| 12 of 12 | 200, between 0.20s and 0.26s |
+
+The gate itself passes on this lockfile. `yarn npm audit --severity moderate`,
+the exact command hyperi-ci runs, answers `YN0001: No audit suggestions` with
+the `.yarnrc.yml` exclusions in place.
+
+So `quality.typescript.audit` comes out of `.hyperi-ci.yaml` and the house
+default, `blocking`, applies again. If the brownout returns, the loop above is
+still the test, and one success still says nothing.
