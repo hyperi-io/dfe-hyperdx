@@ -16,10 +16,9 @@ test:
   coverage: true
 build:
   enabled: false
-publish:
+release:
   enabled: true
-  target: internal
-  destinations_oss:
+  destinations:
     npm: false
   container:
     enabled: true
