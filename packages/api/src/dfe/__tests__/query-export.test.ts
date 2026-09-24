@@ -154,10 +154,16 @@ describe('POST /dfe/export-sql placeholder contract', () => {
     whereLanguage: 'sql' as const,
   };
 
-  /** The config the route handed the renderer. */
+  /**
+   * The config the route handed the renderer. Its type is a union, and only
+   * some members declare `where`, so the two fields read here are added back.
+   */
   function renderedConfig() {
     const [config] = mockRender.mock.calls[0];
-    return config;
+    return config as typeof config & {
+      where?: string;
+      whereLanguage?: string;
+    };
   }
 
   beforeEach(() => {
