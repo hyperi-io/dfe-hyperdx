@@ -16,15 +16,12 @@
 # the OTel collector are NOT bundled here (that is upstream's all-in-one target,
 # deliberately excluded). Runtime config (connections, sources, theme, auth
 # mode) comes from env at container start, not baked into the image.
-#
-# The DFE fork changes are applied in-place to the mainline source (the
-# .dfe[CHG] copies match their originals), so the standard nx build below
-# produces the DFE build with no swap step.
 
+# Both FROM digests below belong to this tag and take precedence over it, so bump all three together.
 ARG NODE_VERSION=22.22
 
 # base ############################################################################################
-FROM node:${NODE_VERSION}-alpine AS node_base
+FROM node:${NODE_VERSION}-alpine@sha256:e58326d0d441090181ac150dc2078d3e2cf6a0d42e809aebba3ef5880935ffdd AS node_base
 
 WORKDIR /app
 
@@ -79,7 +76,7 @@ RUN rm -rf node_modules && yarn workspaces focus @hyperdx/api --production
 
 
 # prod ############################################################################################
-FROM node:${NODE_VERSION}-alpine AS prod
+FROM node:${NODE_VERSION}-alpine@sha256:e58326d0d441090181ac150dc2078d3e2cf6a0d42e809aebba3ef5880935ffdd AS prod
 
 LABEL org.opencontainers.image.vendor="HyperI" \
       org.opencontainers.image.title="HyperI HyperDX Production" \
