@@ -35,6 +35,8 @@ COPY ./packages/api/jest.config.js ./packages/api/tsconfig.json ./packages/api/t
 COPY ./packages/app/jest.config.js ./packages/app/tsconfig.json ./packages/app/tsconfig.build.json ./packages/app/package.json ./packages/app/next.config.mjs ./packages/app/mdx.d.ts ./packages/app/css.d.ts ./packages/app/eslint.config.mjs ./packages/app/
 
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
+# Unpinned on purpose: Alpine keeps one build per branch, so a pinned version fails the build once a patched one replaces it.
+# hadolint ignore=DL3018
 RUN apk add --no-cache libc6-compat
 
 RUN yarn install --mode=skip-build && yarn cache clean
@@ -113,6 +115,6 @@ COPY --chown=node:node ./docker/hyperdx/refresh-env.js /etc/local/refresh-env.js
 COPY --chown=node:node ./docker/hyperdx/entry.prod.sh /etc/local/entry.sh
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:8000/health',r=>r.statusCode===200?process.exit(0):process.exit(1)).on('error',()=>process.exit(1))"
+    CMD ["node", "-e", "require('http').get('http://localhost:8000/health',r=>r.statusCode===200?process.exit(0):process.exit(1)).on('error',()=>process.exit(1))"]
 
 ENTRYPOINT ["sh", "/etc/local/entry.sh"]

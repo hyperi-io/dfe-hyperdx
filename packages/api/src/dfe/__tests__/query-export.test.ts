@@ -53,10 +53,12 @@ jest.mock('@hyperdx/common-utils/dist/queryParser', () => ({
 
 import { renderChartConfig } from '@hyperdx/common-utils/dist/core/renderChartConfig';
 import express from 'express';
+import mongoose from 'mongoose';
 import request from 'supertest';
 
 import { getConnectionById } from '@/controllers/connection';
 import { getSource } from '@/controllers/sources';
+import { makeDocument } from '@/dfe/__tests__/doubles';
 import { extractToken } from '@/dfe/middleware/jwt-verify';
 import router from '@/dfe/routers/query-export';
 import { getNonNullUserWithTeam } from '@/middleware/auth';
@@ -168,19 +170,25 @@ describe('POST /dfe/export-sql placeholder contract', () => {
 
   beforeEach(() => {
     mockUserWithTeam.mockReturnValue({
-      teamId: '507f1f77bcf86cd799439099',
-    } as unknown as ReturnType<typeof getNonNullUserWithTeam>);
-    mockGetSource.mockResolvedValue({
-      name: 'JSON Demo',
-      kind: 'log',
-      from: { databaseName: 'dfe', tableName: 'default' },
-      connection: '507f1f77bcf86cd799439022',
-    } as unknown as Awaited<ReturnType<typeof getSource>>);
-    mockGetConnection.mockResolvedValue({
-      host: 'http://clickhouse.test:8123',
-      username: 'default',
-      password: '',
-    } as unknown as Awaited<ReturnType<typeof getConnectionById>>);
+      teamId: new mongoose.Types.ObjectId('507f1f77bcf86cd799439099'),
+      userId: new mongoose.Types.ObjectId('507f1f77bcf86cd799439098'),
+      email: 'analyst@dfe.test',
+    });
+    mockGetSource.mockResolvedValue(
+      makeDocument<Awaited<ReturnType<typeof getSource>>>({
+        name: 'JSON Demo',
+        kind: 'log',
+        from: { databaseName: 'dfe', tableName: 'default' },
+        connection: '507f1f77bcf86cd799439022',
+      }),
+    );
+    mockGetConnection.mockResolvedValue(
+      makeDocument<Awaited<ReturnType<typeof getConnectionById>>>({
+        host: 'http://clickhouse.test:8123',
+        username: 'default',
+        password: '',
+      }),
+    );
   });
 
   it('replaces the real table with the engine placeholders', async () => {

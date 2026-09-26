@@ -739,3 +739,62 @@ the `.yarnrc.yml` exclusions in place.
 So `quality.typescript.audit` comes out of `.hyperi-ci.yaml` and the house
 default, `blocking`, applies again. If the brownout returns, the loop above is
 still the test, and one success still says nothing.
+
+## 2026-09-27 - image-size, and the copy Dependabot cannot see
+
+Two open alerts, both high, both image-size 2.0.2. Neither clears THE BAR, so
+nothing is pinned.
+
+| Alert | Advisory            | Parser the loop is in | Vulnerable           | Fixed |
+| ----- | ------------------- | --------------------- | -------------------- | ----- |
+| #293  | GHSA-5p2g-fcmc-qvqq | JXL and HEIF          | `>= 1.2.0, <= 2.0.2` | 2.0.3 |
+| #294  | GHSA-w3rx-r6r6-pgpr | ICNS                  | `>= 0.6.3, <= 2.0.2` | 2.0.3 |
+
+2.0.3 and 2.0.4 both shipped 2026-09-14. Upstream already has a
+`dependabot/npm_and_yarn/image-size-2.0.4` branch, so the lockfile copy moves on
+a sync.
+
+### The lockfile copy is dev only
+
+`yarn why image-size --recursive` gives one path:
+
+    @hyperdx/app -> @storybook/nextjs@10.1.4 -> image-size@2.0.2
+
+`@storybook/nextjs` is an app devDependency. Dependabot calls it `runtime`
+because it reads the lockfile, not the image - the same mistake as every earlier
+pass. After `yarn workspaces focus @hyperdx/api --production` there is no
+`image-size` directory anywhere in `node_modules`.
+
+### Next vendors the same code, and that copy is in the image
+
+`next@16.3.4` ships its own image-size at `next/dist/compiled/image-size` and
+the type detector at `next/dist/compiled/image-detector/detector.js`. Neither is
+in `yarn.lock`, so no alert will ever fire on them. Both carry the ICNS, JXL and
+HEIF parsers, and the vendored JXL parser still throws 2.0.2's
+`No codestream found in JXL container`, so it predates the fix. The standalone
+server that `Dockerfile:109` copies into the image loads them from
+`next/dist/server/image-optimizer.js`.
+
+It still does not bite. Diffing 2.0.2 against 2.0.4 puts all three loops in
+`calculate()` - the ICNS entry walk, the HEIF `ispe` walk and the JXL `jxlp`
+walk. The only loop `validate()` reaches is `findBox`, which advances by the box
+size or by 8 on a zero, so it always terminates. Next splits the two:
+
+- `detectContentType()` runs on every buffer the optimiser fetches and falls
+  back to `detector()`, which runs `validate()` only.
+- `getImageSize()` is the only caller of `calculate()`, and
+  `image-optimizer.js:1155` calls it only under `opts.isDev`, on the blur
+  placeholder sharp has just produced.
+
+So production never parses request-derived bytes with the vulnerable code, and
+`/_next/image` sits behind the OIDC gateway anyway. The vendored copy moves when
+a Next release vendors 2.0.3 or later. Check it on the next sync with:
+
+    rg -o 'No codestream found in JXL container' node_modules/next/dist/compiled/image-size/index.js
+
+### Recorded
+
+- `scripts/dismiss-triaged-alerts.py` already carried image-size as absent from
+  the image. Its reason now names the parent.
+- Dismissing #293 and #294 is the same `not_used` verdict. It needs repo admin,
+  so it is not done here.

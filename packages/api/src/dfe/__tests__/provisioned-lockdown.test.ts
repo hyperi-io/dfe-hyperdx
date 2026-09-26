@@ -58,7 +58,7 @@ function findsProvisioned(doc: { name: string; team: string } | null) {
 function call(method: string, path: string, dfeRole?: string) {
   const req = { method, path, dfeRole } as Request;
   const json = jest.fn();
-  const listeners: Record<string, () => void> = {};
+  const listeners = new Map<string, () => void>();
   const res = {
     statusCode: 200,
     status: jest.fn(function (this: Response, code: number) {
@@ -66,13 +66,13 @@ function call(method: string, path: string, dfeRole?: string) {
       return { json };
     }),
     on: jest.fn((event: string, handler: () => void) => {
-      listeners[event] = handler;
+      listeners.set(event, handler);
     }),
   } as unknown as Response;
   const next = jest.fn() as NextFunction;
   const finish = (statusCode = 204) => {
     (res as unknown as { statusCode: number }).statusCode = statusCode;
-    listeners.finish?.();
+    listeners.get('finish')?.();
   };
   return { req, res, next, json, finish };
 }
