@@ -17,8 +17,10 @@
     "not planned). includePaths restricts EXTRACTION instead, so there is no",
     "disabled dependency to mis-filter and no rule to regress.",
     "",
-    "WHAT IS ON. The GitHub Actions pinned by SHA in our own five workflows, and",
-    "the two compose files we added. The org preset supplies the rest: the",
+    "WHAT IS ON. The GitHub Actions pinned by SHA in our own five workflows, the",
+    "two compose files we added, and the node base of the root Dockerfile that",
+    "builds the released image. The Dockerfiles under docker/ and packages/ are",
+    "upstream's and stay out. The org preset supplies the rest: the",
     "fix(deps): prefix so a bump actually ships, digest pinning, the 7-day",
     "cooldown with its vulnerability exemption, and the grouped-pair rules.",
     "",
@@ -40,9 +42,10 @@
     ".github/workflows/fork-surface.yml",
     ".github/workflows/fork-security.yml",
     "docker-compose.dfe.yml",
-    "docker-compose.dfe.dev.yml"
+    "docker-compose.dfe.dev.yml",
+    "Dockerfile"
   ],
-  "enabledManagers": ["github-actions", "docker-compose"],
+  "enabledManagers": ["github-actions", "docker-compose", "dockerfile"],
   "packageRules": [
     {
       "description": "ClickHouse is pinned to what this fork's dev and CI stacks actually run (26.5), which is ABOVE the org preset's <26.4 LTS ceiling. The ceiling exists because dfe-infra runs 26.3.13.31 and dfe-engine writes DDL against it. Constrained to the 26.5 line rather than left open, so patches still flow and a further major cannot arrive unnoticed. Resolve the split deliberately - either this fork moves to the estate's LTS line or the estate moves up - and delete this rule when it is resolved.",
@@ -55,7 +58,7 @@
     }
   ],
   "vulnerabilityAlerts": {
-    "description": "On, but not the primary net. Nothing outside includePaths is extracted, so this only ever covers our own two compose files and five workflows. Upstream's tree is covered by Dependabot alerts plus security/overrides.yaml.",
+    "description": "On, but not the primary net. Nothing outside includePaths is extracted, so this only ever covers our own two compose files, five workflows and root Dockerfile. Upstream's tree is covered by Dependabot alerts plus security/overrides.yaml.",
     "enabled": true
   },
   "osvVulnerabilityAlerts": true,
