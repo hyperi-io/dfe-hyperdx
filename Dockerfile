@@ -17,11 +17,11 @@
 # deliberately excluded). Runtime config (connections, sources, theme, auth
 # mode) comes from env at container start, not baked into the image.
 
-# Both FROM digests below belong to this tag and take precedence over it, so bump all three together.
-ARG NODE_VERSION=22.22
+# Tag and digest travel as one value, so a bump or a --build-arg override replaces both.
+ARG NODE_IMAGE=node:22.23-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
 
 # base ############################################################################################
-FROM node:${NODE_VERSION}-alpine@sha256:e58326d0d441090181ac150dc2078d3e2cf6a0d42e809aebba3ef5880935ffdd AS node_base
+FROM ${NODE_IMAGE} AS node_base
 
 WORKDIR /app
 
@@ -76,7 +76,7 @@ RUN rm -rf node_modules && yarn workspaces focus @hyperdx/api --production
 
 
 # prod ############################################################################################
-FROM node:${NODE_VERSION}-alpine@sha256:e58326d0d441090181ac150dc2078d3e2cf6a0d42e809aebba3ef5880935ffdd AS prod
+FROM ${NODE_IMAGE} AS prod
 
 LABEL org.opencontainers.image.vendor="HyperI" \
       org.opencontainers.image.title="HyperI HyperDX Production" \
