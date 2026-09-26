@@ -208,6 +208,12 @@ export async function engineJwtMiddleware(
     return next();
   }
 
+  // A session still on an issued password has no groups and would otherwise land in the default team.
+  if (payload.password_change_required === true) {
+    logger.warn({ email }, 'DFE: engine JWT is pending a password change');
+    return next();
+  }
+
   try {
     const groups = extractGroups(payload);
     const teamName = groups[0] || dfeConfig.DFE_AUTH_DEFAULT_TEAM || 'default';

@@ -304,6 +304,29 @@ describe('engineJwtMiddleware', () => {
       await engineJwtMiddleware(req, res, next as NextFunction);
       expectFellThrough(req, next);
     });
+
+    it('with a session still on an issued password', async () => {
+      const token = await sign({
+        sub: USER.email,
+        groups: [],
+        password_change_required: true,
+      });
+      const req = makeReq({ authorization: `Bearer ${token}` });
+      const next = jest.fn();
+      await engineJwtMiddleware(req, res, next as NextFunction);
+      expectFellThrough(req, next);
+    });
+  });
+
+  it('logs in a session whose password change is not pending', async () => {
+    const token = await sign({
+      sub: USER.email,
+      groups: ['sre'],
+      password_change_required: false,
+    });
+    const req = makeReq({ authorization: `Bearer ${token}` });
+    await engineJwtMiddleware(req, res, jest.fn() as NextFunction);
+    expect(req.login).toHaveBeenCalled();
   });
 
   it('pins ES384 and the engine issuer in the verify options', async () => {
