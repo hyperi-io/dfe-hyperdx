@@ -772,7 +772,7 @@ the type detector at `next/dist/compiled/image-detector/detector.js`. Neither is
 in `yarn.lock`, so no alert will ever fire on them. Both carry the ICNS, JXL and
 HEIF parsers, and the vendored JXL parser still throws 2.0.2's
 `No codestream found in JXL container`, so it predates the fix. The standalone
-server that `Dockerfile:109` copies into the image loads them from
+server that `Dockerfile:106` copies into the image loads them from
 `next/dist/server/image-optimizer.js`.
 
 It still does not bite. Diffing 2.0.2 against 2.0.4 puts all three loops in

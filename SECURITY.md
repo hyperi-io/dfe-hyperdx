@@ -19,8 +19,8 @@ If the doc already covers the advisory you found, there is nothing to file.
 
 ## Why a scanner over-reports here
 
-The shipped image is not the repo. `docker/hyperdx/Dockerfile` builds the
-runtime with:
+The shipped image is not the repo. The root `Dockerfile` builds the runtime
+with:
 
 ```
 yarn workspaces focus @hyperdx/api --production
