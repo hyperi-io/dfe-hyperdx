@@ -11,6 +11,9 @@
 language: typescript
 quality:
   enabled: true
+  exclude_paths:
+    # Spike records name the files they proposed at the time, not files the repo holds.
+    - .hyperi/spikes
 test:
   enabled: true
   coverage: true

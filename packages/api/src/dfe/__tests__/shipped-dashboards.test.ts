@@ -39,8 +39,6 @@ jest.mock('@/dfe/models/dashboard-tombstone', () => ({
   suppressedDashboardNames: jest.fn().mockResolvedValue(new Set<string>()),
 }));
 
-import fs from 'fs';
-import os from 'os';
 import path from 'path';
 
 import { suppressedDashboardNames } from '@/dfe/models/dashboard-tombstone';
@@ -52,37 +50,8 @@ const mockSuppressed = jest.mocked(suppressedDashboardNames);
 
 const TEAM = '507f1f77bcf86cd799439099';
 
-const TILE = {
-  id: '507f1f77bcf86cd799439011',
-  x: 1,
-  y: 1,
-  w: 1,
-  h: 1,
-  config: {
-    name: 'Test Chart',
-    source: 'test-source',
-    displayType: 'line',
-    select: [
-      {
-        aggFn: 'count',
-        aggCondition: '',
-        aggConditionLanguage: 'lucene',
-        valueExpression: '',
-      },
-    ],
-    where: '',
-    whereLanguage: 'lucene',
-  },
-};
-
-let tmpDir: string;
-
-function writeDashboard(name: string) {
-  fs.writeFileSync(
-    path.join(tmpDir, `${name.toLowerCase().replace(/\s+/g, '-')}.json`),
-    JSON.stringify({ name, tiles: [TILE], tags: [] }),
-  );
-}
+// Two shipped dashboards, "Deleted One" and "Kept One".
+const SHIPPED_DIR = path.join(__dirname, 'fixtures', 'shipped-dashboards');
 
 function provisionedNames(): string[] {
   return mockFindOneAndUpdate.mock.calls
@@ -94,47 +63,35 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockSuppressed.mockResolvedValue(new Set<string>());
   mockFindOneAndUpdate.mockResolvedValue(null);
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dfe-shipped-'));
-});
-
-afterEach(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
 describe('syncDashboards - tombstones', () => {
   test('a tombstoned name is skipped, the rest still provision', async () => {
-    writeDashboard('Deleted One');
-    writeDashboard('Kept One');
     mockSuppressed.mockResolvedValue(new Set(['Deleted One']));
 
-    await syncDashboards(TEAM, tmpDir);
+    await syncDashboards(TEAM, SHIPPED_DIR);
 
     expect(provisionedNames()).toEqual(['Kept One']);
   });
 
   test('with no tombstone every shipped dashboard is provisioned', async () => {
-    writeDashboard('Kept One');
+    await syncDashboards(TEAM, SHIPPED_DIR);
 
-    await syncDashboards(TEAM, tmpDir);
-
-    expect(provisionedNames()).toEqual(['Kept One']);
+    expect(provisionedNames().sort()).toEqual(['Deleted One', 'Kept One']);
   });
 
   test('the tombstone lookup is scoped to the team being synced', async () => {
-    writeDashboard('Kept One');
-
-    await syncDashboards(TEAM, tmpDir);
+    await syncDashboards(TEAM, SHIPPED_DIR);
 
     expect(mockSuppressed).toHaveBeenCalledWith(TEAM);
   });
 
   test('a newer shipped version of a deleted dashboard stays deleted', async () => {
-    writeDashboard('Deleted One');
     mockSuppressed.mockResolvedValue(new Set(['Deleted One']));
 
-    await syncDashboards(TEAM, tmpDir);
-    await syncDashboards(TEAM, tmpDir);
+    await syncDashboards(TEAM, SHIPPED_DIR);
+    await syncDashboards(TEAM, SHIPPED_DIR);
 
-    expect(mockFindOneAndUpdate).not.toHaveBeenCalled();
+    expect(provisionedNames()).toEqual(['Kept One', 'Kept One']);
   });
 });

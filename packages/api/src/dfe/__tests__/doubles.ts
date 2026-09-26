@@ -34,3 +34,11 @@ export function makeResponse(fields: Partial<Response> = {}): Response {
   r.sendStatus ??= jest.fn(() => r as Response);
   return r as Response;
 }
+
+/**
+ * A plain fixture standing in for a controller's resolved mongoose document,
+ * whose 50-plus Document methods no fixture can satisfy structurally.
+ */
+export function makeDocument<T>(fields: object): T {
+  return fields as T;
+}

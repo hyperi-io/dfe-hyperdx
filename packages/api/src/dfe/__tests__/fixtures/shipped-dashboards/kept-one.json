@@ -1,0 +1,28 @@
+{
+  "name": "Kept One",
+  "tiles": [
+    {
+      "id": "507f1f77bcf86cd799439011",
+      "x": 1,
+      "y": 1,
+      "w": 1,
+      "h": 1,
+      "config": {
+        "name": "Test Chart",
+        "source": "test-source",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "aggCondition": "",
+            "aggConditionLanguage": "lucene",
+            "valueExpression": ""
+          }
+        ],
+        "where": "",
+        "whereLanguage": "lucene"
+      }
+    }
+  ],
+  "tags": []
+}

@@ -49,6 +49,7 @@ router.post(
       const cleared = await clearDashboardTombstones(team);
 
       const dir = process.env.DASHBOARD_PROVISIONER_DIR;
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- operator config from the environment, never request input
       const reprovisioned = Boolean(dir && fs.existsSync(dir));
       if (dir && reprovisioned) {
         await syncDashboards(

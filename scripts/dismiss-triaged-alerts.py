@@ -64,7 +64,10 @@ VERDICTS: dict[str, tuple[str, str]] = {
     ),
     "postcss": ("not_used", ABSENT),
     "nanoid": ("not_used", ABSENT),
-    "image-size": ("not_used", ABSENT),
+    "image-size": (
+        "not_used",
+        f"{ABSENT} Dev only - @storybook/nextjs is its one parent.",
+    ),
     "brace-expansion": ("not_used", ABSENT),
     "tmp": ("not_used", ABSENT),
     "nx": ("not_used", ABSENT),
