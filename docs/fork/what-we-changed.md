@@ -409,6 +409,22 @@ header check is what holds when a deployment authenticates some other way.
   flag is the RBAC mechanism for the DFE set: a tenant team holds no otel
   source, so the platform dashboards never resolve for it. Content is
   dfe-engine's, mounted in by dfe-infra and dfe-docker.
+- **The preset dashboards are replaced by a DFE throughput figure.** Upstream's
+  list page opens on Services, ClickHouse and Kubernetes links, and this fork
+  ships none of those pages, so all three were 404s.
+  `packages/app/src/dfe/components/ThroughputHeadline/` shows events written to
+  ClickHouse per second, averaged over the last 15 minutes, with a per-minute
+  sparkline. `dfe/throughput.ts` reads the loader's cumulative
+  `rows_inserted_total` from the `otel_metrics` source through `increase`,
+  upstream's reset-aware counter path, summed across every loader. A team
+  without that source, which is every tenant team, gets nothing rendered.
+
+  **`DashboardsListPage.tsx` (catalogued)** loses `PRESET_DASHBOARDS`, the
+  import only it used and the block that rendered it, and gains one import and
+  one element. `dfe/__tests__/forkDeltas.test.ts` pins the swap. Upstream's
+  `tests/e2e/features/dashboards-list.spec.ts` still asserts the preset links
+  and is left untouched, like the specs for the three pages this fork does not
+  ship.
 
 ## Config and bootstrap
 

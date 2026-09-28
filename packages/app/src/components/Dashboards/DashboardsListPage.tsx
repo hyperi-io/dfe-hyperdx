@@ -36,7 +36,6 @@ import { FavoriteButton } from '@/components/FavoriteButton';
 import { ListingCard } from '@/components/ListingCard';
 import { ListingRow } from '@/components/ListingListRow';
 import { PageHeader } from '@/components/PageHeader';
-import { IS_K8S_DASHBOARD_ENABLED } from '@/config';
 import {
   type Dashboard,
   useCreateDashboard,
@@ -44,6 +43,7 @@ import {
   useDeleteDashboard,
 } from '@/dashboard';
 import RestoreShippedDashboards from '@/dfe/components/RestoreShippedDashboards';
+import DfeThroughputHeadline from '@/dfe/components/ThroughputHeadline';
 import { useFavorites } from '@/favorites';
 import { withAppNav } from '@/layout';
 import { useBrandDisplayName } from '@/theme/ThemeProvider';
@@ -53,28 +53,6 @@ import { groupByTags } from '@/utils/groupByTags';
 function getDashboardAlerts(tiles: Dashboard['tiles']) {
   return tiles.map(t => t.config.alert).filter(a => a != null);
 }
-
-const PRESET_DASHBOARDS = [
-  {
-    name: 'Services',
-    href: '/services',
-    description: 'Monitor HTTP endpoints, latency, and error rates',
-  },
-  {
-    name: 'ClickHouse',
-    href: '/clickhouse',
-    description: 'ClickHouse cluster health and query performance',
-  },
-  ...(IS_K8S_DASHBOARD_ENABLED
-    ? [
-        {
-          name: 'Kubernetes',
-          href: '/kubernetes',
-          description: 'Kubernetes cluster monitoring and pod health',
-        },
-      ]
-    : []),
-];
 
 export default function DashboardsListPage() {
   const brandName = useBrandDisplayName();
@@ -192,14 +170,7 @@ export default function DashboardsListPage() {
         w="100%"
         style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
       >
-        <Text fw={500} size="sm" c="dimmed" mb="sm">
-          Preset Dashboards
-        </Text>
-        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} mb="sm">
-          {PRESET_DASHBOARDS.map(p => (
-            <ListingCard key={p.href} {...p} />
-          ))}
-        </SimpleGrid>
+        <DfeThroughputHeadline />
         <Text ta="right" mb="sm">
           <Anchor component={Link} href="/dashboards/templates" fz="sm">
             Browse dashboard templates &rarr;
