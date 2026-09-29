@@ -117,6 +117,19 @@ describe('DashboardsListPage.tsx - restoring the shipped set', () => {
   });
 });
 
+describe('DashboardsListPage.tsx - throughput in place of the presets', () => {
+  const page = read('src/components/Dashboards/DashboardsListPage.tsx');
+
+  it('mounts the throughput headline', () => {
+    expect(page).toContain('<DfeThroughputHeadline />');
+  });
+
+  it('carries no preset links, whose routes this fork does not ship', () => {
+    expect(page).not.toContain('PRESET_DASHBOARDS');
+    expect(page).not.toMatch(/href: '\/(services|clickhouse|kubernetes)'/);
+  });
+});
+
 describe('layout.tsx and AppNav.tsx - chromeless embed', () => {
   it('renders no hyperdx nav when embedded, so dfe-ui owns the only nav', () => {
     expect(read('src/layout.tsx')).toContain('isEmbedChrome');
