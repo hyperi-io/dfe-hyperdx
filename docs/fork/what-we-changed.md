@@ -176,7 +176,16 @@ header check is what holds when a deployment authenticates some other way.
   a NEW team also runs `syncDashboards` for it when `DASHBOARD_PROVISIONER_DIR`
   is set: the provisioner cron fires once a minute with no run at start, so the
   page's first `GET /dashboards`, a second after the team is created, saw `[]`
-  and the SPA cached it until a reload.
+  and the SPA cached it until a reload. Seeding runs on any member's request
+  until one lands, not only on the request that created the team, because that
+  request can carry a token the engine gives no connection for yet (its
+  ClickHouse reader not yet minted, or the engine unreachable).
+  `dfe/models/team-seed.ts` holds one claim per team, atomic across replicas, so
+  a login's parallel requests never write two connections. A failed attempt is
+  retried once the 30-second claim lapses, and a seeded team is remembered in
+  process, so it costs no query per request. A team that already holds any
+  connection is never given a second, since that would hand its members another
+  org's rows.
 - `packages/api/src/dfe/routers/dfe-sources.ts` +
   `packages/api/src/dfe/controllers/dfe-sources.ts` -
   `PUT`/`DELETE`/`GET /dfe/sources`, engine-only. The team-scoped `/sources`
@@ -421,7 +430,11 @@ header check is what holds when a deployment authenticates some other way.
   `DASHBOARD_PROVISIONER_REQUIRE_REFS=true` skips the dashboard instead. That
   flag is the RBAC mechanism for the DFE set: a tenant team holds no otel
   source, so the platform dashboards never resolve for it. Content is
-  dfe-engine's, mounted in by dfe-infra and dfe-docker.
+  dfe-engine's, mounted in by dfe-infra and dfe-docker. Under that flag a skip
+  logs at debug, not warn: the provisioner runs every minute over every team, so
+  each team without the platform sources logged one warning per platform
+  dashboard per minute. An unresolved reference written through with dead tiles
+  still warns.
 - **The preset dashboards are replaced by a DFE throughput figure.** Upstream's
   list page opens on Services, ClickHouse and Kubernetes links, and this fork
   ships none of those pages, so all three were 404s.

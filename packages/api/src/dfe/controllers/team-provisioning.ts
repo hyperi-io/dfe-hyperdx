@@ -3,21 +3,10 @@
 // This is a NEW controller — it does not modify any upstream HyperDX files.
 
 import * as dfeConfig from '@/dfe/config';
+import { isDuplicateKey } from '@/dfe/models/duplicate-key';
 import Team from '@/models/team';
 import { setupTeamDefaults } from '@/setupDefaults';
 import logger from '@/utils/logger';
-
-// MongoDB duplicate-key error code, raised when two concurrent inserts collide
-// on the unique `name` index. FerretDB surfaces the same code.
-const DUPLICATE_KEY = 11000;
-
-function isDuplicateKey(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    (err as { code?: number }).code === DUPLICATE_KEY
-  );
-}
 
 // Team name is the OIDC group / org identity here, so it must be unique. The
 // constraint is what makes find-or-create race-safe (a concurrent create

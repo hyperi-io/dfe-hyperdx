@@ -41,7 +41,7 @@ jest.mock('@/dfe/controllers/user-provisioning', () => ({
 }));
 
 jest.mock('@/dfe/controllers/org-connection', () => ({
-  ensureOrgConnection: jest.fn(),
+  seedTeam: jest.fn(),
   engineOrigin: () => 'https://engine.example.test',
 }));
 
@@ -75,6 +75,10 @@ jest.mock('@/dfe/middleware/oidc-identity', () => ({
 
 const { placeUserOnTeam } = jest.requireMock<{ placeUserOnTeam: jest.Mock }>(
   '@/dfe/controllers/user-provisioning',
+);
+
+const { seedTeam } = jest.requireMock<{ seedTeam: jest.Mock }>(
+  '@/dfe/controllers/org-connection',
 );
 
 // The config module exports consts, so a test that varies them has to write
@@ -147,6 +151,7 @@ const expectRefused = (
 ) => {
   expect(outcome.reply.sendStatus).toHaveBeenCalledWith(status);
   expect(findOrCreateTeamByName).not.toHaveBeenCalled();
+  expect(seedTeam).not.toHaveBeenCalled();
   expect(outcome.req.login).not.toHaveBeenCalled();
   expect(outcome.next).not.toHaveBeenCalled();
 };
@@ -310,6 +315,37 @@ describe('engineJwtMiddleware', () => {
       await run({ sub: USER.email, groups: ['sre'] });
 
       expect(placeUserOnTeam).toHaveBeenCalledWith(USER, TEAM._id);
+    });
+  });
+
+  describe('seeding is not tied to the request that created the team', () => {
+    // A team created by a request the engine could not answer, or by the
+    // engine's own service principal, would otherwise stay empty for good.
+    it('seeds a team that already existed', async () => {
+      const { token } = await run({ sub: USER.email, groups: ['sre'] });
+
+      expect(seedTeam).toHaveBeenCalledWith(token, TEAM._id);
+    });
+
+    it('seeds a team this request created', async () => {
+      (findOrCreateTeamByName as jest.Mock).mockResolvedValue({
+        team: TEAM,
+        created: true,
+      });
+
+      const { token } = await run({ sub: USER.email, groups: ['sre'] });
+
+      expect(seedTeam).toHaveBeenCalledWith(token, TEAM._id);
+    });
+
+    it('seeds after the user is on the team, before the login completes', async () => {
+      const { req } = await run({ sub: USER.email, groups: ['sre'] });
+
+      const seeded = seedTeam.mock.invocationCallOrder[0];
+      expect(placeUserOnTeam.mock.invocationCallOrder[0]).toBeLessThan(seeded);
+      expect(
+        (req.login as jest.Mock).mock.invocationCallOrder[0],
+      ).toBeGreaterThan(seeded);
     });
   });
 
@@ -522,6 +558,8 @@ describe('engineJwtMiddleware', () => {
         expect(next).toHaveBeenCalledWith();
         // The service identity binds no account, so there is no session to ask about.
         expect(global.fetch).not.toHaveBeenCalled();
+        // Nor an org connection: the engine answers it none.
+        expect(seedTeam).not.toHaveBeenCalled();
       },
     );
 
