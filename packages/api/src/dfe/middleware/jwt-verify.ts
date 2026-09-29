@@ -21,7 +21,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 import * as dfeConfig from '@/dfe/config';
 import { resolveEngineSession } from '@/dfe/controllers/engine-session';
-import { ensureOrgConnection } from '@/dfe/controllers/org-connection';
+import { seedTeam } from '@/dfe/controllers/org-connection';
 import { findOrCreateTeamByName } from '@/dfe/controllers/team-provisioning';
 import {
   findOrCreateUserFromOIDC,
@@ -222,18 +222,11 @@ export async function engineJwtMiddleware(
     // Minted from the account's grants at login or refresh; role-claim gates on it.
     req.dfeRole = typeof payload.role === 'string' ? payload.role : undefined;
 
-    const { team, created: teamCreated } = await findOrCreateTeamByName(
-      session.team,
-    );
+    const { team } = await findOrCreateTeamByName(session.team);
     const { user } = await findOrCreateUserFromOIDC(email, team._id);
     await placeUserOnTeam(user, team._id);
-    // Seed the caller's OWN org connection only on the request that created the
-    // team. First login fires team + sources + connections at once, so gating on
-    // the unique creator stops them racing duplicate connections onto one team.
     // Non-fatal - a login is never refused for want of a connection.
-    if (teamCreated) {
-      await ensureOrgConnection(token, String(team._id));
-    }
+    await seedTeam(token, String(team._id));
 
     // req.login() populates req.user and makes req.isAuthenticated() true.
     req.login(user, { session: false }, err => {

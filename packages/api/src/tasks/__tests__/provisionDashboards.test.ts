@@ -22,6 +22,7 @@ jest.mock('@/utils/logger', () => ({
 import type { DashboardWithoutId } from '@hyperdx/common-utils/dist/types';
 
 import { resolveDashboardRefs } from '@/tasks/provisionDashboards';
+import logger from '@/utils/logger';
 
 const SOURCES = [
   { id: '507f1f77bcf86cd799439011', name: 'default' },
@@ -149,6 +150,31 @@ describe('resolveDashboardRefs', () => {
     );
 
     expect(resolved).toBeUndefined();
+  });
+
+  test('a requireResolvable skip is not a warning', () => {
+    // Every tick skips the platform dashboards for every team without the
+    // platform sources, so a warning here floods the log once a minute.
+    jest.mocked(logger.warn).mockClear();
+
+    resolveDashboardRefs(dashboard([{ source: 'otel_metrics' }]), [], [], true);
+
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({ unresolved: 'source:otel_metrics' }),
+      expect.any(String),
+    );
+  });
+
+  test('an unresolved ref written with dead tiles is still a warning', () => {
+    jest.mocked(logger.warn).mockClear();
+
+    resolveDashboardRefs(dashboard([{ source: 'nope' }]), SOURCES, CONNECTIONS);
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ unresolved: 'source:nope' }),
+      expect.any(String),
+    );
   });
 
   test('requireResolvable keeps a dashboard whose refs all resolve', () => {

@@ -43,13 +43,23 @@ jest.mock('@/dfe/controllers/dfe-sources', () => ({
   seedDfeSources: jest.fn(),
 }));
 
+jest.mock('@/dfe/models/team-seed', () => ({
+  claimTeamSeed: jest.fn(),
+  markTeamSeeded: jest.fn(),
+}));
+
 import {
   createConnection,
   getConnectionsByTeam,
 } from '@/controllers/connection';
 import { createSource, getSources } from '@/controllers/sources';
 import { seedDfeSources } from '@/dfe/controllers/dfe-sources';
-import { ensureOrgConnection } from '@/dfe/controllers/org-connection';
+import {
+  clearTeamSeedCache,
+  ensureOrgConnection,
+  seedTeam,
+} from '@/dfe/controllers/org-connection';
+import { claimTeamSeed, markTeamSeeded } from '@/dfe/models/team-seed';
 import { syncDashboards } from '@/tasks/provisionDashboards';
 import logger from '@/utils/logger';
 
@@ -59,6 +69,8 @@ const mockSources = getSources as jest.Mock;
 const mockCreateSource = createSource as jest.Mock;
 const mockSyncDashboards = syncDashboards as jest.Mock;
 const mockSeedDfeSources = seedDfeSources as jest.Mock;
+const mockClaim = claimTeamSeed as jest.Mock;
+const mockMarkSeeded = markTeamSeeded as jest.Mock;
 const mockWarn = logger.warn as jest.Mock;
 
 const ORG_CONN = {
@@ -200,17 +212,38 @@ describe('ensureOrgConnection', () => {
   test('is a no-op when the team already has a connection', async () => {
     mockConns.mockResolvedValue([{ _id: 'existing' }]);
 
-    await ensureOrgConnection('tok', 'team-1');
+    await expect(ensureOrgConnection('tok', 'team-1')).resolves.toBe(true);
 
     expect(global.fetch).not.toHaveBeenCalled();
     expect(mockCreateConn).not.toHaveBeenCalled();
+  });
+
+  test("never adds a caller's org connection beside another org's", async () => {
+    // Two members of one team can resolve to different orgs; a second
+    // connection would hand every member the other org's rows.
+    mockConns.mockResolvedValue([{ _id: 'acme-conn', name: 'acme' }]);
+    okFetch(PLATFORM_CONN);
+
+    await expect(ensureOrgConnection('tok', 'team-1')).resolves.toBe(true);
+
+    expect(mockCreateConn).not.toHaveBeenCalled();
+    expect(mockCreateSource).not.toHaveBeenCalled();
+  });
+
+  test('reports a seeded team as done', async () => {
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([]);
+    okFetch(ORG_CONN);
+
+    await expect(ensureOrgConnection('tok', 'team-1')).resolves.toBe(true);
   });
 
   test('creates nothing when the engine refuses (non-fatal)', async () => {
     mockConns.mockResolvedValue([]);
     (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 403 });
 
-    await ensureOrgConnection('tok', 'team-1');
+    await expect(ensureOrgConnection('tok', 'team-1')).resolves.toBe(false);
 
     expect(mockCreateConn).not.toHaveBeenCalled();
     expect(mockCreateSource).not.toHaveBeenCalled();
@@ -304,7 +337,7 @@ describe('ensureOrgConnection', () => {
     const boom = new Error('dashboard dir unreadable');
     mockSyncDashboards.mockRejectedValue(boom);
 
-    await expect(ensureOrgConnection('tok', 'team-1')).resolves.toBeUndefined();
+    await expect(ensureOrgConnection('tok', 'team-1')).resolves.toBe(false);
 
     expect(mockCreateConn).toHaveBeenCalledTimes(1);
     expect(mockCreateSource).toHaveBeenCalledTimes(2);
@@ -330,7 +363,7 @@ describe('ensureOrgConnection', () => {
   test('swallows a thrown controller error so login is never blocked', async () => {
     mockConns.mockRejectedValue(new Error('db down'));
 
-    await expect(ensureOrgConnection('tok', 'team-1')).resolves.toBeUndefined();
+    await expect(ensureOrgConnection('tok', 'team-1')).resolves.toBe(false);
   });
 
   test('a team created later gets the sources the engine already registered', async () => {
@@ -361,5 +394,111 @@ describe('ensureOrgConnection', () => {
     await ensureOrgConnection('tok', 'team-1');
 
     expect(mockSeedDfeSources).not.toHaveBeenCalled();
+  });
+});
+
+describe('seedTeam', () => {
+  const LEASE_MS = 30_000;
+  let now: number;
+
+  beforeEach(() => {
+    clearTeamSeedCache();
+    now = 1_000_000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([]);
+  });
+
+  test('a team whose first attempt was refused is seeded by a later request', async () => {
+    mockClaim.mockResolvedValue('claimed');
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+    });
+
+    await seedTeam('first', 'team-1');
+    expect(mockCreateConn).not.toHaveBeenCalled();
+    expect(mockMarkSeeded).not.toHaveBeenCalled();
+
+    now += LEASE_MS;
+    okFetch(ORG_CONN);
+    await seedTeam('later', 'team-1');
+
+    expect(mockCreateConn).toHaveBeenCalledWith(
+      'team-1',
+      expect.objectContaining({ username: 'dfe_org_acme' }),
+    );
+    expect(mockMarkSeeded).toHaveBeenCalledWith('team-1');
+  });
+
+  test('a seeded team costs no query on later requests', async () => {
+    mockClaim.mockResolvedValue('claimed');
+    okFetch(ORG_CONN);
+
+    await seedTeam('tok', 'team-1');
+    mockClaim.mockClear();
+    mockConns.mockClear();
+    (global.fetch as jest.Mock).mockClear();
+
+    await seedTeam('tok', 'team-1');
+
+    expect(mockClaim).not.toHaveBeenCalled();
+    expect(mockConns).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('an unseeded team is retried at most once per lease', async () => {
+    mockClaim.mockResolvedValue('claimed');
+    (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 403 });
+
+    await seedTeam('tok', 'team-1');
+    now += LEASE_MS - 1;
+    await seedTeam('tok', 'team-1');
+
+    expect(mockClaim).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test('a team another request is seeding is left to it', async () => {
+    mockClaim.mockResolvedValue('busy');
+
+    await seedTeam('tok', 'team-1');
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockCreateConn).not.toHaveBeenCalled();
+  });
+
+  test('a team seeded elsewhere is remembered without asking the engine', async () => {
+    mockClaim.mockResolvedValue('seeded');
+
+    await seedTeam('tok', 'team-1');
+    await seedTeam('tok', 'team-1');
+
+    expect(mockClaim).toHaveBeenCalledTimes(1);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockMarkSeeded).not.toHaveBeenCalled();
+  });
+
+  test('a team already holding a connection is marked seeded', async () => {
+    mockClaim.mockResolvedValue('claimed');
+    mockConns.mockResolvedValue([{ _id: 'existing', name: 'acme' }]);
+
+    await seedTeam('tok', 'team-1');
+
+    expect(mockMarkSeeded).toHaveBeenCalledWith('team-1');
+    expect(mockCreateConn).not.toHaveBeenCalled();
+  });
+
+  test('a claim failure is logged and never blocks the login', async () => {
+    const boom = new Error('ferretdb down');
+    mockClaim.mockRejectedValue(boom);
+
+    await expect(seedTeam('tok', 'team-1')).resolves.toBeUndefined();
+
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ err: boom, teamId: 'team-1' }),
+      'DFE: team seeding failed (non-fatal)',
+    );
   });
 });

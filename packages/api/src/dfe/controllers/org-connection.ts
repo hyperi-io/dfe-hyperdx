@@ -21,6 +21,7 @@ import {
 import { createSource, getSources } from '@/controllers/sources';
 import * as dfeConfig from '@/dfe/config';
 import { seedDfeSources } from '@/dfe/controllers/dfe-sources';
+import { claimTeamSeed, markTeamSeeded } from '@/dfe/models/team-seed';
 import { syncDashboards } from '@/tasks/provisionDashboards';
 import logger from '@/utils/logger';
 
@@ -271,20 +272,25 @@ function clickhouseSystemSource(connectionId: string) {
  * Idempotent and non-fatal: a team that already has a connection is left alone
  * (the first user seeds it, the rest reuse), and any failure is logged and
  * swallowed so a HyperDX login is never blocked on the engine being reachable.
+ *
+ * Resolves true once the team holds a connection, false when this attempt could
+ * not give it one and a later request should try again.
  */
 export async function ensureOrgConnection(
   token: string,
   teamId: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
+    // Any connection, not only this caller's: a second org's connection on a
+    // team would hand its members that org's rows.
     const existing = await getConnectionsByTeam(teamId);
     if (existing.length > 0) {
-      return;
+      return true;
     }
 
     const material = await fetchOrgConnection(token);
     if (!material) {
-      return;
+      return false;
     }
 
     const conn = await createConnection(teamId, {
@@ -338,10 +344,62 @@ export async function ensureOrgConnection(
         );
       }
     }
+    return true;
   } catch (err) {
     logger.warn(
       { err, teamId },
       'DFE: org connection provisioning failed (non-fatal)',
     );
+    return false;
   }
+}
+
+// How long a seeding attempt holds its claim, and so how soon a team whose
+// attempt failed is tried again. Covers the engine timeout plus the writes.
+const SEED_LEASE_MS = 30_000;
+
+// Teams known to hold a connection, so a seeded team costs no query per request.
+const seededTeams = new Set<string>();
+
+// When this process next asks the database about a team it could not seed.
+const nextSeedCheck = new Map<string, number>();
+
+/**
+ * Seed the caller's team from the caller's engine answer, on any request, until
+ * one attempt gives the team a connection.
+ *
+ * The team's first request may carry a token the engine cannot answer for (the
+ * engine down, or its reader not yet minted), so seeding is retried on later
+ * requests rather than tied to the request that created the team. A seeded team
+ * is remembered in process; an unseeded one costs at most one claim query per
+ * SEED_LEASE_MS per replica. Non-fatal: every failure is logged and swallowed.
+ */
+export async function seedTeam(token: string, teamId: string): Promise<void> {
+  if (
+    seededTeams.has(teamId) ||
+    (nextSeedCheck.get(teamId) ?? 0) > Date.now()
+  ) {
+    return;
+  }
+  try {
+    let claim = await claimTeamSeed(teamId, SEED_LEASE_MS);
+    if (claim === 'claimed' && (await ensureOrgConnection(token, teamId))) {
+      await markTeamSeeded(teamId);
+      claim = 'seeded';
+    }
+    if (claim === 'seeded') {
+      seededTeams.add(teamId);
+      nextSeedCheck.delete(teamId);
+      return;
+    }
+  } catch (err) {
+    logger.warn({ err, teamId }, 'DFE: team seeding failed (non-fatal)');
+  }
+  nextSeedCheck.set(teamId, Date.now() + SEED_LEASE_MS);
+}
+
+/** Forget every team this process has seen seeded or waiting. */
+export function clearTeamSeedCache(): void {
+  seededTeams.clear();
+  nextSeedCheck.clear();
 }
