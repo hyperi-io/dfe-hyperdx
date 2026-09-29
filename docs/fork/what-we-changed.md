@@ -588,11 +588,15 @@ upstream HyperDX app version. When pinning this fork in dfe-infra, use the image
 tag this repo's CI publishes, NOT the upstream HyperDX version.
 
 That image is `ghcr.io/hyperi-io/dfe-hyperdx`, built by hyperi-ci from
-`publish.container` in `.hyperi-ci.yaml` using the root `Dockerfile` (amd64
-only - the arm64 half runs under qemu and Next's build-time font fetch times
-out). GHCR is the only registry hyperi-ci publishes to. Upstream's `release.yml`
-pushes to Docker Hub under `hyperdx/*` and `clickhouse/*`, which are not ours -
-that workflow is deliberately absent from `main`.
+`release.container` in `.hyperi-ci.yaml` using the root `Dockerfile`, for
+linux/amd64 and linux/arm64. The install and the Next build run once on the
+build host and only the runtime stage runs per arch, so an arm64 build never
+emulates Next. Both arches' prebuilt native packages are installed, and
+`scripts/native-arch.mjs` keeps the target's and fails the build on any binary
+for the wrong machine. GHCR is the only registry hyperi-ci publishes to.
+Upstream's `release.yml` pushes to Docker Hub under `hyperdx/*` and
+`clickhouse/*`, which are not ours - that workflow is deliberately absent from
+`main`.
 
 `git show <our-tag>:.upstream-version` answers "which upstream is release X
 built on" for any release we have cut.
