@@ -13,13 +13,33 @@ import { isDfeManaged, shippedDashboardCopy } from '@/dfe/shippedDashboard';
 const SHIPPED: Dashboard = {
   id: '507f1f77bcf86cd799439011',
   name: 'DFE Overview',
-  tiles: [{ id: 'tile-1', x: 0, y: 0, w: 4, h: 3, config: {} as never }],
+  tiles: [
+    {
+      id: 'tile-1',
+      x: 0,
+      y: 0,
+      w: 4,
+      h: 3,
+      // SavedChartConfig is a deep query/chart union; shippedDashboardCopy
+      // only passes tiles through unchanged, so the content is opaque here.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+      config: {} as never,
+    },
+  ],
   tags: ['dfe'],
-  filters: [{ id: 'f1' } as never],
+  filters: [
+    {
+      id: 'f1',
+      type: 'QUERY_EXPRESSION',
+      name: 'f1',
+      expression: 'service',
+      source: 'source-1',
+    },
+  ],
   savedQuery: 'level:error',
   savedQueryLanguage: 'lucene',
-  savedFilterValues: [{ type: 'sql', condition: '1=1' } as never],
-  containers: [{ id: 'c1' } as never],
+  savedFilterValues: [{ type: 'sql', condition: '1=1' }],
+  containers: [{ id: 'c1', title: 'c1', collapsed: false }],
   createdAt: '2026-09-01T00:00:00.000Z',
   updatedAt: '2026-09-02T00:00:00.000Z',
   createdBy: { email: 'someone@example.com' },
