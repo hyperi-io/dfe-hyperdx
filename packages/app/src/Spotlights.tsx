@@ -9,6 +9,7 @@ import {
   IconSearch,
 } from '@tabler/icons-react';
 
+import { dfePresetDashboards } from './dfe/presetDashboards';
 import { useBrandDisplayName, useLogomark } from './theme/ThemeProvider';
 import { IS_K8S_DASHBOARD_ENABLED } from './config';
 import { useDashboards } from './dashboard';
@@ -87,7 +88,7 @@ export const useSpotlightActions = () => {
         : []),
     ];
 
-    presetDashboards.forEach(preset => {
+    dfePresetDashboards(presetDashboards).forEach(preset => {
       logViewActions.push({
         id: preset.id,
         group: 'Preset Dashboards',

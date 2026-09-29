@@ -158,7 +158,8 @@ export function dfeJsonPathRoot(
 
 /**
  * Rewrite every native-JSON sub-path in a SQL fragment so it carries a
- * `toString()` coercion.
+ * `toString()` coercion, or the numeric one where it is the operand of
+ * upstream's numeric guard.
  *
  * This is the single seam. It is called at query RENDER time rather than when
  * a filter key is built, so one call covers search, charts, dashboards and
@@ -214,7 +215,9 @@ export function coerceJsonPathsInSql(
     const unquoted = path.map(unquoteJsonSegment);
     const coerced = inCoercion
       ? renderJsonPath(root, unquoted)
-      : renderJsonStringExpression(root, unquoted);
+      : isNumericOperand(sql, index, expr)
+        ? renderJsonNumberExpression(root, unquoted)
+        : renderJsonStringExpression(root, unquoted);
     out = out.slice(0, index) + coerced + out.slice(index + expr.length);
   }
 
@@ -313,6 +316,33 @@ function stripTypeSuffix(path: string[]): string[] {
 function isAlreadyCoerced(sql: string, index: number): boolean {
   const before = sql.slice(0, index);
   return /(?:toString|dynamicType|getSubcolumn)\($/.test(before);
+}
+
+/**
+ * True when the path at `index` is the operand of the numeric guard upstream's
+ * Lucene serializer emits for `>`, `>=`, `<`, `<=` and ranges:
+ * `dynamicType(P) in (...) and P`. A `toString()` there compares as text, so
+ * `> '100'` matches 50 and a BETWEEN against numbers fails with NO_COMMON_TYPE.
+ */
+function isNumericOperand(sql: string, index: number, expr: string): boolean {
+  const guard = /dynamicType\(([^()]*)\) in \([^()]*\) and $/.exec(
+    sql.slice(0, index),
+  );
+  return guard?.[1] === expr;
+}
+
+/**
+ * The range operand for a Lucene field. Upstream's `range()` reads `column`,
+ * which is empty for a native-JSON sub-path, leaving `( BETWEEN 100 AND 500)`
+ * with no left-hand side. Its `>`/`<` operators read the numeric expression
+ * instead, and so does this.
+ */
+export function dfeRangeField<
+  T extends { column?: string; columnJSON?: { number: string } },
+>(field: T): T {
+  return field.columnJSON
+    ? { ...field, column: field.columnJSON.number }
+    : field;
 }
 
 /** Structural shape of the metadata reader, to keep this module cycle-free. */

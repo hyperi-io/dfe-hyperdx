@@ -132,19 +132,16 @@ def _load_register() -> list[dict]:
     return entries
 
 
-def _resolved_versions() -> dict[str, set[str]]:
-    """Every version each package actually resolves to in yarn.lock.
+def _resolved_versions(lockfile: str) -> dict[str, set[str]]:
+    """Every version each package actually resolves to in a yarn.lock's text.
 
     A package can legitimately resolve to several versions in a workspace tree,
     so this collects all of them - claiming an override is redundant when only
     ONE of three resolutions is patched would be worse than saying nothing.
     """
     versions: dict[str, set[str]] = {}
-    if not LOCKFILE.is_file():
-        return versions
-
     names: list[str] = []
-    for line in LOCKFILE.read_text(encoding="utf-8").splitlines():
+    for line in lockfile.splitlines():
         version_match = _VERSION.match(line)
         if version_match and names:
             for name in names:
@@ -251,6 +248,20 @@ def _base_resolutions() -> dict[str, str] | None:
         return None
 
 
+def _upstream_resolved_versions() -> dict[str, set[str]] | None:
+    """What upstream's own lockfile resolves at our upstream base.
+
+    OUR lockfile cannot say whether upstream has caught up: with a pin in force
+    it resolves at or above that pin's floor by construction, so every live pin
+    reads as redundant. Returns None when upstream's lockfile cannot be read.
+    """
+    base = _upstream_base()
+    if not base:
+        return None
+    raw = _git("show", f"{base}:yarn.lock")
+    return _resolved_versions(raw) if raw else None
+
+
 def _current_resolutions() -> dict[str, str]:
     """The block as it stands in the working tree."""
     try:
@@ -353,8 +364,15 @@ def _write_resolutions(block: dict[str, str]) -> bool:
     return True
 
 
-def _redundant(entries: list[dict], resolved: dict[str, set[str]]) -> tuple[list[dict], list[str]]:
+def _redundant(
+    entries: list[dict],
+    resolved: dict[str, set[str]],
+    upstream: dict[str, set[str]],
+) -> tuple[list[dict], list[str]]:
     """Split the register into entries still doing work and those that are not.
+
+    `resolved` is our lockfile, which says whether the package is in our tree at
+    all; `upstream` is upstream's, which says whether the pin still raises it.
 
     Returns (kept, notes) where notes are the per-entry lines to print. Used by
     --check, which nags; --apply decides separately, in _expected, on whether an
@@ -383,17 +401,25 @@ def _redundant(entries: list[dict], resolved: dict[str, set[str]]) -> tuple[list
             notes.append(f"  [gone]      {package} - not in the tree at all; the pin does nothing")
             continue
 
-        below = {v for v in present if _parse_version(v) < floor}
+        shipped = upstream.get(package, set())
+        if not shipped:
+            kept.append(entry)
+            notes.append(
+                f"  [holding]   {package} {entry['range']} - only our tree pulls it in"
+            )
+            continue
+
+        below = {v for v in shipped if _parse_version(v) < floor}
         if below:
             kept.append(entry)
             notes.append(
                 f"  [holding]   {package} {entry['range']} - still needed "
-                f"(resolves to {', '.join(sorted(present))})"
+                f"(upstream ships {', '.join(sorted(shipped))})"
             )
         else:
             notes.append(
                 f"  [REDUNDANT] {package} {entry['range']} - upstream now ships "
-                f"{', '.join(sorted(present))}"
+                f"{', '.join(sorted(shipped))}"
             )
     return kept, notes
 
@@ -430,8 +456,18 @@ def _check() -> int:
             print(f"  ERROR: {problem}")
         return 1
 
-    print(f"Checking {len(entries)} fork security override(s) against yarn.lock\n")
-    kept, notes = _redundant(entries, _resolved_versions())
+    upstream = _upstream_resolved_versions()
+    if upstream is None:
+        # stdout, not stderr: the drift workflow tees stdout into its summary.
+        print(
+            "upstream lockfile unavailable - run: git fetch upstream\n"
+            "Declining to judge a pin against a baseline that could not be read."
+        )
+        return 1
+
+    ours = LOCKFILE.read_text(encoding="utf-8") if LOCKFILE.is_file() else ""
+    print(f"Checking {len(entries)} fork security override(s) against upstream's yarn.lock\n")
+    kept, notes = _redundant(entries, _resolved_versions(ours), upstream)
     for note in notes:
         print(note)
 

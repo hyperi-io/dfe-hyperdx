@@ -258,6 +258,19 @@ header check is what holds when a deployment authenticates some other way.
   editing upstream's own `metadata.test.ts` assertions, which is the most
   expensive delta shape we have.
 
+  Lucene `>`, `>=`, `<`, `<=` and ranges on a JSON path are numeric. Upstream's
+  serializer guards them as `dynamicType(P) in (...) and P`, and the seam gives
+  that operand `toFloat64OrNull(toString(P))` rather than `toString(P)`: a text
+  operand compares lexically, so `> '100'` matched 50 and 99, and a text BETWEEN
+  against numbers fails with NO_COMMON_TYPE. Upstream's `range()` also read
+  `column`, which is empty for a JSON path, so `_json.bytes:[100 TO 500]`
+  rendered `( BETWEEN 100 AND 500)`. **`queryParser.ts` (catalogued)** wraps its
+  `getColumnForField` call in `dfeRangeField`, which hands over the same numeric
+  operand its comparison operators already use: one import and one wrapped call.
+  `dfe/__tests__/luceneJsonRange.test.ts` pins the rendered SQL, and each shape
+  was run on ClickHouse 26.9 against Int64, Float64 and String rows under one
+  path.
+
 - `packages/app/src/dfe/jsonColumns.ts` - which roots take dot access. Two
   catalogued call sites read it: **`components/SQLEditor/SQLInlineEditor.tsx`**
   (the chart-builder autocomplete rendered every nested path as `col['key']`,
@@ -426,6 +439,18 @@ header check is what holds when a deployment authenticates some other way.
   and is left untouched, like the specs for the three pages this fork does not
   ship.
 
+  **`Spotlights.tsx` (catalogued)**, the Cmd+K command palette, offered the same
+  three presets. Upstream's list stays as written and the loop that adds it
+  reads `dfePresetDashboards(presetDashboards)` from `dfe/presetDashboards.ts`,
+  which returns none. That is one added import and one changed line, neither
+  inside the list, so a preset upstream adds to it is dropped with the rest.
+  `forkDeltas.test.ts` pins the swap and
+  `dfe/__tests__/spotlightPresets.test.ts` asserts the rendered palette offers
+  no preset. The same file's Menu entries for Client Sessions, Alerts, Service
+  Health and Team Settings are commented out because this fork blocks or does
+  not ship those pages, and so are the Documentation and Cloud entries, which
+  link to ClickStack.
+
 ## Config and bootstrap
 
 - `packages/api/src/dfe/config.ts` - auth mode, header names, default team
@@ -529,10 +554,9 @@ header check is what holds when a deployment authenticates some other way.
   `systeminformation ^5.31.7`, raising upstream's own `^5.24.0`. It is generated
   from `security/overrides.yaml` by `scripts/security-override.py --apply`, so
   edit the register, never this line. The vector is in the register entry.
-  `--check` currently reports it REDUNDANT: it compares our floor against the
-  lockfile resolution our own pin produced, so it cannot tell an upstream fix
-  from ours. The pin is real - the lockfile moved 5.30.7 to 5.33.1 when it was
-  applied. `--verify`, which is what CI gates on, passes.
+  `--check` judges the pin against upstream's own lockfile at our merge base,
+  never ours: the pin makes our lockfile resolve above its own floor, so ours
+  would call every live pin redundant.
 
 ## Docs
 

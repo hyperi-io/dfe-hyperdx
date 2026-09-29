@@ -76,6 +76,9 @@ packages/app/src/DBChartPage.tsx
 packages/app/src/DBDashboardPage.tsx
 packages/app/src/DBSearchPage.tsx
 packages/app/src/LandingPage.tsx
+# The command palette: Menu entries for pages we do not ship are commented out,
+# and the preset dashboards route through dfe/presetDashboards.ts, which offers
+# none - see docs/fork/what-we-changed.md.
 packages/app/src/Spotlights.tsx
 packages/app/src/UserPreferencesModal.tsx
 packages/app/src/__tests__/ChartUtils.test.ts
@@ -110,6 +113,10 @@ packages/common-utils/README.md
 packages/common-utils/package.json
 packages/common-utils/src/core/metadata.ts
 packages/common-utils/src/core/renderChartConfig.ts
+# One import and one wrapped call: range() takes its operand from
+# dfe/jsonPath.ts, so a native-JSON path gets a left-hand side - see
+# docs/fork/what-we-changed.md.
+packages/common-utils/src/queryParser.ts
 packages/otel-collector/CHANGELOG.md
 scripts/ci/ratchet-baseline.json
 yarn.lock
