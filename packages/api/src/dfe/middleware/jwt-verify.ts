@@ -5,11 +5,11 @@
 // Point and MUST verify it too (defence in depth) rather than trust an
 // unauthenticated header. We verify against the engine's JWKS.
 //
-// On a valid token we ask the engine which groups the session holds, resolve
-// the user + team from that answer (findOrCreateTeamByName /
-// findOrCreateUserFromOIDC) and call req.login() so Passport's
-// isUserAuthenticated() passes through. The token's own groups claim is never
-// read. On a missing/invalid token we fall through (no 401 here) - the
+// On a valid token we ask the engine for the session's ClickHouse identity and
+// role, resolve the user + the team named after that identity
+// (findOrCreateTeamByName / findOrCreateUserFromOIDC) and call req.login() so
+// Passport's isUserAuthenticated() passes through. The token's own groups claim
+// is never read. On a missing/invalid token we fall through (no 401 here) - the
 // route-level isUserAuthenticated guard rejects unauthenticated requests. A
 // valid token the engine refuses, or cannot answer for, is refused here.
 //
@@ -27,9 +27,13 @@ import {
   findOrCreateUserFromOIDC,
   placeUserOnTeam,
 } from '@/dfe/controllers/user-provisioning';
+import { scheduleTeamConnectionRepair } from '@/dfe/tasks/team-connection-repair';
 import logger from '@/utils/logger';
 
 import { oidcIdentityMiddleware } from './oidc-identity';
+
+// api-app.ts loads this module only when DFE auth is on; the repair itself runs in oidc-proxy mode alone.
+scheduleTeamConnectionRepair();
 
 // Lazily-built remote JWKS. createRemoteJWKSet returns a key-resolver that
 // fetches + caches the engine JWKS (with its own coalescing + cooldown), so
@@ -219,20 +223,27 @@ export async function engineJwtMiddleware(
       return res.sendStatus(session.status);
     }
 
-    // Minted from the account's grants at login or refresh; role-claim gates on it.
-    req.dfeRole = typeof payload.role === 'string' ? payload.role : undefined;
+    // The engine's live answer wins; the token's claim covers an engine that sends none.
+    req.dfeRole =
+      session.role ??
+      (typeof payload.role === 'string' ? payload.role : undefined);
 
-    const { team, created: teamCreated } = await findOrCreateTeamByName(
-      session.team,
-    );
+    const { team } = await findOrCreateTeamByName(session.team);
     const { user } = await findOrCreateUserFromOIDC(email, team._id);
     await placeUserOnTeam(user, team._id);
-    // Seed the caller's OWN org connection only on the request that created the
-    // team. First login fires team + sources + connections at once, so gating on
-    // the unique creator stops them racing duplicate connections onto one team.
-    // Non-fatal - a login is never refused for want of a connection.
-    if (teamCreated) {
-      await ensureOrgConnection(token, String(team._id));
+    // Every request, so a failed first seed is retried. An engine that cannot
+    // answer never blocks a login; a refusal or a foreign credential does.
+    const seed = await ensureOrgConnection(
+      token,
+      String(team._id),
+      session.team,
+    );
+    if (seed === 'refused' || seed === 'mismatch') {
+      logger.warn(
+        { email, team: session.team, seed },
+        'DFE: refused a session whose team connection is not its own',
+      );
+      return res.sendStatus(403);
     }
 
     // req.login() populates req.user and makes req.isAuthenticated() true.

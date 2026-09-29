@@ -2,21 +2,10 @@
 // Find-or-create users from OIDC identity headers.
 // This is a NEW controller — it does not modify any upstream HyperDX files.
 
+import { isDuplicateKey } from '@/dfe/utils/mongo';
 import type { ObjectId } from '@/models';
 import User, { type UserDocument } from '@/models/user';
 import logger from '@/utils/logger';
-
-// MongoDB duplicate-key error code, raised when two concurrent inserts collide
-// on a unique index (here `email_1`). FerretDB surfaces the same code.
-const DUPLICATE_KEY = 11000;
-
-function isDuplicateKey(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    (err as { code?: number }).code === DUPLICATE_KEY
-  );
-}
 
 /**
  * Find an existing user by email, or create one on the given team.

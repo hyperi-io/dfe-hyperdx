@@ -84,15 +84,18 @@ Rationale:
 
 The auth boundary moves out of HyperDX. Envoy (Kubernetes) or oauth2-proxy
 (docker) runs the OIDC flow and forwards identity headers. HyperDX trusts
-`x-oidc-*` / `X-Forwarded-*`, find-or-creates the user, and maps groups to
-teams. It falls back to upstream session auth when the headers are absent.
+`x-oidc-*` / `X-Forwarded-*`, find-or-creates the user, and names its team after
+the ClickHouse identity the engine hands it. It falls back to upstream session
+auth when the headers are absent.
 
 - `packages/api/src/dfe/middleware/oidc-identity.ts` - trusted-header identity
 - `packages/api/src/dfe/middleware/jwt-verify.ts` - ES384 verification against
   the provider JWKS
 - `packages/api/src/dfe/controllers/user-provisioning.ts` - JIT user creation
-- `packages/api/src/dfe/controllers/team-provisioning.ts` - group-to-team
-  mapping
+- `packages/api/src/dfe/controllers/team-provisioning.ts` - find-or-create the
+  team by name
+- `packages/api/src/dfe/controllers/engine-session.ts` - the engine's answer for
+  a session: the team (its ClickHouse identity) and the dashboard role
 - `packages/api/src/dfe/middleware/legacy-auth-lockdown.ts` - 404s HyperDX's own
   password login, registration and invite-acceptance routes in OIDC mode
 - `packages/api/src/api-app.ts` - wires both middlewares behind `AUTH_MODE`
@@ -137,16 +140,13 @@ is unset - `next('router')`, so the request 404s as it would upstream.
 `dfe/routers/shipped-dashboards.ts` mounts it, inside our own router rather than
 at the `api-app.ts` mount, which keeps the gate off the upstream file.
 
-**The role claim is honoured before it exists
+**Only `admin` and `owner` change what the whole team sees
 (`dfe/middleware/role-claim.ts`).** Deleting or restoring a shipped dashboard
-changes what the whole team sees, and team membership is the only thing
-authorising it: the engine JWT carries `sub` and `groups`, groups select the
-team, and dfe-engine issues no role claim - so a read-only console account can
-delete a shipped dashboard for everyone. That gap closes in the engine, not
-here. The check is gated on the claim's PRESENCE, so a token without one behaves
-exactly as today and a token carrying `role` is allowed only for `admin` or
-`owner`. `jwt-verify.ts` copies the claim across when the token has it;
-header-dev mode sets none, so local dev is unchanged.
+changes it for every member. `jwt-verify.ts` takes the role from the engine's
+`hyperdx_role` on `GET /api/v1/auth/me`, cached for 30 seconds, and falls back
+to the token's `role` claim for an engine that sends none. The check is gated on
+the role's PRESENCE, so a session with none keeps team membership as the whole
+authorisation; header-dev mode sets none, so local dev is unchanged.
 
 **Restore refuses a simple request (`dfe/middleware/cross-site.ts`).** A form
 post needs no CORS preflight and carries no header the posting page had to be
@@ -166,17 +166,21 @@ header check is what holds when a deployment authenticates some other way.
 
 ## DFE integration features
 
-- `packages/api/src/dfe/controllers/org-connection.ts` - a team holds ONLY its
-  own org's ClickHouse connection, fetched from the engine, plus its seed
-  sources. `main` and `hunts` for every team (org-fenced by their row policies);
-  `otel_logs`, `otel_traces`, `otel_metrics` and `clickhouse_system` for the
-  platform team alone, since operator telemetry and ClickHouse's own `system`
-  database must never reach an org_viewer. That source set is also the RBAC
-  fence for the pre-canned dashboards - see the provisioner note below. Seeding
-  a NEW team also runs `syncDashboards` for it when `DASHBOARD_PROVISIONER_DIR`
-  is set: the provisioner cron fires once a minute with no run at start, so the
-  page's first `GET /dashboards`, a second after the team is created, saw `[]`
-  and the SPA cached it until a reload.
+- `packages/api/src/dfe/controllers/org-connection.ts` - a team holds ONLY one
+  connection, as the ClickHouse user it is named after, fetched from the engine
+  and seeded on any request that finds none, plus its seed sources. `main` and
+  `hunts` for every team (org-fenced by their row policies); `otel_logs`,
+  `otel_traces`, `otel_metrics` and `clickhouse_system` for the platform team
+  alone, since operator telemetry and ClickHouse's own `system` database must
+  never reach an org_viewer. That source set is also the RBAC fence for the
+  pre-canned dashboards - see the provisioner note below. Seeding a NEW team
+  also runs `syncDashboards` for it when `DASHBOARD_PROVISIONER_DIR` is set: the
+  provisioner cron fires once a minute with no run at start, so the page's first
+  `GET /dashboards`, a second after the team is created, saw `[]` and the SPA
+  cached it until a reload. A dfe-layer unique index on `connections.team` stops
+  two replicas seeding one team twice, and `dfe/tasks/team-connection-repair.ts`
+  deletes, once at startup, every connection that is not its team's own - see
+  [../architecture/team-identity.md](../architecture/team-identity.md).
 - `packages/api/src/dfe/routers/dfe-sources.ts` +
   `packages/api/src/dfe/controllers/dfe-sources.ts` -
   `PUT`/`DELETE`/`GET /dfe/sources`, engine-only. The team-scoped `/sources`

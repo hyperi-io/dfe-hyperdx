@@ -1,10 +1,11 @@
 /**
  * DFE per-org connection provisioning.
  *
- * The invariant: a team is seeded with ONLY its own org connection (fetched from
- * the engine with the caller's token) and only when it has none, so a team never
- * ends up holding another org's credentials and a login is never blocked on the
- * engine being reachable.
+ * The invariant: a team named after a ClickHouse identity is seeded with ONLY a
+ * connection as that identity (fetched from the engine with the caller's token),
+ * and only when it has none. A team never holds a ClickHouse user other than its
+ * name, a failed seed is retried by the next request, and an engine that cannot
+ * answer never blocks a login.
  */
 /* eslint-disable @typescript-eslint/no-unsafe-type-assertion --
  * Reading jest.Mock off a mocked module asserts a narrower type than the real
@@ -43,6 +44,11 @@ jest.mock('@/dfe/controllers/dfe-sources', () => ({
   seedDfeSources: jest.fn(),
 }));
 
+jest.mock('@/models/connection', () => ({
+  __esModule: true,
+  default: { collection: { createIndex: jest.fn() } },
+}));
+
 import {
   createConnection,
   getConnectionsByTeam,
@@ -60,11 +66,15 @@ const mockCreateSource = createSource as jest.Mock;
 const mockSyncDashboards = syncDashboards as jest.Mock;
 const mockSeedDfeSources = seedDfeSources as jest.Mock;
 const mockWarn = logger.warn as jest.Mock;
+const mockError = logger.error as jest.Mock;
+
+const ORG = 'dfe_org_acme';
+const PLATFORM = 'dfe_query_reader';
 
 const ORG_CONN = {
   name: 'acme',
   host: 'http://ch:8123',
-  username: 'dfe_org_acme',
+  username: ORG,
   password: 'pw',
 };
 
@@ -84,6 +94,7 @@ afterEach(() => {
 function okFetch(body: unknown) {
   (global.fetch as jest.Mock).mockResolvedValue({
     ok: true,
+    status: 200,
     json: async () => body,
   });
 }
@@ -91,9 +102,206 @@ function okFetch(body: unknown) {
 const PLATFORM_CONN = {
   name: 'platform',
   host: 'http://ch:8123',
-  username: 'dfe_query_reader',
+  username: PLATFORM,
   password: 'pw',
 };
+
+describe('ensureOrgConnection - the team identity', () => {
+  test('never seeds a connection whose username is not the team name', async () => {
+    // A platform admin arriving first on an org team used to seed it with the
+    // platform reader for every later member.
+    mockConns.mockResolvedValue([]);
+    okFetch(PLATFORM_CONN);
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'mismatch',
+    );
+
+    expect(mockCreateConn).not.toHaveBeenCalled();
+    expect(mockCreateSource).not.toHaveBeenCalled();
+  });
+
+  test('a team holding a connection as anyone else is a mismatch, never reused', async () => {
+    mockConns.mockResolvedValue([{ _id: 'c-1', username: PLATFORM }]);
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'mismatch',
+    );
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockCreateConn).not.toHaveBeenCalled();
+    expect(mockError).toHaveBeenCalledWith(
+      expect.objectContaining({ team: ORG, foreign: [PLATFORM] }),
+      'DFE: team holds a connection that is not its own ClickHouse identity',
+    );
+  });
+
+  test('a team holding its own connection is present', async () => {
+    mockConns.mockResolvedValue([{ _id: 'c-1', username: ORG }]);
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'present',
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('a failed first seed is retried by the next call', async () => {
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([]);
+    (global.fetch as jest.Mock)
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ORG_CONN,
+      });
+
+    const first = await ensureOrgConnection('tok', 'team-1', ORG);
+    const second = await ensureOrgConnection('tok', 'team-1', ORG);
+
+    expect(first).toBe('unavailable');
+    expect(second).toBe('seeded');
+    expect(mockCreateConn).toHaveBeenCalledTimes(1);
+  });
+
+  test('a seed that loses the race to another replica is present, not a second connection', async () => {
+    mockConns.mockResolvedValue([]);
+    okFetch(ORG_CONN);
+    mockCreateConn.mockRejectedValue(
+      Object.assign(new Error('E11000 duplicate key'), { code: 11000 }),
+    );
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'present',
+    );
+    expect(mockCreateSource).not.toHaveBeenCalled();
+  });
+
+  test('concurrent first requests on one team share one seed', async () => {
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([]);
+    okFetch(ORG_CONN);
+
+    const outcomes = await Promise.all([
+      ensureOrgConnection('tok', 'team-1', ORG),
+      ensureOrgConnection('tok', 'team-1', ORG),
+      ensureOrgConnection('tok', 'team-1', ORG),
+    ]);
+
+    expect(outcomes).toEqual(['seeded', 'seeded', 'seeded']);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(mockCreateConn).toHaveBeenCalledTimes(1);
+  });
+
+  test('a refusal from the engine is reported, so the caller can refuse the session', async () => {
+    mockConns.mockResolvedValue([]);
+    (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 403 });
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'refused',
+    );
+    expect(mockCreateConn).not.toHaveBeenCalled();
+  });
+
+  test.each([500, 502, 503])(
+    'an engine %i is unavailable, not a refusal',
+    async status => {
+      mockConns.mockResolvedValue([]);
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status });
+
+      await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+        'unavailable',
+      );
+      expect(mockCreateConn).not.toHaveBeenCalled();
+    },
+  );
+
+  test('never writes the connection password to the log', async () => {
+    mockConns.mockResolvedValue([]);
+    okFetch({ ...PLATFORM_CONN, password: 'pw-secret' });
+
+    await ensureOrgConnection('tok', 'team-1', ORG);
+    okFetch({ name: 'acme', host: 'h', username: ORG, password: 42 });
+    await ensureOrgConnection('tok', 'team-2', ORG);
+
+    const logged = JSON.stringify([
+      mockWarn.mock.calls,
+      mockError.mock.calls,
+      (logger.info as jest.Mock).mock.calls,
+    ]);
+    expect(logged).not.toContain('pw-secret');
+    expect(logged).not.toContain('42');
+  });
+});
+
+type FreshSeed = {
+  createIndex: jest.Mock;
+  createConnection: jest.Mock;
+  ensure: typeof ensureOrgConnection;
+};
+
+/**
+ * org-connection with its once-per-process index memo unset, over mocks that
+ * seed one team with its own connection.
+ */
+function freshSeed(): FreshSeed {
+  let fresh: FreshSeed | undefined;
+  jest.isolateModules(() => {
+    const model = jest.requireMock<typeof import('@/models/connection')>(
+      '@/models/connection',
+    );
+    const controllers = jest.requireMock<
+      typeof import('@/controllers/connection')
+    >('@/controllers/connection');
+    const sources = jest.requireMock<typeof import('@/controllers/sources')>(
+      '@/controllers/sources',
+    );
+    const orgConnection = jest.requireActual<
+      typeof import('@/dfe/controllers/org-connection')
+    >('@/dfe/controllers/org-connection');
+    (controllers.getConnectionsByTeam as jest.Mock).mockResolvedValue([]);
+    (sources.getSources as jest.Mock).mockResolvedValue([{ _id: 's' }]);
+    fresh = {
+      createIndex: model.default.collection.createIndex as jest.Mock,
+      createConnection: (
+        controllers.createConnection as jest.Mock
+      ).mockResolvedValue({ _id: 'conn-1' }),
+      ensure: orgConnection.ensureOrgConnection,
+    };
+  });
+  if (!fresh) {
+    throw new Error('jest.isolateModules did not run');
+  }
+  return fresh;
+}
+
+describe('ensureOrgConnection - the one-connection-per-team index', () => {
+  test('is ensured before the first connection is created', async () => {
+    const seed = freshSeed();
+    okFetch(ORG_CONN);
+
+    await expect(seed.ensure('tok', 'team-1', ORG)).resolves.toBe('seeded');
+
+    expect(seed.createIndex).toHaveBeenCalledWith(
+      { team: 1 },
+      { unique: true, name: 'dfe_one_connection_per_team' },
+    );
+    expect(seed.createIndex.mock.invocationCallOrder[0]).toBeLessThan(
+      seed.createConnection.mock.invocationCallOrder[0],
+    );
+  });
+
+  test('an index that cannot be built does not block the seed', async () => {
+    const seed = freshSeed();
+    seed.createIndex.mockRejectedValue(new Error('index build failed'));
+    okFetch(ORG_CONN);
+
+    await expect(seed.ensure('tok', 'team-1', ORG)).resolves.toBe('seeded');
+    expect(seed.createConnection).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('ensureOrgConnection', () => {
   test('a tenant team is seeded with the org connection + ONLY the DFE sources', async () => {
@@ -102,7 +310,7 @@ describe('ensureOrgConnection', () => {
     mockSources.mockResolvedValue([]);
     okFetch(ORG_CONN);
 
-    await ensureOrgConnection('tok', 'team-1');
+    await ensureOrgConnection('tok', 'team-1', ORG);
 
     expect(global.fetch).toHaveBeenCalledWith(
       'http://engine.test:8000/api/v1/hyperdx/connection',
@@ -143,7 +351,7 @@ describe('ensureOrgConnection', () => {
     mockSources.mockResolvedValue([]);
     okFetch(ORG_CONN);
 
-    await ensureOrgConnection('tok', 'team-1');
+    await ensureOrgConnection('tok', 'team-1', ORG);
 
     const from = (name: string) =>
       mockCreateSource.mock.calls.find(c => c[1].name === name)?.[1].from;
@@ -160,7 +368,7 @@ describe('ensureOrgConnection', () => {
     mockSources.mockResolvedValue([]);
     okFetch(PLATFORM_CONN);
 
-    await ensureOrgConnection('tok', 'team-1');
+    await ensureOrgConnection('tok', 'team-1', PLATFORM);
 
     // main + hunts (every team) then the platform-only set, all on one connection.
     const seeded = mockCreateSource.mock.calls.map(c => c[1].name);
@@ -191,26 +399,26 @@ describe('ensureOrgConnection', () => {
     mockSources.mockResolvedValue([]);
     okFetch(ORG_CONN);
 
-    await ensureOrgConnection('tok', 'team-1');
+    await ensureOrgConnection('tok', 'team-1', ORG);
 
     const seeded = mockCreateSource.mock.calls.map(c => c[1].name);
     expect(seeded).not.toContain('clickhouse_system');
   });
 
-  test('is a no-op when the team already has a connection', async () => {
-    mockConns.mockResolvedValue([{ _id: 'existing' }]);
+  test('is a no-op when the team already has its own connection', async () => {
+    mockConns.mockResolvedValue([{ _id: 'existing', username: ORG }]);
 
-    await ensureOrgConnection('tok', 'team-1');
+    await ensureOrgConnection('tok', 'team-1', ORG);
 
     expect(global.fetch).not.toHaveBeenCalled();
     expect(mockCreateConn).not.toHaveBeenCalled();
   });
 
-  test('creates nothing when the engine refuses (non-fatal)', async () => {
+  test('creates nothing when the engine refuses', async () => {
     mockConns.mockResolvedValue([]);
     (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 403 });
 
-    await ensureOrgConnection('tok', 'team-1');
+    await ensureOrgConnection('tok', 'team-1', ORG);
 
     expect(mockCreateConn).not.toHaveBeenCalled();
     expect(mockCreateSource).not.toHaveBeenCalled();
@@ -222,7 +430,7 @@ describe('ensureOrgConnection', () => {
     mockSources.mockResolvedValue([{ _id: 'existing-source' }]);
     okFetch(ORG_CONN);
 
-    await ensureOrgConnection('tok', 'team-1');
+    await ensureOrgConnection('tok', 'team-1', ORG);
 
     expect(mockCreateSource).not.toHaveBeenCalled();
   });
@@ -238,7 +446,7 @@ describe('ensureOrgConnection', () => {
     mockSources.mockResolvedValue([]);
     okFetch(ORG_CONN);
 
-    await ensureOrgConnection('tok', 'team-1');
+    await ensureOrgConnection('tok', 'team-1', ORG);
 
     expect(mockSyncDashboards).toHaveBeenCalledTimes(1);
     expect(mockSyncDashboards).toHaveBeenCalledWith(
@@ -261,7 +469,7 @@ describe('ensureOrgConnection', () => {
     mockSources.mockResolvedValue([]);
     okFetch(ORG_CONN);
 
-    await ensureOrgConnection('tok', 'team-1');
+    await ensureOrgConnection('tok', 'team-1', ORG);
 
     expect(mockSyncDashboards).toHaveBeenCalledWith(
       'team-1',
@@ -276,7 +484,7 @@ describe('ensureOrgConnection', () => {
     mockSources.mockResolvedValue([]);
     okFetch(ORG_CONN);
 
-    await ensureOrgConnection('tok', 'team-1');
+    await ensureOrgConnection('tok', 'team-1', ORG);
 
     expect(mockCreateSource).toHaveBeenCalledTimes(2);
     expect(mockSyncDashboards).not.toHaveBeenCalled();
@@ -290,7 +498,7 @@ describe('ensureOrgConnection', () => {
     mockSources.mockResolvedValue([{ _id: 'existing-source' }]);
     okFetch(ORG_CONN);
 
-    await ensureOrgConnection('tok', 'team-1');
+    await ensureOrgConnection('tok', 'team-1', ORG);
 
     expect(mockSyncDashboards).not.toHaveBeenCalled();
   });
@@ -304,7 +512,9 @@ describe('ensureOrgConnection', () => {
     const boom = new Error('dashboard dir unreadable');
     mockSyncDashboards.mockRejectedValue(boom);
 
-    await expect(ensureOrgConnection('tok', 'team-1')).resolves.toBeUndefined();
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'seeded',
+    );
 
     expect(mockCreateConn).toHaveBeenCalledTimes(1);
     expect(mockCreateSource).toHaveBeenCalledTimes(2);
@@ -319,18 +529,20 @@ describe('ensureOrgConnection', () => {
     // password, so an engine response missing it stored `undefined` as the
     // ClickHouse password.
     mockConns.mockResolvedValue([]);
-    okFetch({ name: 'acme', host: 'http://ch:8123', username: 'dfe_org_acme' });
+    okFetch({ name: 'acme', host: 'http://ch:8123', username: ORG });
 
-    await ensureOrgConnection('tok', 'team-1');
+    await ensureOrgConnection('tok', 'team-1', ORG);
 
     expect(mockCreateConn).not.toHaveBeenCalled();
     expect(mockCreateSource).not.toHaveBeenCalled();
   });
 
-  test('swallows a thrown controller error so login is never blocked', async () => {
+  test('a store error is unavailable, so login is never blocked', async () => {
     mockConns.mockRejectedValue(new Error('db down'));
 
-    await expect(ensureOrgConnection('tok', 'team-1')).resolves.toBeUndefined();
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'unavailable',
+    );
   });
 
   test('a team created later gets the sources the engine already registered', async () => {
@@ -342,7 +554,7 @@ describe('ensureOrgConnection', () => {
     mockSources.mockResolvedValue([]);
     okFetch(ORG_CONN);
 
-    await ensureOrgConnection('tok', 'team-1');
+    await ensureOrgConnection('tok', 'team-1', ORG);
 
     expect(mockSeedDfeSources).toHaveBeenCalledWith('team-1', 'conn-1');
     // Sources land before the sync, registered ones included, or a dashboard
@@ -358,7 +570,7 @@ describe('ensureOrgConnection', () => {
     mockSources.mockResolvedValue([{ _id: 'existing-source' }]);
     okFetch(ORG_CONN);
 
-    await ensureOrgConnection('tok', 'team-1');
+    await ensureOrgConnection('tok', 'team-1', ORG);
 
     expect(mockSeedDfeSources).not.toHaveBeenCalled();
   });

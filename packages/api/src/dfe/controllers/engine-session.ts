@@ -3,10 +3,11 @@
 //
 // An engine token's own `groups` claim grants nothing (dfe-engine#591): the
 // engine resolves a session's groups from the account the token binds, on every
-// request. A HyperDX team is that decision's data-plane face - the team's
-// connection is a ClickHouse user - so the team is chosen from what the engine
-// answers for the token, never from the claim. Anything short of a readable
-// engine answer is a refusal.
+// request. A HyperDX team's connection is a ClickHouse user, so the team IS that
+// user: its name is the username the engine hands this caller, one team per org
+// plus one platform team. Two callers share a team only when the engine gives
+// them the same ClickHouse identity. Anything short of a readable engine answer
+// is a refusal.
 //
 // This is a NEW file - it does not modify any upstream HyperDX files.
 
@@ -19,29 +20,41 @@ import logger from '@/utils/logger';
 
 const ENGINE_TIMEOUT_MS = 5000;
 
-// A revoked group or a deleted account reaches HyperDX within this window.
+// A revoked group, a changed role or a deleted account reaches HyperDX within this window.
 const CACHE_TTL_MS = 30_000;
 
 const CACHE_MAX_ENTRIES = 1000;
 
 /**
- * GET /api/v1/auth/me, read for the two fields the decision needs. `groups` is
- * what the bound account holds, and is empty when the token binds no account.
+ * GET /api/v1/auth/me, read for the fields the decision needs. `groups` is what
+ * the bound account holds, and is empty when the token binds no account.
+ * `hyperdx_identity` is the ClickHouse username the engine hands this session,
+ * empty when it hands none; `hyperdx_role` is the session's dashboard role. An
+ * engine that predates either sends neither.
  */
 const EngineSessionSchema = z.object({
   groups: z.array(z.string()),
   password_change_required: z.boolean().optional(),
+  hyperdx_identity: z.string().optional(),
+  hyperdx_role: z.string().optional(),
 });
+
+/**
+ * GET /api/v1/hyperdx/connection, read for the username alone. The password in
+ * the same body is stripped by the parse and never leaves this function.
+ */
+const ConnectionIdentitySchema = z.object({ username: z.string().min(1) });
 
 type RefusalReason =
   | 'engine_refused'
   | 'no_group'
+  | 'no_identity'
   | 'password_change'
   | 'engine_unavailable';
 
-type EngineSession =
-  | { granted: true; team: string }
-  | { granted: false; status: 401 | 403; reason: RefusalReason };
+type Refusal = { granted: false; status: 401 | 403; reason: RefusalReason };
+
+type EngineSession = { granted: true; team: string; role?: string } | Refusal;
 
 interface EngineAnswer {
   session: EngineSession;
@@ -63,12 +76,41 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>();
 const pending = new Map<string, Promise<EngineSession>>();
 
+function refused(status: 401 | 403, reason: RefusalReason): EngineAnswer {
+  return { session: { granted: false, status, reason }, definitive: true };
+}
+
 /**
- * The team for the groups the engine grants: the first in code-point order, so
- * the choice never depends on the order the engine lists them in.
+ * The ClickHouse username an engine that predates `hyperdx_identity` hands this
+ * caller, asked of the connection read itself. Its refusal is the session's.
  */
-function chooseTeam(groups: readonly string[]): string | undefined {
-  return [...groups].sort()[0];
+async function identityFromConnection(
+  origin: string,
+  token: string,
+): Promise<string | EngineAnswer> {
+  const resp = await fetch(`${origin}/api/v1/hyperdx/connection`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(ENGINE_TIMEOUT_MS),
+  });
+  if (resp.status === 401) {
+    return refused(401, 'engine_refused');
+  }
+  if (resp.status === 403) {
+    return refused(403, 'no_identity');
+  }
+  if (!resp.ok) {
+    logger.warn(
+      { status: resp.status },
+      'DFE: engine connection identity answered with an error',
+    );
+    return UNAVAILABLE;
+  }
+  const parsed = ConnectionIdentitySchema.safeParse(await resp.json());
+  if (!parsed.success) {
+    logger.warn('DFE: engine connection identity failed validation');
+    return UNAVAILABLE;
+  }
+  return parsed.data.username.trim();
 }
 
 async function askEngine(token: string): Promise<EngineAnswer> {
@@ -83,14 +125,7 @@ async function askEngine(token: string): Promise<EngineAnswer> {
       signal: AbortSignal.timeout(ENGINE_TIMEOUT_MS),
     });
     if (resp.status === 401 || resp.status === 403) {
-      return {
-        session: {
-          granted: false,
-          status: resp.status === 401 ? 401 : 403,
-          reason: 'engine_refused',
-        },
-        definitive: true,
-      };
+      return refused(resp.status === 401 ? 401 : 403, 'engine_refused');
     }
     if (!resp.ok) {
       logger.warn(
@@ -107,22 +142,32 @@ async function askEngine(token: string): Promise<EngineAnswer> {
       );
       return UNAVAILABLE;
     }
-    if (parsed.data.password_change_required) {
-      return {
-        session: { granted: false, status: 403, reason: 'password_change' },
-        definitive: true,
-      };
+    const me = parsed.data;
+    if (me.password_change_required) {
+      return refused(403, 'password_change');
     }
-    const team = chooseTeam(
-      parsed.data.groups.map(g => g.trim()).filter(Boolean),
-    );
-    if (!team) {
-      return {
-        session: { granted: false, status: 403, reason: 'no_group' },
-        definitive: true,
-      };
+    if (!me.groups.some(group => group.trim())) {
+      return refused(403, 'no_group');
     }
-    return { session: { granted: true, team }, definitive: true };
+
+    const identity =
+      me.hyperdx_identity === undefined
+        ? await identityFromConnection(origin, token)
+        : me.hyperdx_identity.trim();
+    if (typeof identity !== 'string') {
+      return identity;
+    }
+    if (!identity) {
+      return refused(403, 'no_identity');
+    }
+    return {
+      session: {
+        granted: true,
+        team: identity,
+        role: me.hyperdx_role || undefined,
+      },
+      definitive: true,
+    };
   } catch (err) {
     logger.warn(
       { err: err instanceof Error ? err.message : String(err) },
@@ -167,8 +212,9 @@ function remember(
 }
 
 /**
- * The engine's decision for this token: the team it selects, or a refusal
- * carrying the status to answer with.
+ * The engine's decision for this token: the team (the caller's ClickHouse
+ * identity) and the session's dashboard role, or a refusal carrying the status
+ * to answer with.
  *
  * An engine answer is cached until the sooner of CACHE_TTL_MS and the token's
  * own expiry (`tokenExpiresAt`, epoch ms), and concurrent lookups for one token

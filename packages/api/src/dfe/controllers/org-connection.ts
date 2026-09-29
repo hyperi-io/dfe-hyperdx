@@ -1,10 +1,12 @@
 // DFE per-org ClickHouse connection provisioning.
 //
-// The engine is the SOLE source of a team's ClickHouse connection: the fork asks
-// the engine for the CALLER's own org connection and seeds exactly that on the
-// caller's team, so a team never holds another org's credentials. This is the
-// fork half of the per-org connection seam (dfe-engine#124) - it replaces the
-// global DEFAULT_CONNECTIONS blob that handed every team every org's connection.
+// The engine is the SOLE source of a team's ClickHouse connection. A team is
+// named after the ClickHouse user the engine hands its members, and holds one
+// connection as exactly that user: the fork asks the engine for the CALLER's own
+// connection and seeds it only when its username is the team's name, so a team
+// never holds a credential its members were not each handed. This is the fork
+// half of the per-org connection seam (dfe-engine#124) - it replaces the global
+// DEFAULT_CONNECTIONS blob that handed every team every org's connection.
 //
 // This is a NEW file - it does not modify any upstream HyperDX files.
 /* eslint-disable @typescript-eslint/no-unsafe-type-assertion --
@@ -21,6 +23,8 @@ import {
 import { createSource, getSources } from '@/controllers/sources';
 import * as dfeConfig from '@/dfe/config';
 import { seedDfeSources } from '@/dfe/controllers/dfe-sources';
+import { isDuplicateKey } from '@/dfe/utils/mongo';
+import Connection from '@/models/connection';
 import { syncDashboards } from '@/tasks/provisionDashboards';
 import logger from '@/utils/logger';
 
@@ -59,38 +63,77 @@ export function engineOrigin(): string | undefined {
   }
 }
 
+// `refused` is the engine answering 401/403; `unavailable` is any answer it could not give.
 async function fetchOrgConnection(
   token: string,
-): Promise<OrgConnection | undefined> {
+): Promise<OrgConnection | 'refused' | 'unavailable'> {
   const origin = engineOrigin();
   if (!origin) {
-    return undefined;
+    return 'unavailable';
   }
   try {
     const resp = await fetch(`${origin}/api/v1/hyperdx/connection`, {
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(ENGINE_TIMEOUT_MS),
     });
-    if (!resp.ok) {
+    if (resp.status === 401 || resp.status === 403) {
       logger.warn(
         { status: resp.status },
         'DFE: engine connection endpoint refused',
       );
-      return undefined;
+      return 'refused';
+    }
+    if (!resp.ok) {
+      logger.warn(
+        { status: resp.status },
+        'DFE: engine connection endpoint answered with an error',
+      );
+      return 'unavailable';
     }
     const parsed = OrgConnectionSchema.safeParse(await resp.json());
     if (!parsed.success) {
       logger.warn(
-        { issues: parsed.error.issues },
+        { issues: parsed.error.issues.map(issue => issue.path.join('.')) },
         'DFE: engine connection material failed validation',
       );
-      return undefined;
+      return 'unavailable';
     }
     return parsed.data;
   } catch (err) {
     logger.warn({ err }, 'DFE: engine connection endpoint unreachable');
-    return undefined;
+    return 'unavailable';
   }
+}
+
+// The index name is ours, so it never collides with one upstream adds on `team`.
+const ONE_CONNECTION_PER_TEAM = 'dfe_one_connection_per_team';
+
+let teamIndexEnsured = false;
+
+/**
+ * Ensure a team can hold at most one connection, so a seed racing on another
+ * replica collides instead of adding a second. Ensured from the dfe layer with
+ * an idempotent createIndex, so the upstream Connection model stays pristine.
+ *
+ * Only called in oidc-proxy mode: header-dev and upstream seed several
+ * DEFAULT_CONNECTIONS onto one team.
+ *
+ * @returns whether the index is in place.
+ */
+export async function ensureOneConnectionPerTeam(): Promise<boolean> {
+  if (teamIndexEnsured) {
+    return true;
+  }
+  try {
+    await Connection.collection.createIndex(
+      { team: 1 },
+      { unique: true, name: ONE_CONNECTION_PER_TEAM },
+    );
+    teamIndexEnsured = true;
+  } catch (err) {
+    logger.warn({ err }, 'DFE: failed to ensure one connection per team');
+  }
+  return teamIndexEnsured;
 }
 
 // The engine returns this ClickHouse username for the PLATFORM/admin team - the
@@ -264,35 +307,111 @@ function clickhouseSystemSource(connectionId: string) {
 }
 
 /**
- * Ensure the caller's team holds ONLY its own org connection, plus its seed
- * sources: `main` and `hunts` for every team, and the otel sources as well for the
- * platform/admin team (see the source builders above for the RBAC split).
+ * What ensureOrgConnection found or did.
  *
- * Idempotent and non-fatal: a team that already has a connection is left alone
- * (the first user seeds it, the rest reuse), and any failure is logged and
- * swallowed so a HyperDX login is never blocked on the engine being reachable.
+ * - `present`: the team already holds its own connection, and nothing else.
+ * - `seeded`: this call created it.
+ * - `unavailable`: the engine or the store could not answer; the next request retries.
+ * - `refused`: the engine refused this caller a connection.
+ * - `mismatch`: the team holds, or the engine offered, a ClickHouse user other
+ *   than the one the team is named after.
+ */
+export type SeedOutcome =
+  | 'present'
+  | 'seeded'
+  | 'unavailable'
+  | 'refused'
+  | 'mismatch';
+
+// Concurrent first requests on one team share one seed; the unique index covers other replicas.
+const seeding = new Map<string, Promise<SeedOutcome>>();
+
+/**
+ * Ensure the team named `identity` holds ONLY its own connection, as the
+ * ClickHouse user `identity`, plus its seed sources: `main` and `hunts` for every
+ * team, and the otel sources as well for the platform/admin team (see the source
+ * builders above for the RBAC split).
+ *
+ * Runs on every request, so a team whose first seed failed is seeded by the next
+ * one. The engine's material is seeded only when its username is `identity`. A
+ * team holding a connection as anyone else answers `mismatch` and is never
+ * reused. Engine and store faults are logged and answered `unavailable`, which
+ * does not block a login.
  */
 export async function ensureOrgConnection(
   token: string,
   teamId: string,
-): Promise<void> {
+  identity: string,
+): Promise<SeedOutcome> {
+  let held: { username?: string }[];
   try {
-    const existing = await getConnectionsByTeam(teamId);
-    if (existing.length > 0) {
-      return;
+    held = await getConnectionsByTeam(teamId);
+  } catch (err) {
+    logger.warn({ err, teamId }, 'DFE: could not read the team connection');
+    return 'unavailable';
+  }
+  if (held.length > 0) {
+    const foreign = held
+      .map(connection => connection.username)
+      .filter(username => username !== identity);
+    if (foreign.length === 0) {
+      return 'present';
     }
+    logger.error(
+      { teamId, team: identity, foreign },
+      'DFE: team holds a connection that is not its own ClickHouse identity',
+    );
+    return 'mismatch';
+  }
 
+  const key = `${teamId}:${identity}`;
+  const inFlight = seeding.get(key);
+  if (inFlight) {
+    return inFlight;
+  }
+  const seed = seedTeam(token, teamId, identity).finally(() => {
+    seeding.delete(key);
+  });
+  seeding.set(key, seed);
+  return seed;
+}
+
+async function seedTeam(
+  token: string,
+  teamId: string,
+  identity: string,
+): Promise<SeedOutcome> {
+  let outcome: SeedOutcome = 'unavailable';
+  try {
     const material = await fetchOrgConnection(token);
-    if (!material) {
-      return;
+    if (material === 'refused' || material === 'unavailable') {
+      return material;
+    }
+    if (material.username !== identity) {
+      logger.warn(
+        { teamId, team: identity, username: material.username },
+        'DFE: engine connection is not the team identity; not seeded',
+      );
+      return 'mismatch';
     }
 
-    const conn = await createConnection(teamId, {
-      name: material.name,
-      host: material.host,
-      username: material.username,
-      password: material.password,
-    } as Parameters<typeof createConnection>[1]);
+    await ensureOneConnectionPerTeam();
+    let conn;
+    try {
+      conn = await createConnection(teamId, {
+        name: material.name,
+        host: material.host,
+        username: material.username,
+        password: material.password,
+      } as Parameters<typeof createConnection>[1]);
+    } catch (err) {
+      if (isDuplicateKey(err)) {
+        // Another replica seeded this team first, through the same identity check.
+        return 'present';
+      }
+      throw err;
+    }
+    outcome = 'seeded';
 
     const sources = await getSources(teamId);
     if (sources.length === 0) {
@@ -344,4 +463,5 @@ export async function ensureOrgConnection(
       'DFE: org connection provisioning failed (non-fatal)',
     );
   }
+  return outcome;
 }

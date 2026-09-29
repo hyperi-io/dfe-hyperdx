@@ -1,25 +1,15 @@
 // DFE Team Provisioning
-// Find-or-create teams from OIDC group claims.
+// Find-or-create a team by name: the session's ClickHouse identity in
+// oidc-proxy mode, the first group header in header-dev mode.
 // This is a NEW controller — it does not modify any upstream HyperDX files.
 
 import * as dfeConfig from '@/dfe/config';
+import { isDuplicateKey } from '@/dfe/utils/mongo';
 import Team from '@/models/team';
 import { setupTeamDefaults } from '@/setupDefaults';
 import logger from '@/utils/logger';
 
-// MongoDB duplicate-key error code, raised when two concurrent inserts collide
-// on the unique `name` index. FerretDB surfaces the same code.
-const DUPLICATE_KEY = 11000;
-
-function isDuplicateKey(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    (err as { code?: number }).code === DUPLICATE_KEY
-  );
-}
-
-// Team name is the OIDC group / org identity here, so it must be unique. The
+// Team name is the session's ClickHouse identity here, so it must be unique. The
 // constraint is what makes find-or-create race-safe (a concurrent create
 // collides on it). Ensured from the dfe layer - idempotent createIndex - so the
 // upstream Team model stays pristine and off the fork conflict surface.
