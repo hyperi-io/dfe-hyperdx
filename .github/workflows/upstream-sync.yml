@@ -59,6 +59,9 @@ concurrency:
 
 env:
   UPSTREAM_URL: https://github.com/hyperdxio/hyperdx.git
+  # gh ranks a remote named `upstream` above `origin`, so without this every gh
+  # call after the resolve step targets hyperdxio/hyperdx and gets a 403.
+  GH_REPO: ${{ github.repository }}
 
 jobs:
   sync:

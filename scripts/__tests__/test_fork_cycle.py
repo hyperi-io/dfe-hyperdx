@@ -413,6 +413,84 @@ class BraceInAValueTest(unittest.TestCase):
         self.assertEqual(manifest["scripts"], {"build": "nx build"})
 
 
+def lockfile(versions: dict[str, str]) -> str:
+    """A yarn.lock resolving each package to exactly one version."""
+    return "".join(
+        f'"{name}@npm:^{version}":\n'
+        f"  version: {version}\n"
+        f'  resolution: "{name}@npm:{version}"\n\n'
+        for name, version in versions.items()
+    )
+
+
+class RedundancyCheckTest(unittest.TestCase):
+    """--check asks whether upstream has caught up, so it reads UPSTREAM's lockfile.
+
+    Our own lockfile cannot answer that: with the pin in force it resolves at or
+    above the pin's floor by construction, so reading it reported every live pin
+    redundant and told us to delete a security fix upstream does not have.
+    """
+
+    def setUp(self) -> None:
+        self.fork = ForkFixture()
+        self.addCleanup(self.fork.cleanup)
+
+    def upstream_ships(self, versions: dict[str, str]) -> None:
+        """Move the merge base to an upstream commit carrying this lockfile."""
+        git(self.fork.dir, "checkout", "-q", "-b", "locked", self.fork.upstream_sha)
+        (self.fork.dir / "yarn.lock").write_text(lockfile(versions), encoding="utf-8")
+        git(self.fork.dir, "add", "yarn.lock")
+        git(self.fork.dir, "commit", "-qm", "upstream lockfile")
+        git(self.fork.dir, "update-ref", "refs/remotes/upstream/main", "HEAD")
+        git(self.fork.dir, "checkout", "-q", "main")
+        git(self.fork.dir, "merge", "-q", "--no-edit", "locked")
+
+    def we_resolve(self, versions: dict[str, str]) -> None:
+        (self.fork.dir / "yarn.lock").write_text(lockfile(versions), encoding="utf-8")
+
+    def test_a_pin_holding_our_tree_above_upstream_is_not_redundant(self) -> None:
+        self.upstream_ships({"some-parser": "1.2.0"})
+        self.we_resolve({"some-parser": "1.2.5"})
+        self.fork.set_register([{"package": "some-parser", "range": "^1.2.3"}])
+
+        result = self.fork.run("security-override.py", "--check")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("REDUNDANT", result.stdout)
+        self.assertIn("upstream ships 1.2.0", result.stdout)
+
+    def test_a_pin_upstream_has_caught_up_with_is_redundant(self) -> None:
+        self.upstream_ships({"some-parser": "1.3.0"})
+        self.we_resolve({"some-parser": "1.3.0"})
+        self.fork.set_register([{"package": "some-parser", "range": "^1.2.3"}])
+
+        result = self.fork.run("security-override.py", "--check")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("[REDUNDANT] some-parser ^1.2.3 - upstream now ships 1.3.0", result.stdout)
+
+    def test_a_package_only_our_tree_pulls_in_keeps_its_pin(self) -> None:
+        """Upstream's lockfile says nothing about a dependency only we added."""
+        self.upstream_ships({"other": "1.0.0"})
+        self.we_resolve({"other": "1.0.0", "some-parser": "1.2.5"})
+        self.fork.set_register([{"package": "some-parser", "range": "^1.2.3"}])
+
+        result = self.fork.run("security-override.py", "--check")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("REDUNDANT", result.stdout)
+
+    def test_no_upstream_lockfile_declines_rather_than_passing(self) -> None:
+        self.we_resolve({"some-parser": "1.2.5"})
+        self.fork.set_register([{"package": "some-parser", "range": "^1.2.3"}])
+
+        result = self.fork.run("security-override.py", "--check")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Declining", result.stdout)
+        self.assertNotIn("REDUNDANT", result.stdout)
+
+
 class PatchSeriesTest(unittest.TestCase):
     def setUp(self) -> None:
         self.fork = ForkFixture()

@@ -24,6 +24,7 @@ import {
   parseTokenizerFromTextIndex,
   splitAndTrimWithBracket,
 } from '@/core/utils';
+import { dfeRangeField } from '@/dfe/jsonPath';
 import { UseTextIndex } from '@/types';
 
 /** Max number of tokens to pass to hasAllTokens(), which supports up to 64 tokens as of ClickHouse v25.12. */
@@ -740,8 +741,9 @@ export abstract class SQLSerializer implements Serializer {
     context: SerializerContext,
     inclusive: lucene.NodeRangedTerm['inclusive'] = 'both',
   ) {
-    const { column, found, mapKeyIndexExpression, isArray } =
-      await this.getColumnForField(field, context);
+    const { column, found, mapKeyIndexExpression, isArray } = dfeRangeField(
+      await this.getColumnForField(field, context),
+    );
     if (!found) {
       return this.NOT_FOUND_QUERY;
     }

@@ -21,9 +21,10 @@
 #
 # THE UNWIND. That is what `vector` and `upstream` are for, and what
 # `scripts/security-override.py --check` automates: it compares each entry
-# against what the tree ACTUALLY resolves to now and FAILS when upstream has
-# caught up, so a redundant pin nags us to delete it. That inverse nag is the
-# whole point - an override nobody removes is how a fork silently drifts.
+# against what UPSTREAM's lockfile resolves at our merge base and FAILS when
+# upstream has caught up, so a redundant pin nags us to delete it. That inverse
+# nag is the whole point - an override nobody removes is how a fork silently
+# drifts. Our own lockfile cannot answer it: the pin holds ours above the floor.
 #
 # ADDING ONE
 #   1. Add the entry below with every field filled in. `vector` is prose, not a

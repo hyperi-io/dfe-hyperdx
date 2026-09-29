@@ -130,6 +130,15 @@ describe('DashboardsListPage.tsx - throughput in place of the presets', () => {
   });
 });
 
+describe('Spotlights.tsx - no preset dashboards in the command palette', () => {
+  it('routes the presets through the fork, which offers none', () => {
+    // dfe/__tests__/spotlightPresets.test.ts asserts the rendered actions.
+    expect(read('src/Spotlights.tsx')).toContain(
+      'dfePresetDashboards(presetDashboards).forEach(',
+    );
+  });
+});
+
 describe('layout.tsx and AppNav.tsx - chromeless embed', () => {
   it('renders no hyperdx nav when embedded, so dfe-ui owns the only nav', () => {
     expect(read('src/layout.tsx')).toContain('isEmbedChrome');
