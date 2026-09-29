@@ -26,10 +26,10 @@ release:
   container:
     enabled: true
     dockerfile: Dockerfile
-    # amd64 only: the arm64 half runs under qemu and Next.js's build-time
-    # font fetch (next/font) times out inside the emulator. Revisit with an
-    # arm runner or fonts vendored offline.
+    # The Dockerfile installs and builds on the build host and runs only its runtime stage per arch, so arm64 never emulates the Next build.
+    # Listed rather than inherited: the Dockerfile maps exactly these two arches to their prebuilt packages.
     platforms:
       - linux/amd64
+      - linux/arm64
 typescript:
   package_manager: yarn
