@@ -8,15 +8,10 @@ import { parameterizedQueryToSql } from '@hyperdx/common-utils/dist/clickhouse';
 import { ClickhouseClient } from '@hyperdx/common-utils/dist/clickhouse/node';
 import { getMetadata } from '@hyperdx/common-utils/dist/core/metadata';
 import { renderChartConfig } from '@hyperdx/common-utils/dist/core/renderChartConfig';
-import {
-  CustomSchemaSQLSerializerV2,
-  SearchQueryBuilder,
-} from '@hyperdx/common-utils/dist/queryParser';
 import { format } from '@hyperdx/common-utils/dist/sqlFormatter';
 import {
   ChartConfigWithOptDateRange,
   SavedChartConfigSchema,
-  UseTextIndex,
 } from '@hyperdx/common-utils/dist/types';
 import express from 'express';
 import { z } from 'zod';
@@ -57,49 +52,10 @@ const createRuleBodySchema = z.object({
 const ENGINE_TIMEOUT_MS = 5000;
 
 /**
- * Translate a Lucene search to its SQL equivalent, using the same serializer
- * `renderChartConfig` uses for a `whereLanguage: 'lucene'` config.
- *
- * The export splices `{timestamp_condition}` into `where`, and that placeholder
- * is not valid Lucene -- the grammar reads `{...}` as `{a TO b}` range syntax
- * and throws. Translating first lets the export hold one language.
- *
- * Runs against the source's REAL table: the serializer resolves column metadata,
- * which the `{{org_id}}` / `{{source_table_name}}` placeholders cannot satisfy.
- */
-async function luceneToSql({
-  condition,
-  metadata,
-  from,
-  connectionId,
-  implicitColumnExpression,
-  bodyExpression,
-  useTextIndexForImplicitColumn,
-}: {
-  condition: string;
-  metadata: ReturnType<typeof getMetadata>;
-  from: { databaseName: string; tableName: string };
-  connectionId: string;
-  implicitColumnExpression?: string;
-  bodyExpression?: string;
-  useTextIndexForImplicitColumn?: UseTextIndex;
-}): Promise<string> {
-  const serializer = new CustomSchemaSQLSerializerV2({
-    metadata,
-    databaseName: from.databaseName,
-    tableName: from.tableName,
-    implicitColumnExpression,
-    bodyExpression,
-    useTextIndexForImplicitColumn,
-    connectionId,
-  });
-  return new SearchQueryBuilder(condition, serializer).build();
-}
-
-/**
  * POST /dfe/export-sql
  *
- * Renders SQL from a chart config for use as a DFE Rule.
+ * Renders SQL from a chart config for use as a DFE Rule: the query the view
+ * runs, against its source's own table and with every filter it carries.
  *
  * Request body:
  *   - chartConfig: SavedChartConfig (same structure as dashboard tiles)
@@ -154,41 +110,8 @@ router.post(
       const metadata = getMetadata(clickhouseClient);
       const querySettings = source.querySettings;
 
-      // Build the full chart config with optional date range.
-      // renderChartConfig requires connection and from; add them from the resolved source.
-      // `where` only exists on the builder (search/select) chart-config variant,
-      // not the raw-SQL / PromQL variants (2.29 made SavedChartConfig a union).
-      const existingWhere =
-        'where' in chartConfig && chartConfig.where
-          ? (chartConfig.where as string)
-          : undefined;
-
-      // The export holds ONE language, because `{timestamp_condition}` is only
-      // valid in the SQL one. See luceneToSql.
-      const sqlWhere =
-        existingWhere &&
-        'whereLanguage' in chartConfig &&
-        chartConfig.whereLanguage === 'lucene'
-          ? await luceneToSql({
-              condition: existingWhere,
-              metadata,
-              from: source.from,
-              connectionId,
-              implicitColumnExpression:
-                'implicitColumnExpression' in chartConfig
-                  ? chartConfig.implicitColumnExpression
-                  : undefined,
-              bodyExpression:
-                'bodyExpression' in chartConfig
-                  ? chartConfig.bodyExpression
-                  : undefined,
-              useTextIndexForImplicitColumn:
-                'useTextIndexForImplicitColumn' in chartConfig
-                  ? chartConfig.useTextIndexForImplicitColumn
-                  : undefined,
-            })
-          : existingWhere;
-
+      // renderChartConfig requires connection and from; both come from the
+      // resolved source, so the rule scans the table the view searched.
       const fullConfig = {
         ...chartConfig,
         connection: connectionId,
@@ -197,16 +120,7 @@ router.post(
               dateRange: [new Date(startTime), new Date(endTime)],
             }
           : {}),
-        // Adjust the config to use the org_id and source_table_name placeholders
-        // required by the DFE control plane
-        from: {
-          databaseName: '{{org_id}}',
-          tableName: '{{source_table_name}}',
-        },
-        where: sqlWhere
-          ? `${sqlWhere} AND {timestamp_condition}`
-          : '{timestamp_condition}',
-        whereLanguage: 'sql' as const,
+        from: source.from,
       } as ChartConfigWithOptDateRange;
 
       // Render the chart config to SQL

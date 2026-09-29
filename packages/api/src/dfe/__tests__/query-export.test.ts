@@ -26,8 +26,8 @@ jest.mock('@/dfe/controllers/org-connection', () => ({
 
 jest.mock('@/dfe/middleware/jwt-verify', () => ({ extractToken: jest.fn() }));
 
-// The export path talks to ClickHouse to resolve column metadata. Only the
-// placeholder splice is under test here, so the renderer is the capture point
+// The export path talks to ClickHouse to resolve column metadata. What the route
+// hands the renderer is under test here, so the renderer is the capture point
 // and everything under it is a stand-in.
 jest.mock('@hyperdx/common-utils/dist/clickhouse/node', () => ({
   ClickhouseClient: jest.fn(() => ({})),
@@ -43,12 +43,6 @@ jest.mock('@hyperdx/common-utils/dist/clickhouse', () => ({
 }));
 jest.mock('@hyperdx/common-utils/dist/sqlFormatter', () => ({
   format: jest.fn((sql: string) => sql),
-}));
-jest.mock('@hyperdx/common-utils/dist/queryParser', () => ({
-  CustomSchemaSQLSerializerV2: jest.fn(() => ({})),
-  SearchQueryBuilder: jest.fn(() => ({
-    build: async () => "hasToken(lower(_json), lower('syslog'))",
-  })),
 }));
 
 import { renderChartConfig } from '@hyperdx/common-utils/dist/core/renderChartConfig';
@@ -141,30 +135,38 @@ describe('POST /dfe/create-rule status mapping', () => {
 });
 
 /**
- * The placeholder contract on POST /dfe/export-sql.
+ * What POST /dfe/export-sql renders.
  *
- * `{{org_id}}`, `{{source_table_name}}` and `{timestamp_condition}` are a
- * contract between this fork, the engine's rule builder and dfe-ui. The engine
- * expands them per org at hunt time, so a rename here produces SQL that renders
- * and then matches nothing. Nothing else asserts these literals.
+ * The engine builds a hunt rule from this SQL and scans the table its FROM
+ * names, so the view's own table, search and filters have to reach the renderer
+ * as the view runs them. The engine expands no placeholder: a templated table
+ * or time condition is SQL it refuses.
  */
-describe('POST /dfe/export-sql placeholder contract', () => {
+describe('POST /dfe/export-sql renders the view as it runs', () => {
+  const FILTERS = [
+    {
+      type: 'sql' as const,
+      condition: "toString(_json.user_name) IN ('root')",
+    },
+  ];
   const CHART_CONFIG = {
     source: '507f1f77bcf86cd799439011',
-    select: 'count()',
-    where: '',
-    whereLanguage: 'sql' as const,
+    select: '_timestamp,_json',
+    where: 'rulecycle',
+    whereLanguage: 'lucene' as const,
+    filters: FILTERS,
   };
 
   /**
    * The config the route handed the renderer. Its type is a union, and only
-   * some members declare `where`, so the two fields read here are added back.
+   * some members declare the search fields, so the ones read here are added back.
    */
   function renderedConfig() {
     const [config] = mockRender.mock.calls[0];
     return config as typeof config & {
       where?: string;
       whereLanguage?: string;
+      filters?: unknown[];
     };
   }
 
@@ -191,54 +193,51 @@ describe('POST /dfe/export-sql placeholder contract', () => {
     );
   });
 
-  it('replaces the real table with the engine placeholders', async () => {
+  it("renders against the source's own table", async () => {
     const res = await request(app)
       .post('/dfe/export-sql')
       .send({ chartConfig: CHART_CONFIG });
 
     expect(res.status).toBe(200);
     expect(renderedConfig().from).toEqual({
-      databaseName: '{{org_id}}',
-      tableName: '{{source_table_name}}',
+      databaseName: 'dfe',
+      tableName: 'default',
     });
   });
 
-  it('an empty where becomes the timestamp placeholder alone', async () => {
+  it('keeps the search in the language the view ran it in', async () => {
     await request(app)
       .post('/dfe/export-sql')
       .send({ chartConfig: CHART_CONFIG });
 
-    expect(renderedConfig().where).toBe('{timestamp_condition}');
+    expect(renderedConfig().where).toBe('rulecycle');
+    expect(renderedConfig().whereLanguage).toBe('lucene');
   });
 
-  it("keeps the analyst's SQL and appends the timestamp placeholder", async () => {
+  it('keeps every side-panel filter', async () => {
     await request(app)
       .post('/dfe/export-sql')
-      .send({
-        chartConfig: { ...CHART_CONFIG, where: "_source = 'syslog'" },
-      });
+      .send({ chartConfig: CHART_CONFIG });
 
-    expect(renderedConfig().where).toBe(
-      "_source = 'syslog' AND {timestamp_condition}",
-    );
+    expect(renderedConfig().filters).toEqual(FILTERS);
   });
 
-  it('translates a lucene where to SQL before splicing the placeholder in', async () => {
-    // `{timestamp_condition}` is not valid Lucene -- the grammar reads `{...}`
-    // as range syntax and throws -- so the translation has to happen first.
+  it('adds no placeholder the engine would have to expand', async () => {
     await request(app)
       .post('/dfe/export-sql')
-      .send({
-        chartConfig: {
-          ...CHART_CONFIG,
-          where: 'syslog',
-          whereLanguage: 'lucene',
-        },
-      });
+      .send({ chartConfig: { ...CHART_CONFIG, where: '' } });
 
-    expect(renderedConfig().where).toBe(
-      "hasToken(lower(_json), lower('syslog')) AND {timestamp_condition}",
-    );
-    expect(renderedConfig().whereLanguage).toBe('sql');
+    const rendered = JSON.stringify(renderedConfig());
+    expect(rendered).not.toContain('timestamp_condition');
+    expect(rendered).not.toContain('{{');
+    expect(renderedConfig().where).toBe('');
+  });
+
+  it('answers with the SQL the renderer produced', async () => {
+    const res = await request(app)
+      .post('/dfe/export-sql')
+      .send({ chartConfig: CHART_CONFIG });
+
+    expect(res.body.rawSql).toBe('SELECT 1');
   });
 });

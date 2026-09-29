@@ -2,10 +2,10 @@
 
 **Turn a HyperDX search into a DFE detection rule without retyping it.** An
 analyst who has already found the thing in HyperDX presses a button; the engine
-gets executable SQL with the tenant and table left as placeholders.
+gets the SQL that search runs and saves it as a rule a hunt can use.
 
-One route (`POST /dfe/export-sql`) and one button, both under `dfe/` - no
-upstream file is modified.
+Two routes (`POST /dfe/export-sql`, `POST /dfe/create-rule`) and one button, all
+under `dfe/` - no upstream file is modified.
 
 ---
 
@@ -15,23 +15,26 @@ upstream file is modified.
 sequenceDiagram
     participant User as Analyst
     participant App as HyperDX UI
-    participant API as /dfe/export-sql
+    participant API as HyperDX API /dfe
     participant CH as ClickHouse
+    participant Engine as DFE engine
 
     User->>App: refine a search until it is right
-    App->>API: POST chartConfig with an optional date range
+    App->>API: POST /dfe/export-sql with the search's chart config
     API->>API: resolve source and connection for the team
-    API->>API: swap in org_id and source_table_name placeholders
-    API->>API: append the timestamp_condition placeholder
     API->>CH: fetch column metadata
     API->>API: renderChartConfig then parameterizedQueryToSql then format
     API-->>App: sql, rawSql, config, source
-    App-->>User: hand off to the DFE rule builder
+    App->>API: POST /dfe/create-rule with rawSql
+    API->>Engine: POST /api/v1/rules/from-hyperdx as the caller
+    Engine-->>API: the rule id, or 422 when the SQL cannot be compiled
+    API-->>App: the engine's status and body
+    App-->>User: open the rule in the DFE UI, or show the engine's reason
 ```
 
 ---
 
-## What the endpoint actually does
+## What the export renders
 
 `packages/api/src/dfe/routers/query-export.ts`, mounted at `/dfe` behind
 upstream's `isUserAuthenticated`.
@@ -48,23 +51,20 @@ uses), plus optional `startTime` / `endTime` in milliseconds.
 | `config` | the original chart config, for structured consumption |
 | `source` | `{ name, kind, from, connection }`                    |
 
-### The placeholder rewrite is the interesting part
+The query is the one the search runs. `from` is the source's own table, and the
+search bar, its language and every side-panel filter reach `renderChartConfig`
+as the view holds them, so the renderer that runs the search also writes the
+rule. The engine reads the `FROM` as the table the hunt scans and the `WHERE` as
+the detection logic.
 
-The rendered SQL is not meant to run as-is in HyperDX - it runs in the DFE
-control plane, against whichever tenant and table the rule is later bound to. So
-before rendering, three substitutions happen:
+There is no time bound. The saved chart config carries no
+`timestampValueExpression`, so the renderer emits none, and the hunt runner
+supplies its own window. The engine strips the display-only rest (`LIMIT`,
+`SETTINGS`, time buckets).
 
-```
-from.databaseName  ->  {{org_id}}
-from.tableName     ->  {{source_table_name}}
-where              ->  <original where> AND {timestamp_condition}
-```
-
-With no original `where`, the clause becomes `{timestamp_condition}` alone -
-**and `whereLanguage` is forced to `sql`.** That is not cosmetic. The default
-Lucene parser reads `{a TO b}` as range syntax, so it chokes on
-`{timestamp_condition}` and the export fails. Forcing SQL mode skips the Lucene
-pass entirely.
+The engine expands no placeholder. A templated table such as
+`{{org_id}}.{{source_table_name}}` or a `{timestamp_condition}` does not parse,
+and the engine refuses a rule it cannot compile with 422 and saves nothing.
 
 ### Rendering
 
@@ -77,8 +77,9 @@ beats no query at all.
 
 ## The button
 
-`packages/app/src/dfe/components/CreateRuleFromSearch/` posts to the endpoint
-and hands the result to the DFE UI's rule builder at `DFE_UI_BASE_URL`.
+`packages/app/src/dfe/components/CreateRuleFromSearch/` exports the search,
+posts the `rawSql` to `/dfe/create-rule`, and opens the created rule at
+`DFE_UI_BASE_URL/rules/<id>`. A refusal shows the engine's own reason.
 
 It deliberately uses plain `useState` rather than react-query's `useMutation`.
 The component is injected into upstream's `DBSearchPage`, and upstream's own
@@ -103,9 +104,9 @@ chart types only.
 
 ## AI steering
 
-| Don't                                    | Do                                                            | Why                                                        |
-| ---------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
-| Assume `chartConfig.where` exists        | Check `'where' in chartConfig` first                          | It is a union; raw-SQL and PromQL variants have no `where` |
-| Drop the `whereLanguage: 'sql'` branch   | Keep it for the empty-`where` case                            | The Lucene parser fails on `{timestamp_condition}`         |
-| Hardcode a database or table name        | Leave the `{{org_id}}` / `{{source_table_name}}` placeholders | The rule is bound to a tenant later, not here              |
-| Add a react-query hook to this component | Use plain state                                               | Upstream's partial mock of that module breaks their tests  |
+| Don't                                            | Do                                        | Why                                                        |
+| ------------------------------------------------ | ----------------------------------------- | ---------------------------------------------------------- |
+| Assume `chartConfig.where` exists                | Check `'where' in chartConfig` first      | It is a union; raw-SQL and PromQL variants have no `where` |
+| Swap the table or the time filter for a template | Render against `source.from` as it stands | The engine expands no placeholder and refuses the rule     |
+| Rewrite the search into SQL by hand              | Let `renderChartConfig` render it         | The search page runs the same renderer                     |
+| Add a react-query hook to this component         | Use plain state                           | Upstream's partial mock of that module breaks their tests  |
