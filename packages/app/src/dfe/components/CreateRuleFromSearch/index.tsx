@@ -28,6 +28,24 @@ type CreatedRule = {
   sql_errors?: unknown[];
 };
 
+// The engine's `message` says why it refused; ky's own names only the status.
+async function engineReason(err: HTTPError): Promise<string> {
+  try {
+    const body: unknown = await err.response.clone().json();
+    if (
+      body != null &&
+      typeof body === 'object' &&
+      'message' in body &&
+      typeof body.message === 'string'
+    ) {
+      return body.message;
+    }
+  } catch {
+    // A body that is not JSON carries no reason to show.
+  }
+  return err.message;
+}
+
 export function CreateRuleFromSearch({
   chartConfig,
   savedSearchName,
@@ -86,7 +104,12 @@ export function CreateRuleFromSearch({
         notifications.show({
           color: 'red',
           title: 'Failed to create rule',
-          message: err instanceof Error ? err.message : String(err),
+          message:
+            err instanceof HTTPError
+              ? await engineReason(err)
+              : err instanceof Error
+                ? err.message
+                : String(err),
           autoClose: 5000,
         });
       }
