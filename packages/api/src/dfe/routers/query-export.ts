@@ -2,7 +2,7 @@
 // Renders SQL from a HyperDX chart config or saved search for use
 // as a DFE Rule. Returns both the structured config and the rendered SQL.
 //
-// This is a NEW file — it does not modify any upstream HyperDX files.
+// This is a NEW file -- it does not modify any upstream HyperDX files.
 
 import { parameterizedQueryToSql } from '@hyperdx/common-utils/dist/clickhouse';
 import { ClickhouseClient } from '@hyperdx/common-utils/dist/clickhouse/node';
@@ -28,14 +28,14 @@ import logger from '@/utils/logger';
 const router = express.Router();
 
 const exportSqlBodySchema = z.object({
-  // The chart config to render — same shape as a dashboard tile config
+  // The chart config to render -- same shape as a dashboard tile config
   chartConfig: SavedChartConfigSchema,
   // Optional date range for the query (millisecond timestamps)
   startTime: z.number().optional(),
   endTime: z.number().optional(),
 });
 
-// The expanded rule input the UI hands us — the same fields CreateRuleFromSearch
+// The expanded rule input the UI hands us -- the same fields CreateRuleFromSearch
 // gathered for export-sql, i.e. the rendered rawSql plus the saved-search metadata.
 // Field names mirror what the UI holds (camelCase); we translate to the engine's
 // snake_case RuleFromHyperdxRequest below.
