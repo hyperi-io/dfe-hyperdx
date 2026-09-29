@@ -31,5 +31,8 @@ release:
     platforms:
       - linux/amd64
       - linux/arm64
+    # The API reports CODE_VERSION on /health and in its telemetry; without it every image reports an empty version.
+    build_args:
+      CODE_VERSION: '{version}'
 typescript:
   package_manager: yarn
