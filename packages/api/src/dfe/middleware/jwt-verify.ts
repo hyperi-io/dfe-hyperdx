@@ -5,11 +5,13 @@
 // Point and MUST verify it too (defence in depth) rather than trust an
 // unauthenticated header. We verify against the engine's JWKS.
 //
-// On a valid token we resolve the user + team the same way the header
-// middleware does (findOrCreateTeamByName / findOrCreateUserFromOIDC) and
-// call req.login() so Passport's isUserAuthenticated() passes through.
-// On a missing/invalid token we fall through (no 401 here) - the
-// route-level isUserAuthenticated guard rejects unauthenticated requests.
+// On a valid token we ask the engine which groups the session holds, resolve
+// the user + team from that answer (findOrCreateTeamByName /
+// findOrCreateUserFromOIDC) and call req.login() so Passport's
+// isUserAuthenticated() passes through. The token's own groups claim is never
+// read. On a missing/invalid token we fall through (no 401 here) - the
+// route-level isUserAuthenticated guard rejects unauthenticated requests. A
+// valid token the engine refuses, or cannot answer for, is refused here.
 //
 // This is a NEW file - it does not modify any upstream HyperDX files.
 
@@ -18,9 +20,13 @@ import type { JWTPayload, JWTVerifyGetKey } from 'jose';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 import * as dfeConfig from '@/dfe/config';
+import { resolveEngineSession } from '@/dfe/controllers/engine-session';
 import { ensureOrgConnection } from '@/dfe/controllers/org-connection';
 import { findOrCreateTeamByName } from '@/dfe/controllers/team-provisioning';
-import { findOrCreateUserFromOIDC } from '@/dfe/controllers/user-provisioning';
+import {
+  findOrCreateUserFromOIDC,
+  placeUserOnTeam,
+} from '@/dfe/controllers/user-provisioning';
 import logger from '@/utils/logger';
 
 import { oidcIdentityMiddleware } from './oidc-identity';
@@ -69,21 +75,6 @@ export function extractToken(req: Request): string | undefined {
   }
 
   return undefined;
-}
-
-// Groups may arrive as a JSON array or a comma-separated string claim.
-function extractGroups(payload: JWTPayload): string[] {
-  const raw = (payload as Record<string, unknown>).groups;
-  if (Array.isArray(raw)) {
-    return raw.map(g => String(g).trim()).filter(Boolean);
-  }
-  if (typeof raw === 'string') {
-    return raw
-      .split(',')
-      .map(g => g.trim())
-      .filter(Boolean);
-  }
-  return [];
 }
 
 // Engine machine identity (dfe-engine#149): the engine self-signs short-lived
@@ -168,7 +159,8 @@ async function handleServiceToken(
 
 /**
  * Express middleware that verifies the engine's ES384 JWT and resolves the
- * user + team from its claims. Falls through on missing/invalid tokens.
+ * user + team from the engine's answer for it. Falls through on missing/invalid
+ * tokens; answers 401/403 when the engine refuses the session or cannot answer.
  */
 export async function engineJwtMiddleware(
   req: Request,
@@ -208,25 +200,37 @@ export async function engineJwtMiddleware(
     return next();
   }
 
-  // A session still on an issued password has no groups and would otherwise land in the default team.
+  // A session still on an issued password holds no standing, so the engine is not asked.
   if (payload.password_change_required === true) {
     logger.warn({ email }, 'DFE: engine JWT is pending a password change');
     return next();
   }
 
   try {
-    const groups = extractGroups(payload);
-    const teamName = groups[0] || dfeConfig.DFE_AUTH_DEFAULT_TEAM || 'default';
-    // Absent today; dfe/middleware/role-claim gates on the claim's presence.
+    const session = await resolveEngineSession(
+      token,
+      typeof payload.exp === 'number' ? payload.exp * 1000 : undefined,
+    );
+    if (!session.granted) {
+      logger.warn(
+        { email, reason: session.reason },
+        'DFE: engine did not grant the session a team',
+      );
+      return res.sendStatus(session.status);
+    }
+
+    // Minted from the account's grants at login or refresh; role-claim gates on it.
     req.dfeRole = typeof payload.role === 'string' ? payload.role : undefined;
 
-    const { team, created: teamCreated } =
-      await findOrCreateTeamByName(teamName);
+    const { team, created: teamCreated } = await findOrCreateTeamByName(
+      session.team,
+    );
     const { user } = await findOrCreateUserFromOIDC(email, team._id);
+    await placeUserOnTeam(user, team._id);
     // Seed the caller's OWN org connection only on the request that created the
     // team. First login fires team + sources + connections at once, so gating on
     // the unique creator stops them racing duplicate connections onto one team.
-    // Non-fatal - a HyperDX login never blocks on the engine.
+    // Non-fatal - a login is never refused for want of a connection.
     if (teamCreated) {
       await ensureOrgConnection(token, String(team._id));
     }

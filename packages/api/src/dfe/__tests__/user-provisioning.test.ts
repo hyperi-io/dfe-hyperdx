@@ -30,16 +30,26 @@ jest.mock('@/models/user', () => {
     save,
   }));
   (User as unknown as { findOne: jest.Mock }).findOne = jest.fn();
+  (User as unknown as { updateOne: jest.Mock }).updateOne = jest.fn();
   return { __esModule: true, default: User };
 });
 
-import { findOrCreateUserFromOIDC } from '@/dfe/controllers/user-provisioning';
+import {
+  findOrCreateUserFromOIDC,
+  placeUserOnTeam,
+} from '@/dfe/controllers/user-provisioning';
 import User from '@/models/user';
 
 const mockFindOne = (User as unknown as { findOne: jest.Mock }).findOne;
+const mockUpdateOne = (User as unknown as { updateOne: jest.Mock }).updateOne;
 const TEAM = 'team-1' as unknown as Parameters<
   typeof findOrCreateUserFromOIDC
 >[1];
+const OTHER_TEAM = 'team-2' as unknown as typeof TEAM;
+const userOn = (team: typeof TEAM) =>
+  ({ _id: 'u1', email: 'a@b.com', team }) as unknown as Parameters<
+    typeof placeUserOnTeam
+  >[0];
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -99,5 +109,33 @@ describe('findOrCreateUserFromOIDC', () => {
     await expect(findOrCreateUserFromOIDC('x@b.com', TEAM)).rejects.toThrow(
       'db down',
     );
+  });
+});
+
+describe('placeUserOnTeam', () => {
+  test('moves a user whose stored team is not the one selected', async () => {
+    const user = userOn(OTHER_TEAM);
+
+    await placeUserOnTeam(user, TEAM);
+
+    expect(mockUpdateOne).toHaveBeenCalledWith(
+      { _id: 'u1' },
+      { $set: { team: TEAM } },
+    );
+    expect(user.team).toBe(TEAM);
+  });
+
+  test('leaves a user already on the selected team alone', async () => {
+    await placeUserOnTeam(userOn(TEAM), TEAM);
+
+    expect(mockUpdateOne).not.toHaveBeenCalled();
+  });
+
+  test('keeps the stored team when the move fails', async () => {
+    const user = userOn(OTHER_TEAM);
+    mockUpdateOne.mockRejectedValueOnce(new Error('db down'));
+
+    await expect(placeUserOnTeam(user, TEAM)).rejects.toThrow('db down');
+    expect(user.team).toBe(OTHER_TEAM);
   });
 });
