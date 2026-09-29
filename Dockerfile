@@ -18,7 +18,8 @@
 # mode) comes from env at container start, not baked into the image.
 
 # Tag and digest travel as one value, so a bump or a --build-arg override replaces both.
-ARG NODE_IMAGE=node:22.23-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
+# Debian trixie, not upstream's Alpine: on glibc the prebuilt native bindings load their -gnu builds with no compat shim.
+ARG NODE_IMAGE=node:24.21.0-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe
 
 # base ############################################################################################
 FROM ${NODE_IMAGE} AS node_base
@@ -30,11 +31,6 @@ COPY .yarnrc.yml yarn.lock package.json nx.json .prettierrc .prettierignore ./ts
 COPY ./packages/common-utils ./packages/common-utils
 COPY ./packages/api/jest.config.js ./packages/api/tsconfig.json ./packages/api/tsconfig.build.json ./packages/api/package.json ./packages/api/
 COPY ./packages/app/jest.config.js ./packages/app/tsconfig.json ./packages/app/tsconfig.build.json ./packages/app/package.json ./packages/app/next.config.mjs ./packages/app/mdx.d.ts ./packages/app/css.d.ts ./packages/app/eslint.config.mjs ./packages/app/
-
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-# Unpinned on purpose: Alpine keeps one build per branch, so a pinned version fails the build once a patched one replaces it.
-# hadolint ignore=DL3018
-RUN apk add --no-cache libc6-compat
 
 RUN yarn install --mode=skip-build && yarn cache clean
 
@@ -93,6 +89,10 @@ ENV NEXT_PUBLIC_IS_LOCAL_MODE=$NEXT_PUBLIC_IS_LOCAL_MODE
 
 # Install libs used for the start script
 RUN npm install -g concurrently@9.1.0
+# concurrently's --kill-others-on-fail walks the process tree with ps, which the slim base lacks: without it the kill path crashes on ENOENT.
+# Unpinned on purpose: a Debian point release drops the superseded version from the mirror, so a pinned one fails the build.
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends procps && rm -rf /var/lib/apt/lists/*
 
 USER node
 
