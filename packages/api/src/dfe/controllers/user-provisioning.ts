@@ -3,7 +3,7 @@
 // This is a NEW controller — it does not modify any upstream HyperDX files.
 
 import type { ObjectId } from '@/models';
-import User from '@/models/user';
+import User, { type UserDocument } from '@/models/user';
 import logger from '@/utils/logger';
 
 // MongoDB duplicate-key error code, raised when two concurrent inserts collide
@@ -70,4 +70,26 @@ export async function findOrCreateUserFromOIDC(
     }
     throw err;
   }
+}
+
+/**
+ * Move an existing user onto the team the engine's decision selects.
+ *
+ * Upstream never moves a user off the team it was created on, so without this a
+ * user whose engine groups changed would keep the old team's connection, and
+ * with it that team's ClickHouse access.
+ */
+export async function placeUserOnTeam(
+  user: UserDocument,
+  teamId: ObjectId,
+): Promise<void> {
+  if (String(user.team) === String(teamId)) {
+    return;
+  }
+  await User.updateOne({ _id: user._id }, { $set: { team: teamId } });
+  logger.info(
+    { userId: user._id, from: user.team, to: teamId },
+    'DFE: moved user to the team the engine selects',
+  );
+  user.team = teamId;
 }

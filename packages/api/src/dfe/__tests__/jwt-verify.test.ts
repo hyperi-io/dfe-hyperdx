@@ -9,7 +9,8 @@
  *
  * So the signing here is REAL: a generated ES384 keypair and the real
  * `jwtVerify`. Only the network fetch of the engine's JWKS is stubbed, by
- * pointing `createRemoteJWKSet` at the local public key.
+ * pointing `createRemoteJWKSet` at the local public key, and the engine's
+ * session answer is stubbed at `fetch`.
  */
 /* eslint-disable @typescript-eslint/no-unsafe-type-assertion --
  * Building an express Request/Response double and reading jest.Mock off a
@@ -36,10 +37,12 @@ jest.mock('@/dfe/controllers/team-provisioning', () => ({
 
 jest.mock('@/dfe/controllers/user-provisioning', () => ({
   findOrCreateUserFromOIDC: jest.fn(),
+  placeUserOnTeam: jest.fn(),
 }));
 
 jest.mock('@/dfe/controllers/org-connection', () => ({
   ensureOrgConnection: jest.fn(),
+  engineOrigin: () => 'https://engine.example.test',
 }));
 
 const actualJose = jest.requireActual('jose');
@@ -69,6 +72,10 @@ import { oidcIdentityMiddleware } from '@/dfe/middleware/oidc-identity';
 jest.mock('@/dfe/middleware/oidc-identity', () => ({
   oidcIdentityMiddleware: jest.fn((_req, _res, next) => next()),
 }));
+
+const { placeUserOnTeam } = jest.requireMock<{ placeUserOnTeam: jest.Mock }>(
+  '@/dfe/controllers/user-provisioning',
+);
 
 // The config module exports consts, so a test that varies them has to write
 // through a mutable view. One alias rather than a cast per assignment.
@@ -108,6 +115,42 @@ const makeRes = (): Response =>
 
 const res = {} as Response;
 
+const ENGINE_ME = `${ISSUER}/api/v1/auth/me`;
+
+// The engine's GET /api/v1/auth/me: `groups` is what the BOUND account holds.
+const engineAnswers = (groups: string[], extra: Record<string, unknown> = {}) =>
+  (global.fetch as jest.Mock).mockResolvedValueOnce({
+    ok: true,
+    status: 200,
+    json: async () => ({ user_id: USER.email, groups, ...extra }),
+  });
+
+const engineStatus = (status: number) =>
+  (global.fetch as jest.Mock).mockResolvedValueOnce({
+    ok: false,
+    status,
+    json: async () => ({}),
+  });
+
+const run = async (claims: Record<string, unknown>) => {
+  const token = await sign(claims);
+  const req = makeReq({ authorization: `Bearer ${token}` });
+  const reply = makeRes();
+  const next = jest.fn();
+  await engineJwtMiddleware(req, reply, next as NextFunction);
+  return { token, req, reply, next };
+};
+
+const expectRefused = (
+  outcome: Awaited<ReturnType<typeof run>>,
+  status: number,
+) => {
+  expect(outcome.reply.sendStatus).toHaveBeenCalledWith(status);
+  expect(findOrCreateTeamByName).not.toHaveBeenCalled();
+  expect(outcome.req.login).not.toHaveBeenCalled();
+  expect(outcome.next).not.toHaveBeenCalled();
+};
+
 describe('engineJwtMiddleware', () => {
   beforeAll(async () => {
     const pair = await actualJose.generateKeyPair('ES384', {
@@ -127,6 +170,11 @@ describe('engineJwtMiddleware', () => {
     config.DFE_ENGINE_JWKS_URL = `${ISSUER}/.well-known/jwks.json`;
     config.DFE_ENGINE_ISSUER = ISSUER;
     config.DFE_AUTH_DEFAULT_TEAM = undefined;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ user_id: USER.email, groups: ['sre'] }),
+    });
   });
 
   it('accepts a valid ES384 bearer token and logs the user in', async () => {
@@ -183,52 +231,112 @@ describe('engineJwtMiddleware', () => {
     );
   });
 
-  describe('team resolution', () => {
-    it('uses the first group claim', async () => {
-      const token = await sign({
-        sub: USER.email,
-        groups: ['platform', 'sre'],
-      });
-      await engineJwtMiddleware(
-        makeReq({ authorization: `Bearer ${token}` }),
-        res,
-        jest.fn() as NextFunction,
+  describe('team resolution follows the engine, never the groups claim', () => {
+    it('asks the engine about the session with the caller token', async () => {
+      const { token } = await run({ sub: USER.email, groups: ['sre'] });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        ENGINE_ME,
+        expect.objectContaining({
+          headers: { Authorization: `Bearer ${token}` },
+        }),
       );
-      expect(findOrCreateTeamByName).toHaveBeenCalledWith('platform');
     });
 
-    it('accepts groups as a comma-separated string', async () => {
-      const token = await sign({
-        sub: USER.email,
-        groups: ' platform , sre ',
-      });
-      await engineJwtMiddleware(
-        makeReq({ authorization: `Bearer ${token}` }),
-        res,
-        jest.fn() as NextFunction,
+    it('takes the team from the groups the engine grants', async () => {
+      engineAnswers(['org-a-analysts']);
+
+      await run({ sub: USER.email, groups: ['platform-admins'] });
+
+      expect(findOrCreateTeamByName).toHaveBeenCalledWith('org-a-analysts');
+      expect(findOrCreateTeamByName).not.toHaveBeenCalledWith(
+        'platform-admins',
       );
-      expect(findOrCreateTeamByName).toHaveBeenCalledWith('platform');
     });
 
-    it('falls back to DFE_AUTH_DEFAULT_TEAM when there are no groups', async () => {
+    it('refuses a token whose claim groups the engine does not grant', async () => {
+      engineAnswers([]);
+
+      const outcome = await run({
+        sub: USER.email,
+        groups: ['platform-admins'],
+      });
+
+      expectRefused(outcome, 403);
+    });
+
+    it("refuses a deleted account's token that still carries its groups", async () => {
+      // A deleted account binds nothing, so the engine answers 200 with no groups.
       config.DFE_AUTH_DEFAULT_TEAM = 'house-team';
-      const token = await sign({ sub: USER.email });
-      await engineJwtMiddleware(
-        makeReq({ authorization: `Bearer ${token}` }),
-        res,
-        jest.fn() as NextFunction,
-      );
-      expect(findOrCreateTeamByName).toHaveBeenCalledWith('house-team');
+      engineAnswers([], { roles: [], org_ids: [] });
+
+      const outcome = await run({
+        sub: 'leaver@example.test',
+        groups: ['dfe-admins'],
+      });
+
+      expectRefused(outcome, 403);
     });
 
-    it("falls back to 'default' when nothing else is configured", async () => {
-      const token = await sign({ sub: USER.email, groups: [] });
-      await engineJwtMiddleware(
-        makeReq({ authorization: `Bearer ${token}` }),
-        res,
-        jest.fn() as NextFunction,
-      );
-      expect(findOrCreateTeamByName).toHaveBeenCalledWith('default');
+    it('refuses with 401 when the engine refuses the token', async () => {
+      engineStatus(401);
+
+      expectRefused(await run({ sub: USER.email, groups: ['sre'] }), 401);
+    });
+
+    it('refuses a session the engine reports as pending a password change', async () => {
+      engineAnswers(['sre'], { password_change_required: true });
+
+      expectRefused(await run({ sub: USER.email, groups: ['sre'] }), 403);
+    });
+
+    it('lands a two-group user on the same team whatever order the groups arrive in', async () => {
+      const teams: unknown[] = [];
+      for (const order of [
+        ['sre', 'platform'],
+        ['platform', 'sre'],
+      ]) {
+        engineAnswers(order);
+        await run({ sub: USER.email, groups: order });
+        teams.push(
+          (findOrCreateTeamByName as jest.Mock).mock.calls.at(-1)?.[0],
+        );
+      }
+
+      expect(teams).toEqual(['platform', 'platform']);
+    });
+
+    it('moves an existing user onto the team the engine selects', async () => {
+      await run({ sub: USER.email, groups: ['sre'] });
+
+      expect(placeUserOnTeam).toHaveBeenCalledWith(USER, TEAM._id);
+    });
+  });
+
+  describe('an engine that cannot answer refuses, never falling back to the claim', () => {
+    it.each([
+      ['unreachable', () => new TypeError('fetch failed')],
+      ['timed out', () => new DOMException('timed out', 'TimeoutError')],
+    ])('when the engine is %s', async (_label, fault) => {
+      (global.fetch as jest.Mock).mockRejectedValueOnce(fault());
+
+      expectRefused(await run({ sub: USER.email, groups: ['sre'] }), 401);
+    });
+
+    it.each([500, 502, 404])('when the engine answers %i', async status => {
+      engineStatus(status);
+
+      expectRefused(await run({ sub: USER.email, groups: ['sre'] }), 401);
+    });
+
+    it('when the engine answers with a body it cannot read', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ groups: 'sre' }),
+      });
+
+      expectRefused(await run({ sub: USER.email, groups: ['sre'] }), 401);
     });
   });
 
@@ -239,6 +347,7 @@ describe('engineJwtMiddleware', () => {
       expect(next).toHaveBeenCalledWith();
       expect(req.login).not.toHaveBeenCalled();
       expect(findOrCreateTeamByName).not.toHaveBeenCalled();
+      expect(global.fetch).not.toHaveBeenCalled();
     };
 
     it('with no token at all', async () => {
@@ -411,6 +520,8 @@ describe('engineJwtMiddleware', () => {
           expect.any(Function),
         );
         expect(next).toHaveBeenCalledWith();
+        // The service identity binds no account, so there is no session to ask about.
+        expect(global.fetch).not.toHaveBeenCalled();
       },
     );
 
