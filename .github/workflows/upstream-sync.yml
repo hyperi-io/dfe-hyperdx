@@ -97,7 +97,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: '3.12'
+          python-version: '3.14'
 
       # The dispatch input goes through `env:`, never straight into the shell -
       # it is free text and interpolating it into `run:` executes it.
