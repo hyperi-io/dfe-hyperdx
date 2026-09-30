@@ -134,13 +134,16 @@ export function resolveDashboardRefs(
   }
 
   if (unresolved) {
-    logger.warn(
-      { name: dashboard.name, unresolved, requireResolvable },
-      'Dashboard reference did not match any of the team’s sources or connections',
-    );
+    const fields = { name: dashboard.name, unresolved, requireResolvable };
+    const message =
+      'Dashboard reference did not match any of the team’s sources or connections';
+    // A required-refs skip is the RBAC fence, repeated every tick for every
+    // team the dashboard is not for, so it is not a warning.
     if (requireResolvable) {
+      logger.debug(fields, message);
       return undefined;
     }
+    logger.warn(fields, message);
   }
 
   return resolved;

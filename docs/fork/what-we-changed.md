@@ -177,9 +177,16 @@ header check is what holds when a deployment authenticates some other way.
   also runs `syncDashboards` for it when `DASHBOARD_PROVISIONER_DIR` is set: the
   provisioner cron fires once a minute with no run at start, so the page's first
   `GET /dashboards`, a second after the team is created, saw `[]` and the SPA
-  cached it until a reload. A dfe-layer unique index on `connections.team` stops
-  two replicas seeding one team twice, and `dfe/tasks/team-connection-repair.ts`
-  deletes, once at startup, every connection that is not its team's own - see
+  cached it until a reload. Every request reads the team's connections, so a
+  team holding another ClickHouse user refuses the session, and a team holding
+  none is seeded whether its first attempt failed (the engine unreachable, or
+  the reader not yet minted) or its connection was since deleted.
+  `dfe/models/team-seed.ts` holds one claim per team, atomic across replicas, so
+  a login's parallel requests make one seeding attempt, and a failed attempt is
+  retried once the 30-second claim lapses. A dfe-layer unique index on
+  `connections.team` stops two replicas seeding one team twice, and
+  `dfe/tasks/team-connection-repair.ts` deletes, once at startup, every
+  connection that is not its team's own - see
   [../architecture/team-identity.md](../architecture/team-identity.md).
 - `packages/api/src/dfe/routers/dfe-sources.ts` +
   `packages/api/src/dfe/controllers/dfe-sources.ts` -
@@ -425,7 +432,11 @@ header check is what holds when a deployment authenticates some other way.
   `DASHBOARD_PROVISIONER_REQUIRE_REFS=true` skips the dashboard instead. That
   flag is the RBAC mechanism for the DFE set: a tenant team holds no otel
   source, so the platform dashboards never resolve for it. Content is
-  dfe-engine's, mounted in by dfe-infra and dfe-docker.
+  dfe-engine's, mounted in by dfe-infra and dfe-docker. Under that flag a skip
+  logs at debug, not warn: the provisioner runs every minute over every team, so
+  each team without the platform sources logged one warning per platform
+  dashboard per minute. An unresolved reference written through with dead tiles
+  still warns.
 - **The preset dashboards are replaced by a DFE throughput figure.** Upstream's
   list page opens on Services, ClickHouse and Kubernetes links, and this fork
   ships none of those pages, so all three were 404s.
@@ -592,11 +603,15 @@ upstream HyperDX app version. When pinning this fork in dfe-infra, use the image
 tag this repo's CI publishes, NOT the upstream HyperDX version.
 
 That image is `ghcr.io/hyperi-io/dfe-hyperdx`, built by hyperi-ci from
-`publish.container` in `.hyperi-ci.yaml` using the root `Dockerfile` (amd64
-only - the arm64 half runs under qemu and Next's build-time font fetch times
-out). GHCR is the only registry hyperi-ci publishes to. Upstream's `release.yml`
-pushes to Docker Hub under `hyperdx/*` and `clickhouse/*`, which are not ours -
-that workflow is deliberately absent from `main`.
+`release.container` in `.hyperi-ci.yaml` using the root `Dockerfile`, for
+linux/amd64 and linux/arm64. The install and the Next build run once on the
+build host and only the runtime stage runs per arch, so an arm64 build never
+emulates Next. Both arches' prebuilt native packages are installed, and
+`scripts/native-arch.mjs` keeps the target's and fails the build on any binary
+for the wrong machine. GHCR is the only registry hyperi-ci publishes to.
+Upstream's `release.yml` pushes to Docker Hub under `hyperdx/*` and
+`clickhouse/*`, which are not ours - that workflow is deliberately absent from
+`main`.
 
 `git show <our-tag>:.upstream-version` answers "which upstream is release X
 built on" for any release we have cut.

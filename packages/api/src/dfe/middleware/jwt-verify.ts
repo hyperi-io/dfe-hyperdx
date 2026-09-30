@@ -231,8 +231,9 @@ export async function engineJwtMiddleware(
     const { team } = await findOrCreateTeamByName(session.team);
     const { user } = await findOrCreateUserFromOIDC(email, team._id);
     await placeUserOnTeam(user, team._id);
-    // Every request, so a failed first seed is retried. An engine that cannot
-    // answer never blocks a login; a refusal or a foreign credential does.
+    // Every request, so a failed first seed or a deleted connection is restored.
+    // An engine that cannot answer never blocks a login; a refusal or a foreign
+    // credential does.
     const seed = await ensureOrgConnection(
       token,
       String(team._id),

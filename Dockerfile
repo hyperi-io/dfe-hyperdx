@@ -18,10 +18,12 @@
 # mode) comes from env at container start, not baked into the image.
 
 # Tag and digest travel as one value, so a bump or a --build-arg override replaces both.
-ARG NODE_IMAGE=node:22.23-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
+# Debian trixie, not upstream's Alpine: on glibc the prebuilt native bindings load their -gnu builds with no compat shim.
+ARG NODE_IMAGE=node:24.21.0-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe
 
 # base ############################################################################################
-FROM ${NODE_IMAGE} AS node_base
+# Install and build run on the build host's arch: their output is platform-independent JS, and an emulated Next build times out.
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS node_base
 
 WORKDIR /app
 
@@ -31,12 +33,9 @@ COPY ./packages/common-utils ./packages/common-utils
 COPY ./packages/api/jest.config.js ./packages/api/tsconfig.json ./packages/api/tsconfig.build.json ./packages/api/package.json ./packages/api/
 COPY ./packages/app/jest.config.js ./packages/app/tsconfig.json ./packages/app/tsconfig.build.json ./packages/app/package.json ./packages/app/next.config.mjs ./packages/app/mdx.d.ts ./packages/app/css.d.ts ./packages/app/eslint.config.mjs ./packages/app/
 
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-# Unpinned on purpose: Alpine keeps one build per branch, so a pinned version fails the build once a patched one replaces it.
-# hadolint ignore=DL3018
-RUN apk add --no-cache libc6-compat
-
-RUN yarn install --mode=skip-build && yarn cache clean
+# Every published arch's prebuilt packages, so the Next trace carries each and app_tree keeps the target's.
+RUN yarn config set supportedArchitectures.cpu --json '["x64","arm64"]' \
+    && yarn install --mode=skip-build && yarn cache clean
 
 
 # builder #########################################################################################
@@ -72,7 +71,40 @@ ARG NEXT_PUBLIC_THEME=hyperi
 ENV NEXT_PUBLIC_THEME=$NEXT_PUBLIC_THEME
 ENV NX_DAEMON=false
 RUN npx nx run-many --target=build --projects=@hyperdx/common-utils,@hyperdx/api,@hyperdx/app
-RUN rm -rf node_modules && yarn workspaces focus @hyperdx/api --production
+
+
+# prod_deps #######################################################################################
+# The api's production dependencies, resolved for the target arch alone.
+FROM node_base AS prod_deps
+
+ARG TARGETARCH
+RUN case "$TARGETARCH" in \
+      amd64) cpu=x64 ;; \
+      arm64) cpu=arm64 ;; \
+      *) echo "no yarn cpu for TARGETARCH=$TARGETARCH" >&2; exit 1 ;; \
+    esac \
+    && yarn config set supportedArchitectures.cpu --json "[\"$cpu\"]" \
+    && rm -rf node_modules && yarn workspaces focus @hyperdx/api --production
+
+
+# app_tree ########################################################################################
+# The runtime /app, assembled on the build host so nothing here runs emulated.
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS app_tree
+
+WORKDIR /app
+COPY --from=prod_deps /app/node_modules ./node_modules
+COPY --from=builder /app/packages/api/build ./packages/api/build
+COPY ./packages/api/bin ./packages/api/bin
+COPY --from=builder /app/packages/common-utils/dist ./packages/common-utils/dist
+COPY --from=node_base /app/packages/common-utils/node_modules ./packages/common-utils/node_modules
+COPY --from=builder /app/packages/app/.next/standalone ./packages/app
+COPY --from=builder /app/packages/app/.next/static ./packages/app/packages/app/.next/static
+COPY --from=builder /app/packages/app/public ./packages/app/packages/app/public
+
+# Drops the other arch's prebuilt packages, and fails the build on any binary not built for the target.
+ARG TARGETARCH
+RUN --mount=type=bind,source=scripts/native-arch.mjs,target=/usr/local/lib/native-arch.mjs \
+    node /usr/local/lib/native-arch.mjs "$TARGETARCH" /app
 
 
 # prod ############################################################################################
@@ -93,19 +125,16 @@ ENV NEXT_PUBLIC_IS_LOCAL_MODE=$NEXT_PUBLIC_IS_LOCAL_MODE
 
 # Install libs used for the start script
 RUN npm install -g concurrently@9.1.0
+# concurrently's --kill-others-on-fail walks the process tree with ps, which the slim base lacks: without it the kill path crashes on ENOENT.
+# Unpinned on purpose: a Debian point release drops the superseded version from the mirror, so a pinned one fails the build.
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends procps && rm -rf /var/lib/apt/lists/*
 
 USER node
 
 # Set up API and App
 WORKDIR /app
-COPY --chown=node:node --from=builder /app/node_modules ./node_modules
-COPY --chown=node:node --from=builder /app/packages/api/build ./packages/api/build
-COPY --chown=node:node ./packages/api/bin ./packages/api/bin
-COPY --chown=node:node --from=builder /app/packages/common-utils/dist ./packages/common-utils/dist
-COPY --chown=node:node --from=node_base /app/packages/common-utils/node_modules ./packages/common-utils/node_modules
-COPY --chown=node:node --from=builder /app/packages/app/.next/standalone ./packages/app
-COPY --chown=node:node --from=builder /app/packages/app/.next/static ./packages/app/packages/app/.next/static
-COPY --chown=node:node --from=builder /app/packages/app/public ./packages/app/packages/app/public
+COPY --chown=node:node --from=app_tree /app ./
 
 # Set up start script
 COPY --chown=node:node ./docker/hyperdx/refresh-env.js /etc/local/refresh-env.js

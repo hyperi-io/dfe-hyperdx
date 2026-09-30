@@ -4,7 +4,7 @@
 // This is a NEW controller — it does not modify any upstream HyperDX files.
 
 import * as dfeConfig from '@/dfe/config';
-import { isDuplicateKey } from '@/dfe/utils/mongo';
+import { isDuplicateKey } from '@/dfe/models/duplicate-key';
 import Team from '@/models/team';
 import { setupTeamDefaults } from '@/setupDefaults';
 import logger from '@/utils/logger';

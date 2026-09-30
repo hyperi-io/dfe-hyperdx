@@ -183,6 +183,7 @@ const expectRefused = (
 ) => {
   expect(outcome.reply.sendStatus).toHaveBeenCalledWith(status);
   expect(findOrCreateTeamByName).not.toHaveBeenCalled();
+  expect(ensureOrgConnection).not.toHaveBeenCalled();
   expect(outcome.req.login).not.toHaveBeenCalled();
   expect(outcome.next).not.toHaveBeenCalled();
 };
@@ -388,12 +389,29 @@ describe('engineJwtMiddleware', () => {
       );
     });
 
-    it('is ensured after the user is on its identity team', async () => {
-      await run({ sub: USER.email, groups: ['sre'] });
+    it('is ensured on a team this request created', async () => {
+      (findOrCreateTeamByName as jest.Mock).mockResolvedValue({
+        team: TEAM,
+        created: true,
+      });
 
-      expect(placeUserOnTeam.mock.invocationCallOrder[0]).toBeLessThan(
-        ensureOrgConnection.mock.invocationCallOrder[0],
+      const { token } = await run({ sub: USER.email, groups: ['sre'] });
+
+      expect(ensureOrgConnection).toHaveBeenCalledWith(
+        token,
+        TEAM._id,
+        IDENTITY,
       );
+    });
+
+    it('is ensured after the user is on its identity team, before the login completes', async () => {
+      const { req } = await run({ sub: USER.email, groups: ['sre'] });
+
+      const ensured = ensureOrgConnection.mock.invocationCallOrder[0];
+      expect(placeUserOnTeam.mock.invocationCallOrder[0]).toBeLessThan(ensured);
+      expect(
+        (req.login as jest.Mock).mock.invocationCallOrder[0],
+      ).toBeGreaterThan(ensured);
     });
 
     it.each(['refused', 'mismatch'])(
@@ -665,6 +683,8 @@ describe('engineJwtMiddleware', () => {
         expect(next).toHaveBeenCalledWith();
         // The service identity binds no account, so there is no session to ask about.
         expect(global.fetch).not.toHaveBeenCalled();
+        // Nor an org connection: the engine answers it none.
+        expect(ensureOrgConnection).not.toHaveBeenCalled();
       },
     );
 

@@ -4,8 +4,8 @@
  * The invariant: a team named after a ClickHouse identity is seeded with ONLY a
  * connection as that identity (fetched from the engine with the caller's token),
  * and only when it has none. A team never holds a ClickHouse user other than its
- * name, a failed seed is retried by the next request, and an engine that cannot
- * answer never blocks a login.
+ * name, a team found holding none is seeded again once the claim lapses, and an
+ * engine that cannot answer never blocks a login.
  */
 /* eslint-disable @typescript-eslint/no-unsafe-type-assertion --
  * Reading jest.Mock off a mocked module asserts a narrower type than the real
@@ -49,13 +49,21 @@ jest.mock('@/models/connection', () => ({
   default: { collection: { createIndex: jest.fn() } },
 }));
 
+jest.mock('@/dfe/models/team-seed', () => ({
+  claimTeamSeed: jest.fn(),
+}));
+
 import {
   createConnection,
   getConnectionsByTeam,
 } from '@/controllers/connection';
 import { createSource, getSources } from '@/controllers/sources';
 import { seedDfeSources } from '@/dfe/controllers/dfe-sources';
-import { ensureOrgConnection } from '@/dfe/controllers/org-connection';
+import {
+  clearTeamSeedCache,
+  ensureOrgConnection,
+} from '@/dfe/controllers/org-connection';
+import { claimTeamSeed } from '@/dfe/models/team-seed';
 import { syncDashboards } from '@/tasks/provisionDashboards';
 import logger from '@/utils/logger';
 
@@ -65,6 +73,7 @@ const mockSources = getSources as jest.Mock;
 const mockCreateSource = createSource as jest.Mock;
 const mockSyncDashboards = syncDashboards as jest.Mock;
 const mockSeedDfeSources = seedDfeSources as jest.Mock;
+const mockClaim = claimTeamSeed as jest.Mock;
 const mockWarn = logger.warn as jest.Mock;
 const mockError = logger.error as jest.Mock;
 
@@ -80,6 +89,8 @@ const ORG_CONN = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  clearTeamSeedCache();
+  mockClaim.mockResolvedValue('claimed');
   global.fetch = jest.fn();
   // A copy, so a test can set the provisioner env and restoreAllMocks undoes it.
   jest.replaceProperty(process, 'env', { ...process.env });
@@ -145,26 +156,6 @@ describe('ensureOrgConnection - the team identity', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  test('a failed first seed is retried by the next call', async () => {
-    mockConns.mockResolvedValue([]);
-    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
-    mockSources.mockResolvedValue([]);
-    (global.fetch as jest.Mock)
-      .mockRejectedValueOnce(new TypeError('fetch failed'))
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ORG_CONN,
-      });
-
-    const first = await ensureOrgConnection('tok', 'team-1', ORG);
-    const second = await ensureOrgConnection('tok', 'team-1', ORG);
-
-    expect(first).toBe('unavailable');
-    expect(second).toBe('seeded');
-    expect(mockCreateConn).toHaveBeenCalledTimes(1);
-  });
-
   test('a seed that loses the race to another replica is present, not a second connection', async () => {
     mockConns.mockResolvedValue([]);
     okFetch(ORG_CONN);
@@ -178,10 +169,15 @@ describe('ensureOrgConnection - the team identity', () => {
     expect(mockCreateSource).not.toHaveBeenCalled();
   });
 
-  test('concurrent first requests on one team share one seed', async () => {
+  test('concurrent first requests on one team seed it once', async () => {
+    // The claim is the one seed per team; the requests that lose it go on unseeded.
     mockConns.mockResolvedValue([]);
     mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
     mockSources.mockResolvedValue([]);
+    mockClaim
+      .mockResolvedValueOnce('claimed')
+      .mockResolvedValueOnce('busy')
+      .mockResolvedValueOnce('busy');
     okFetch(ORG_CONN);
 
     const outcomes = await Promise.all([
@@ -190,7 +186,7 @@ describe('ensureOrgConnection - the team identity', () => {
       ensureOrgConnection('tok', 'team-1', ORG),
     ]);
 
-    expect(outcomes).toEqual(['seeded', 'seeded', 'seeded']);
+    expect(outcomes).toEqual(['seeded', 'unavailable', 'unavailable']);
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(mockCreateConn).toHaveBeenCalledTimes(1);
   });
@@ -244,7 +240,7 @@ type FreshSeed = {
 
 /**
  * org-connection with its once-per-process index memo unset, over mocks that
- * seed one team with its own connection.
+ * grant the seed claim and seed one team with its own connection.
  */
 function freshSeed(): FreshSeed {
   let fresh: FreshSeed | undefined;
@@ -258,9 +254,13 @@ function freshSeed(): FreshSeed {
     const sources = jest.requireMock<typeof import('@/controllers/sources')>(
       '@/controllers/sources',
     );
+    const teamSeed = jest.requireMock<typeof import('@/dfe/models/team-seed')>(
+      '@/dfe/models/team-seed',
+    );
     const orgConnection = jest.requireActual<
       typeof import('@/dfe/controllers/org-connection')
     >('@/dfe/controllers/org-connection');
+    (teamSeed.claimTeamSeed as jest.Mock).mockResolvedValue('claimed');
     (controllers.getConnectionsByTeam as jest.Mock).mockResolvedValue([]);
     (sources.getSources as jest.Mock).mockResolvedValue([{ _id: 's' }]);
     fresh = {
@@ -408,10 +408,36 @@ describe('ensureOrgConnection', () => {
   test('is a no-op when the team already has its own connection', async () => {
     mockConns.mockResolvedValue([{ _id: 'existing', username: ORG }]);
 
-    await ensureOrgConnection('tok', 'team-1', ORG);
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'present',
+    );
 
     expect(global.fetch).not.toHaveBeenCalled();
     expect(mockCreateConn).not.toHaveBeenCalled();
+  });
+
+  test("never adds a caller's connection beside another org's", async () => {
+    // A second connection would hand every member the other org's rows.
+    mockConns.mockResolvedValue([{ _id: 'acme-conn', username: ORG }]);
+    okFetch(PLATFORM_CONN);
+
+    await expect(ensureOrgConnection('tok', 'team-1', PLATFORM)).resolves.toBe(
+      'mismatch',
+    );
+
+    expect(mockCreateConn).not.toHaveBeenCalled();
+    expect(mockCreateSource).not.toHaveBeenCalled();
+  });
+
+  test('reports a team this call gave a connection as seeded', async () => {
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([]);
+    okFetch(ORG_CONN);
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'seeded',
+    );
   });
 
   test('creates nothing when the engine refuses', async () => {
@@ -573,5 +599,111 @@ describe('ensureOrgConnection', () => {
     await ensureOrgConnection('tok', 'team-1', ORG);
 
     expect(mockSeedDfeSources).not.toHaveBeenCalled();
+  });
+});
+
+describe('ensureOrgConnection - the seed claim', () => {
+  const LEASE_MS = 30_000;
+  let now: number;
+
+  beforeEach(() => {
+    now = 1_000_000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    mockConns.mockResolvedValue([]);
+    mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
+    mockSources.mockResolvedValue([]);
+  });
+
+  test('a team whose first attempt failed is seeded by a later request', async () => {
+    (global.fetch as jest.Mock).mockRejectedValueOnce(
+      new TypeError('fetch failed'),
+    );
+
+    await expect(ensureOrgConnection('first', 'team-1', ORG)).resolves.toBe(
+      'unavailable',
+    );
+    expect(mockCreateConn).not.toHaveBeenCalled();
+
+    now += LEASE_MS;
+    okFetch(ORG_CONN);
+    await expect(ensureOrgConnection('later', 'team-1', ORG)).resolves.toBe(
+      'seeded',
+    );
+
+    expect(mockCreateConn).toHaveBeenCalledTimes(1);
+    expect(mockCreateConn).toHaveBeenCalledWith(
+      'team-1',
+      expect.objectContaining({ username: ORG }),
+    );
+  });
+
+  test('a seeded team takes no claim and no engine call on later requests', async () => {
+    okFetch(ORG_CONN);
+    await ensureOrgConnection('tok', 'team-1', ORG);
+    mockConns.mockResolvedValue([{ _id: 'conn-1', username: ORG }]);
+    mockClaim.mockClear();
+    (global.fetch as jest.Mock).mockClear();
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'present',
+    );
+
+    expect(mockClaim).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('a team whose connection was deleted is seeded again', async () => {
+    okFetch(ORG_CONN);
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'seeded',
+    );
+
+    // Deleted since: the team holds nothing, whatever the last attempt did.
+    mockConns.mockResolvedValue([]);
+    now += LEASE_MS;
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'seeded',
+    );
+
+    expect(mockClaim).toHaveBeenCalledTimes(2);
+    expect(mockCreateConn).toHaveBeenCalledTimes(2);
+  });
+
+  test('an unseeded team is claimed at most once per lease', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 503 });
+
+    await ensureOrgConnection('tok', 'team-1', ORG);
+    now += LEASE_MS - 1;
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'unavailable',
+    );
+
+    expect(mockClaim).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test('a team another request is seeding is left to it', async () => {
+    mockClaim.mockResolvedValue('busy');
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'unavailable',
+    );
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockCreateConn).not.toHaveBeenCalled();
+  });
+
+  test('a claim failure is logged and never blocks the login', async () => {
+    const boom = new Error('ferretdb down');
+    mockClaim.mockRejectedValue(boom);
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'unavailable',
+    );
+
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ err: boom, teamId: 'team-1' }),
+      'DFE: team seeding failed (non-fatal)',
+    );
   });
 });

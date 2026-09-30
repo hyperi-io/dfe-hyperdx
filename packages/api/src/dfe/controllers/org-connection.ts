@@ -23,7 +23,8 @@ import {
 import { createSource, getSources } from '@/controllers/sources';
 import * as dfeConfig from '@/dfe/config';
 import { seedDfeSources } from '@/dfe/controllers/dfe-sources';
-import { isDuplicateKey } from '@/dfe/utils/mongo';
+import { isDuplicateKey } from '@/dfe/models/duplicate-key';
+import { claimTeamSeed } from '@/dfe/models/team-seed';
 import Connection from '@/models/connection';
 import { syncDashboards } from '@/tasks/provisionDashboards';
 import logger from '@/utils/logger';
@@ -311,7 +312,8 @@ function clickhouseSystemSource(connectionId: string) {
  *
  * - `present`: the team already holds its own connection, and nothing else.
  * - `seeded`: this call created it.
- * - `unavailable`: the engine or the store could not answer; the next request retries.
+ * - `unavailable`: the engine or the store could not answer, or another request
+ *   is seeding the team; a later request retries.
  * - `refused`: the engine refused this caller a connection.
  * - `mismatch`: the team holds, or the engine offered, a ClickHouse user other
  *   than the one the team is named after.
@@ -323,8 +325,12 @@ export type SeedOutcome =
   | 'refused'
   | 'mismatch';
 
-// Concurrent first requests on one team share one seed; the unique index covers other replicas.
-const seeding = new Map<string, Promise<SeedOutcome>>();
+// How long a seeding attempt holds its claim, and so how soon a team whose
+// attempt failed is tried again. Covers the engine timeout plus the writes.
+const SEED_LEASE_MS = 30_000;
+
+// When this process next claims a team its last attempt could not seed.
+const nextSeedCheck = new Map<string, number>();
 
 /**
  * Ensure the team named `identity` holds ONLY its own connection, as the
@@ -332,11 +338,14 @@ const seeding = new Map<string, Promise<SeedOutcome>>();
  * team, and the otel sources as well for the platform/admin team (see the source
  * builders above for the RBAC split).
  *
- * Runs on every request, so a team whose first seed failed is seeded by the next
- * one. The engine's material is seeded only when its username is `identity`. A
- * team holding a connection as anyone else answers `mismatch` and is never
- * reused. Engine and store faults are logged and answered `unavailable`, which
- * does not block a login.
+ * Reads the team's connections on every request. A team holding a connection as
+ * anyone else answers `mismatch` and is never reused. A team holding none is
+ * seeded, whatever an earlier attempt did, so a first seed that failed or a
+ * connection since deleted is restored. One claim per team (dfe/models/team-seed)
+ * keeps that to a single attempt at a time across replicas, and a failed attempt
+ * is retried once the claim lapses. The engine's material is seeded only when its
+ * username is `identity`. Engine and store faults are logged and answered
+ * `unavailable`, which does not block a login.
  */
 export async function ensureOrgConnection(
   token: string,
@@ -364,16 +373,28 @@ export async function ensureOrgConnection(
     return 'mismatch';
   }
 
-  const key = `${teamId}:${identity}`;
-  const inFlight = seeding.get(key);
-  if (inFlight) {
-    return inFlight;
+  if ((nextSeedCheck.get(teamId) ?? 0) > Date.now()) {
+    return 'unavailable';
   }
-  const seed = seedTeam(token, teamId, identity).finally(() => {
-    seeding.delete(key);
-  });
-  seeding.set(key, seed);
-  return seed;
+  let outcome: SeedOutcome = 'unavailable';
+  try {
+    if ((await claimTeamSeed(teamId, SEED_LEASE_MS)) === 'claimed') {
+      outcome = await seedTeam(token, teamId, identity);
+    }
+  } catch (err) {
+    logger.warn({ err, teamId }, 'DFE: team seeding failed (non-fatal)');
+  }
+  if (outcome === 'seeded' || outcome === 'present') {
+    nextSeedCheck.delete(teamId);
+  } else {
+    nextSeedCheck.set(teamId, Date.now() + SEED_LEASE_MS);
+  }
+  return outcome;
+}
+
+/** Forget every team this process is waiting to seed again. */
+export function clearTeamSeedCache(): void {
+  nextSeedCheck.clear();
 }
 
 async function seedTeam(

@@ -36,9 +36,11 @@ flowchart TB
     held{"team holds a connection?"}
     held -->|as the team name| present["present: carry on"]
     held -->|as anyone else| mismatch["mismatch: 403"]
-    held -->|none| ask["ask the engine for the caller's connection"]
+    held -->|none| claim{"seed claim taken?"}
+    claim -->|another request holds it, or this team failed under 30s ago| unavailable
+    claim -->|taken| ask["ask the engine for the caller's connection"]
     ask -->|401 or 403| refused["refused: 403"]
-    ask -->|unreachable, 5xx, unreadable| unavailable["unavailable: log in, retry next request"]
+    ask -->|unreachable, 5xx, unreadable| unavailable["unavailable: log in, retry once the claim lapses"]
     ask -->|username is not the team name| mismatch
     ask -->|username is the team name| create["create the connection and seed sources"]
     create -->|another replica won| present
@@ -55,8 +57,11 @@ flowchart TB
   seed racing on another replica fail with a duplicate key, which reads as
   `present`. It is ensured from the dfe layer in `oidc-proxy` mode only;
   `header-dev` and upstream seed several `DEFAULT_CONNECTIONS` onto one team.
-- A seed that failed is retried by the next request, because the check runs
-  every time.
+- A team holding no connection is seeded whatever happened before, so a failed
+  first seed or a connection since deleted is restored.
+- `dfe/models/team-seed.ts` holds one claim per team, atomic across replicas. A
+  login's parallel requests make one seeding attempt, and a failed attempt is
+  retried once the 30-second claim lapses.
 
 ## The startup repair
 

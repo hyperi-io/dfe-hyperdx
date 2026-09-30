@@ -1,6 +1,6 @@
 /**
- * The team-connection repair, the one-connection-per-team index and the seed
- * race, against a real MongoDB (`yarn ci:int`).
+ * The team-connection repair, the one-connection-per-team index, the seed race
+ * and the seed claim, against a real MongoDB (`yarn ci:int`).
  *
  * The engine is the only stub: its connection read answers from `global.fetch`.
  * Everything else - the models, the controllers, the unique index and its
@@ -21,7 +21,11 @@ import mongoose from 'mongoose';
 
 import * as config from '@/config';
 import { getSources } from '@/controllers/sources';
-import { ensureOrgConnection } from '@/dfe/controllers/org-connection';
+import {
+  clearTeamSeedCache,
+  ensureOrgConnection,
+} from '@/dfe/controllers/org-connection';
+import DfeTeamSeed from '@/dfe/models/team-seed';
 import { repairTeamConnections } from '@/dfe/tasks/team-connection-repair';
 import Connection from '@/models/connection';
 import Dashboard from '@/models/dashboard';
@@ -48,6 +52,12 @@ const engineHands = (username: string) =>
 const connectionOn = (team: mongoose.Types.ObjectId, username: string) =>
   Connection.create({ ...material(username), team });
 
+// The seed claim as it stands 30 seconds on: lapsed in the store, and forgotten here.
+const lapseClaim = async (team: mongoose.Types.ObjectId) => {
+  await DfeTeamSeed.updateOne({ team }, { $set: { claimedAt: new Date(0) } });
+  clearTeamSeedCache();
+};
+
 // @/fixtures loads the whole app, and with it jose, which this jest config cannot parse.
 describe('team connections against a real store', () => {
   beforeAll(async () => {
@@ -58,6 +68,7 @@ describe('team connections against a real store', () => {
   });
 
   afterEach(async () => {
+    clearTeamSeedCache();
     await Promise.all(
       Object.values(mongoose.connection.collections).map(collection =>
         collection.deleteMany({}),
@@ -113,7 +124,7 @@ describe('team connections against a real store', () => {
     expect(await Connection.countDocuments({ team: identity._id })).toBe(1);
   });
 
-  test('a failed first seed is retried, and the team ends with its own connection and sources', async () => {
+  test('a failed first seed is retried once its claim lapses, and the team ends with its own connection and sources', async () => {
     const identity = await Team.create({ name: ORG });
     (global.fetch as jest.Mock).mockRejectedValueOnce(
       new TypeError('fetch failed'),
@@ -124,6 +135,7 @@ describe('team connections against a real store', () => {
     expect(await Connection.countDocuments({ team: identity._id })).toBe(0);
 
     engineHands(ORG);
+    await lapseClaim(identity._id);
     const second = await ensureOrgConnection('tok', String(identity._id), ORG);
 
     expect(second).toBe('seeded');
@@ -144,5 +156,34 @@ describe('team connections against a real store', () => {
 
     expect(outcome).toBe('mismatch');
     expect(await Connection.countDocuments({ team: identity._id })).toBe(0);
+  });
+
+  test('a team whose connection was deleted is seeded again', async () => {
+    const identity = await Team.create({ name: ORG });
+    engineHands(ORG);
+    await ensureOrgConnection('tok', String(identity._id), ORG);
+    await Connection.deleteMany({ team: identity._id });
+    await lapseClaim(identity._id);
+
+    const outcome = await ensureOrgConnection('tok', String(identity._id), ORG);
+
+    expect(outcome).toBe('seeded');
+    expect(await Connection.countDocuments({ team: identity._id })).toBe(1);
+  });
+
+  test('a lapsed claim still carrying a seededAt mark is taken again', async () => {
+    const identity = await Team.create({ name: ORG });
+    // A stored seededAt is not read: only the team's connections say it is seeded.
+    await DfeTeamSeed.collection.insertOne({
+      team: identity._id,
+      claimedAt: new Date(0),
+      seededAt: new Date(0),
+    });
+    engineHands(ORG);
+
+    const outcome = await ensureOrgConnection('tok', String(identity._id), ORG);
+
+    expect(outcome).toBe('seeded');
+    expect(await Connection.countDocuments({ team: identity._id })).toBe(1);
   });
 });

@@ -2,7 +2,7 @@
 // Find-or-create users from OIDC identity headers.
 // This is a NEW controller — it does not modify any upstream HyperDX files.
 
-import { isDuplicateKey } from '@/dfe/utils/mongo';
+import { isDuplicateKey } from '@/dfe/models/duplicate-key';
 import type { ObjectId } from '@/models';
 import User, { type UserDocument } from '@/models/user';
 import logger from '@/utils/logger';
