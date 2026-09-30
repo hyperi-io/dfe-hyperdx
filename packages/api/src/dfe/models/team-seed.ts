@@ -46,8 +46,9 @@ export type TeamSeedClaim = 'claimed' | 'busy';
  * Claim the right to seed a team, unless another request holds an unexpired
  * claim on it.
  *
- * The upsert either takes the one document per team or collides with it on the
- * unique `team` index, and a collision means another request is seeding.
+ * A lapsed claim is taken in place. Otherwise the insert either creates the one
+ * document per team or collides with it on the unique `team` index, and a
+ * collision means another request is seeding.
  */
 export async function claimTeamSeed(
   teamId: string,
@@ -56,20 +57,24 @@ export async function claimTeamSeed(
   // Without the unique index built, two first claims both insert.
   await DfeTeamSeed.init();
   const now = new Date();
+  const lapsed = await DfeTeamSeed.updateOne(
+    {
+      team: teamId,
+      claimedAt: { $lt: new Date(now.getTime() - leaseMs) },
+    },
+    { $set: { claimedAt: now } },
+  );
+  if (lapsed.matchedCount > 0) {
+    return 'claimed';
+  }
+  // An insert, not an upsert: FerretDB answers an upsert collision with InternalError, not a duplicate key.
   try {
-    await DfeTeamSeed.findOneAndUpdate(
-      {
-        team: teamId,
-        claimedAt: { $lt: new Date(now.getTime() - leaseMs) },
-      },
-      { $set: { claimedAt: now } },
-      { upsert: true },
-    );
+    await DfeTeamSeed.create({ team: teamId, claimedAt: now });
     return 'claimed';
   } catch (err) {
-    if (!isDuplicateKey(err)) {
-      throw err;
+    if (isDuplicateKey(err)) {
+      return 'busy';
     }
+    throw err;
   }
-  return 'busy';
 }

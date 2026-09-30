@@ -25,7 +25,7 @@ import {
   clearTeamSeedCache,
   ensureOrgConnection,
 } from '@/dfe/controllers/org-connection';
-import DfeTeamSeed from '@/dfe/models/team-seed';
+import DfeTeamSeed, { claimTeamSeed } from '@/dfe/models/team-seed';
 import { repairTeamConnections } from '@/dfe/tasks/team-connection-repair';
 import Connection from '@/models/connection';
 import Dashboard from '@/models/dashboard';
@@ -185,5 +185,25 @@ describe('team connections against a real store', () => {
 
     expect(outcome).toBe('seeded');
     expect(await Connection.countDocuments({ team: identity._id })).toBe(1);
+  });
+
+  test('a live claim is held against every other request', async () => {
+    const team = String(new mongoose.Types.ObjectId());
+
+    expect(await claimTeamSeed(team, 30_000)).toBe('claimed');
+    expect(await claimTeamSeed(team, 30_000)).toBe('busy');
+    expect(await DfeTeamSeed.countDocuments({ team })).toBe(1);
+  });
+
+  test('two first claims on one team: one is taken, the other is busy', async () => {
+    const team = String(new mongoose.Types.ObjectId());
+
+    const claims = await Promise.all([
+      claimTeamSeed(team, 30_000),
+      claimTeamSeed(team, 30_000),
+    ]);
+
+    expect(claims.sort()).toEqual(['busy', 'claimed']);
+    expect(await DfeTeamSeed.countDocuments({ team })).toBe(1);
   });
 });
