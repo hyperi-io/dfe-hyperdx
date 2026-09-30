@@ -28,9 +28,9 @@ sequenceDiagram
     HDX->>Engine: fetch JWKS (cached)
     HDX->>HDX: jwtVerify ES384, check iss
     HDX->>Engine: GET /api/v1/auth/me with the token (cached)
-    Engine-->>HDX: groups the bound account holds
-    HDX->>HDX: sub claim to email, engine groups to team
-    HDX->>HDX: find-or-provision user and team
+    Engine-->>HDX: groups, ClickHouse identity and role
+    HDX->>HDX: sub claim to email, ClickHouse identity to team
+    HDX->>HDX: find-or-provision user and team, ensure its connection
     HDX->>HDX: req.login(session false)
     HDX-->>User: upstream isUserAuthenticated now passes
 ```
@@ -45,9 +45,10 @@ Three things about the flow are worth knowing:
   would be a hole; failing closed here would break upstream's own session login,
   which still has to work.
 - **A valid token the engine refuses is answered here.** The engine's own 401 or
-  403 passes straight through, a session the engine grants no group gets 403,
-  and an engine that is unreachable, times out or answers with anything
-  unreadable gets 401. None of them falls back to the token's claims.
+  403 passes straight through, a session the engine grants no group or no
+  ClickHouse identity gets 403, and an engine that is unreachable, times out or
+  answers with anything unreadable gets 401. None of them falls back to the
+  token's claims.
 
 ---
 
@@ -83,29 +84,34 @@ dependency for one lookup.
 
 ### Claims
 
-| Claim | Used for                                                |
-| ----- | ------------------------------------------------------- |
-| `sub` | the user's email; without it the request falls through  |
-| `iss` | enforced when `DFE_ENGINE_ISSUER` is set                |
-| `exp` | caps how long the engine's answer for the token is kept |
+| Claim  | Used for                                                       |
+| ------ | -------------------------------------------------------------- |
+| `sub`  | the user's email; without it the request falls through         |
+| `iss`  | enforced when `DFE_ENGINE_ISSUER` is set                       |
+| `exp`  | caps how long the engine's answer for the token is kept        |
+| `role` | the dashboard role, only when the engine's answer carries none |
 
 ### Team
 
 The `groups` claim is never read. Since dfe-engine#591 a token's own groups
 grant nothing: the engine resolves a session's groups from the account the token
 binds. So the middleware asks the engine, `GET /api/v1/auth/me` with the
-caller's token, and takes the team from the `groups` it answers with.
+caller's token.
 
-The team is the first of those groups in code-point order, so a user in several
-groups lands on the same team whatever order the engine lists them in. An empty
-answer is a refusal, never `DFE_AUTH_DEFAULT_TEAM`. A user already on another
-team is moved onto this one, because upstream never moves a user off the team it
-was created on.
+The team is named after the ClickHouse user the engine hands the caller
+(`hyperdx_identity`): one team per org, plus one platform team. An empty answer
+is a refusal, never `DFE_AUTH_DEFAULT_TEAM`. A user already on another team is
+moved onto this one, because upstream never moves a user off the team it was
+created on. The rule, the connection seeding and the startup repair are in
+[team-identity.md](team-identity.md).
+
+The dashboard role is the engine's `hyperdx_role` from the same answer, and the
+token's `role` claim only when the engine sends none.
 
 The answer is cached per token for 30 seconds, never past the token's `exp`, at
 most 1000 entries, and concurrent requests for one token share one lookup. That
-30 seconds is how long a removed group or a deleted account takes to reach
-HyperDX. A lookup the engine could not answer is never cached.
+30 seconds is how long a removed group, a changed role or a deleted account
+takes to reach HyperDX. A lookup the engine could not answer is never cached.
 
 Both the user and the team are find-or-create, so there is no registration or
 invite step in DFE mode.
@@ -130,15 +136,17 @@ gates the middleware registration on.
 
 ## The files
 
-| File                                   | Role                                                   |
-| -------------------------------------- | ------------------------------------------------------ |
-| `dfe/middleware/jwt-verify.ts`         | entry point, mode switch, ES384 verification           |
-| `dfe/middleware/oidc-identity.ts`      | the `header-dev` path                                  |
-| `dfe/controllers/engine-session.ts`    | the engine's answer for a token, cached; the team rule |
-| `dfe/controllers/user-provisioning.ts` | find-or-create the user, and move it to its team       |
-| `dfe/controllers/team-provisioning.ts` | find-or-create the team                                |
-| `dfe/config.ts`                        | the variables above                                    |
-| `api-app.ts`                           | the one upstream file touched - a guarded `app.use`    |
+| File                                   | Role                                                         |
+| -------------------------------------- | ------------------------------------------------------------ |
+| `dfe/middleware/jwt-verify.ts`         | entry point, mode switch, ES384 verification                 |
+| `dfe/middleware/oidc-identity.ts`      | the `header-dev` path                                        |
+| `dfe/controllers/engine-session.ts`    | the engine's answer for a token, cached; the team and role   |
+| `dfe/controllers/user-provisioning.ts` | find-or-create the user, and move it to its team             |
+| `dfe/controllers/team-provisioning.ts` | find-or-create the team                                      |
+| `dfe/controllers/org-connection.ts`    | the team's one connection, as the team's own ClickHouse user |
+| `dfe/tasks/team-connection-repair.ts`  | the startup delete of connections that are not their team's  |
+| `dfe/config.ts`                        | the variables above                                          |
+| `api-app.ts`                           | the one upstream file touched - a guarded `app.use`          |
 
 The JWKS resolver is built once and reused. `createRemoteJWKSet` does its own
 fetch caching, coalescing and cooldown, so there is no key cache of ours to get
@@ -148,11 +156,12 @@ wrong.
 
 ## AI steering
 
-| Don't                                             | Do                                                  | Why                                                                            |
-| ------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Trust `x-forwarded-email` in new code             | Read `req.user`, set by the middleware              | The header is only authoritative in `header-dev`, which is not production      |
-| Return 401 for a missing or invalid token         | Fall through and let `isUserAuthenticated` decide   | Upstream session login must keep working alongside DFE mode                    |
-| Read the token's `groups` claim for a team        | Take `resolveEngineSession`'s team                  | The claim grants nothing; the account the token binds decides                  |
-| Fall back to a claim when the engine is down      | Refuse                                              | A team is ClickHouse access, so an unanswered lookup must not grant one        |
-| Add auth logic to upstream's `middleware/auth.ts` | Add it under `dfe/` and register it in `api-app.ts` | Editing upstream's auth is permanent conflict surface, and the guard blocks it |
-| Widen `algorithms` beyond `['ES384']`             | Leave it pinned                                     | Algorithm confusion is the classic JWT verification bug                        |
+| Don't                                              | Do                                                         | Why                                                                            |
+| -------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Trust `x-forwarded-email` in new code              | Read `req.user`, set by the middleware                     | The header is only authoritative in `header-dev`, which is not production      |
+| Return 401 for a missing or invalid token          | Fall through and let `isUserAuthenticated` decide          | Upstream session login must keep working alongside DFE mode                    |
+| Read the token's `groups` claim for a team         | Take `resolveEngineSession`'s team                         | The claim grants nothing; the account the token binds decides                  |
+| Name a team after a group, or reuse its connection | Name it after the ClickHouse identity; seed only that user | A team's connection is what every member queries as                            |
+| Fall back to a claim when the engine is down       | Refuse                                                     | A team is ClickHouse access, so an unanswered lookup must not grant one        |
+| Add auth logic to upstream's `middleware/auth.ts`  | Add it under `dfe/` and register it in `api-app.ts`        | Editing upstream's auth is permanent conflict surface, and the guard blocks it |
+| Widen `algorithms` beyond `['ES384']`              | Leave it pinned                                            | Algorithm confusion is the classic JWT verification bug                        |

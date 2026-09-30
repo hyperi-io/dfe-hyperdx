@@ -1,10 +1,11 @@
 /**
  * The engine's session decision, and the cache in front of it.
  *
- * The invariants: the team comes only from the groups the engine answers with,
- * chosen the same way whatever order they arrive in; anything short of a
- * readable engine answer refuses; and a cached answer never outlives its token
- * or CACHE_TTL_MS, never grows past its bound, and is never a guess.
+ * The invariants: the team is the ClickHouse identity the engine hands the
+ * caller, so two callers share a team only when they share that identity; the
+ * role is the engine's live answer; anything short of a readable engine answer
+ * refuses; and a cached answer never outlives its token or CACHE_TTL_MS, never
+ * grows past its bound, and is never a guess.
  */
 /* eslint-disable @typescript-eslint/no-unsafe-type-assertion --
  * Reading jest.Mock off a mocked module or global asserts a narrower type than
@@ -36,6 +37,11 @@ const NOW = 1_800_000_000_000;
 const TTL_MS = 30_000;
 const FAR = NOW + 3_600_000;
 
+const ORG = 'dfe_org_acme';
+const PLATFORM = 'dfe_query_reader';
+const ME = 'http://engine.test:8000/api/v1/auth/me';
+const CONNECTION = 'http://engine.test:8000/api/v1/hyperdx/connection';
+
 const mockFetch = () => global.fetch as jest.Mock;
 
 const answer = (body: unknown, status = 200) => ({
@@ -44,8 +50,11 @@ const answer = (body: unknown, status = 200) => ({
   json: async () => body,
 });
 
-const grants = (groups: string[]) =>
-  mockFetch().mockResolvedValueOnce(answer({ groups }));
+/** The engine's /auth/me for a session: its groups, identity and role. */
+const grants = (groups: string[], identity: string = ORG, role?: string) =>
+  mockFetch().mockResolvedValueOnce(
+    answer({ groups, hyperdx_identity: identity, hyperdx_role: role }),
+  );
 
 let clock: jest.SpyInstance<number, []>;
 
@@ -67,7 +76,7 @@ describe('the decision', () => {
     await resolveEngineSession('tok-a', FAR);
 
     expect(global.fetch).toHaveBeenCalledWith(
-      'http://engine.test:8000/api/v1/auth/me',
+      ME,
       expect.objectContaining({
         headers: { Authorization: 'Bearer tok-a' },
         signal: expect.any(AbortSignal),
@@ -75,24 +84,74 @@ describe('the decision', () => {
     );
   });
 
+  test('names the team after the ClickHouse identity the engine hands the caller', async () => {
+    grants(['acme-analysts'], ORG);
+
+    await expect(resolveEngineSession('tok-org', FAR)).resolves.toEqual({
+      granted: true,
+      team: ORG,
+    });
+  });
+
+  test('an admin and an org-only member of one group land on different teams', async () => {
+    // The admin arriving first used to seed the shared group team with the
+    // platform reader, which every later member then queried as.
+    grants(['acme-team', 'dfe-admins'], PLATFORM, 'admin');
+    grants(['acme-team'], ORG, 'member');
+
+    const admin = await resolveEngineSession('tok-admin', FAR);
+    const member = await resolveEngineSession('tok-member', FAR);
+
+    expect(admin).toMatchObject({ granted: true, team: PLATFORM });
+    expect(member).toMatchObject({ granted: true, team: ORG });
+  });
+
+  test('a shared IdP group never puts two orgs on one team', async () => {
+    // `Everyone` sorts first, so it used to be every such user's team.
+    grants(['Everyone', 'acme-viewers'], 'dfe_org_acme');
+    grants(['Everyone', 'nerk-viewers'], 'dfe_org_nerk');
+
+    const acme = await resolveEngineSession('tok-acme', FAR);
+    const nerk = await resolveEngineSession('tok-nerk', FAR);
+
+    expect(acme).toMatchObject({ granted: true, team: 'dfe_org_acme' });
+    expect(nerk).toMatchObject({ granted: true, team: 'dfe_org_nerk' });
+  });
+
+  test('an infra-only user is refused, never handed a viewer colleague team', async () => {
+    // [dfe-infra, dfe-viewers] reads as the platform; dfe-infra alone runs no query.
+    grants(['dfe-infra', 'dfe-viewers'], PLATFORM);
+    grants(['dfe-infra'], '');
+
+    const viewer = await resolveEngineSession('tok-viewer', FAR);
+    const infraOnly = await resolveEngineSession('tok-infra', FAR);
+
+    expect(viewer).toMatchObject({ granted: true, team: PLATFORM });
+    expect(infraOnly).toEqual({
+      granted: false,
+      status: 403,
+      reason: 'no_identity',
+    });
+  });
+
   test.each([
     [['sre', 'platform']],
     [['platform', 'sre']],
     [['sre', 'zeta', 'platform']],
-  ])('chooses the first group in code-point order from %j', async groups => {
-    grants(groups);
+  ])('the order of %j never changes the team', async groups => {
+    grants(groups, ORG);
 
     await expect(
       resolveEngineSession(`tok-${groups.join()}`, FAR),
-    ).resolves.toEqual({ granted: true, team: 'platform' });
+    ).resolves.toEqual({ granted: true, team: ORG });
   });
 
-  test('orders by code point, not by locale', async () => {
-    grants(['alpha', 'Zulu', 'beta']);
+  test('trims the identity the engine answers', async () => {
+    grants(['sre'], `  ${ORG} `);
 
-    await expect(resolveEngineSession('tok-case', FAR)).resolves.toEqual({
+    await expect(resolveEngineSession('tok-trim', FAR)).resolves.toEqual({
       granted: true,
-      team: 'Zulu',
+      team: ORG,
     });
   });
 
@@ -118,7 +177,11 @@ describe('the decision', () => {
 
   test('refuses a session pending a password change whatever groups it names', async () => {
     mockFetch().mockResolvedValueOnce(
-      answer({ groups: ['sre'], password_change_required: true }),
+      answer({
+        groups: ['sre'],
+        hyperdx_identity: ORG,
+        password_change_required: true,
+      }),
     );
 
     await expect(resolveEngineSession('tok-pw', FAR)).resolves.toEqual({
@@ -153,7 +216,11 @@ describe('the decision', () => {
     ['a 404', () => Promise.resolve(answer({}, 404))],
     [
       'groups that are not a list',
-      () => Promise.resolve(answer({ groups: 'sre' })),
+      () => Promise.resolve(answer({ groups: 'sre', hyperdx_identity: ORG })),
+    ],
+    [
+      'an identity that is not a string',
+      () => Promise.resolve(answer({ groups: ['sre'], hyperdx_identity: 7 })),
     ],
     [
       'a body that is not JSON',
@@ -204,6 +271,142 @@ describe('the decision', () => {
   });
 });
 
+describe('an engine that predates hyperdx_identity', () => {
+  const olderMe = (groups: string[]) =>
+    mockFetch().mockResolvedValueOnce(answer({ groups }));
+
+  test('takes the team from the username the connection read hands the caller', async () => {
+    olderMe(['sre']);
+    mockFetch().mockResolvedValueOnce(
+      answer({
+        name: 'acme',
+        host: 'http://ch:8123',
+        username: ORG,
+        password: 'pw',
+      }),
+    );
+
+    const session = await resolveEngineSession('tok-older', FAR);
+
+    expect(session).toEqual({ granted: true, team: ORG });
+    expect(mockFetch().mock.calls[1]?.[0]).toBe(CONNECTION);
+    expect(mockFetch().mock.calls[1]?.[1]).toMatchObject({
+      headers: { Authorization: 'Bearer tok-older' },
+    });
+  });
+
+  test('keeps no part of the connection password', async () => {
+    olderMe(['sre']);
+    mockFetch().mockResolvedValueOnce(
+      answer({ name: 'acme', host: 'h', username: ORG, password: 'pw-secret' }),
+    );
+
+    const session = await resolveEngineSession('tok-pw-strip', FAR);
+
+    expect(JSON.stringify(session)).not.toContain('pw-secret');
+    expect(
+      JSON.stringify([
+        (logger.warn as jest.Mock).mock.calls,
+        (logger.info as jest.Mock).mock.calls,
+      ]),
+    ).not.toContain('pw-secret');
+  });
+
+  test('a connection read the engine refuses refuses the session, and is cached', async () => {
+    olderMe(['dfe-infra']);
+    mockFetch().mockResolvedValueOnce(answer({}, 403));
+
+    const first = await resolveEngineSession('tok-no-conn', FAR);
+    const again = await resolveEngineSession('tok-no-conn', FAR);
+
+    expect(first).toEqual({
+      granted: false,
+      status: 403,
+      reason: 'no_identity',
+    });
+    expect(again).toEqual(first);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test('a 401 from the connection read is the engine refusing the token', async () => {
+    olderMe(['sre']);
+    mockFetch().mockResolvedValueOnce(answer({}, 401));
+
+    await expect(resolveEngineSession('tok-401', FAR)).resolves.toEqual({
+      granted: false,
+      status: 401,
+      reason: 'engine_refused',
+    });
+  });
+
+  test.each([
+    ['a 503', () => Promise.resolve(answer({}, 503))],
+    ['no username', () => Promise.resolve(answer({ name: 'acme' }))],
+    ['a network failure', () => Promise.reject(new TypeError('fetch failed'))],
+  ])(
+    'a connection read it cannot answer (%s) refuses with 401 and is never cached',
+    async (_label, outcome) => {
+      olderMe(['sre']);
+      mockFetch().mockImplementationOnce(outcome);
+      olderMe(['sre']);
+      mockFetch().mockResolvedValueOnce(answer({ username: ORG }));
+
+      const first = await resolveEngineSession('tok-flaky-conn', FAR);
+      const second = await resolveEngineSession('tok-flaky-conn', FAR);
+
+      expect(first).toEqual({
+        granted: false,
+        status: 401,
+        reason: 'engine_unavailable',
+      });
+      expect(second).toEqual({ granted: true, team: ORG });
+    },
+  );
+
+  test('carries no role, so the token claim decides', async () => {
+    olderMe(['sre']);
+    mockFetch().mockResolvedValueOnce(answer({ username: ORG }));
+
+    const session = await resolveEngineSession('tok-no-role', FAR);
+
+    expect(session).toEqual({ granted: true, team: ORG });
+    expect(session).not.toHaveProperty('role', expect.anything());
+  });
+});
+
+describe('the role', () => {
+  test('carries the role the engine resolves for the session', async () => {
+    grants(['dfe-admins'], PLATFORM, 'admin');
+
+    await expect(resolveEngineSession('tok-role', FAR)).resolves.toEqual({
+      granted: true,
+      team: PLATFORM,
+      role: 'admin',
+    });
+  });
+
+  test('an empty role is no role', async () => {
+    grants(['sre'], ORG, '');
+
+    const session = await resolveEngineSession('tok-empty-role', FAR);
+
+    expect(session).toEqual({ granted: true, team: ORG });
+    expect(session).not.toHaveProperty('role', expect.anything());
+  });
+
+  test('a role change reaches the session within CACHE_TTL_MS', async () => {
+    grants(['dfe-viewers'], PLATFORM, 'member');
+    grants(['dfe-viewers', 'dfe-admins'], PLATFORM, 'admin');
+
+    const before = await resolveEngineSession('tok-promote', FAR);
+    clock.mockReturnValue(NOW + TTL_MS);
+    const after = await resolveEngineSession('tok-promote', FAR);
+
+    expect(before).toMatchObject({ role: 'member' });
+    expect(after).toMatchObject({ role: 'admin' });
+  });
+});
+
 describe('the cache', () => {
   test('answers a repeat lookup for one token without asking again', async () => {
     grants(['sre']);
@@ -211,18 +414,18 @@ describe('the cache', () => {
     await resolveEngineSession('tok-repeat', FAR);
     const second = await resolveEngineSession('tok-repeat', FAR);
 
-    expect(second).toEqual({ granted: true, team: 'sre' });
+    expect(second).toEqual({ granted: true, team: ORG });
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
   test('keys on the token, so another token asks again', async () => {
-    grants(['sre']);
-    grants(['platform']);
+    grants(['sre'], ORG);
+    grants(['platform'], PLATFORM);
 
     await resolveEngineSession('tok-one', FAR);
     const other = await resolveEngineSession('tok-two', FAR);
 
-    expect(other).toEqual({ granted: true, team: 'platform' });
+    expect(other).toEqual({ granted: true, team: PLATFORM });
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -235,7 +438,7 @@ describe('the cache', () => {
       resolveEngineSession('tok-burst', FAR),
     ]);
 
-    expect(answers).toEqual(Array(3).fill({ granted: true, team: 'sre' }));
+    expect(answers).toEqual(Array(3).fill({ granted: true, team: ORG }));
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
@@ -299,13 +502,13 @@ describe('the cache', () => {
     const second = await resolveEngineSession('tok-flap', FAR);
 
     expect(first).toMatchObject({ granted: false, status: 401 });
-    expect(second).toEqual({ granted: true, team: 'sre' });
+    expect(second).toEqual({ granted: true, team: ORG });
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
   test('holds at most 1000 answers, dropping the oldest first', async () => {
     mockFetch().mockImplementation(() =>
-      Promise.resolve(answer({ groups: ['sre'] })),
+      Promise.resolve(answer({ groups: ['sre'], hyperdx_identity: ORG })),
     );
 
     for (let i = 0; i <= 1000; i++) {
@@ -323,7 +526,7 @@ describe('the cache', () => {
 
   test('drops expired answers before the oldest live one when full', async () => {
     mockFetch().mockImplementation(() =>
-      Promise.resolve(answer({ groups: ['sre'] })),
+      Promise.resolve(answer({ groups: ['sre'], hyperdx_identity: ORG })),
     );
 
     await resolveEngineSession('tok-short', NOW + 1_000);

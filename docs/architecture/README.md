@@ -115,6 +115,7 @@ so they cannot collide with upstream. Compose files and collector config are in
 | API structure and the OpAMP/MCP servers | [backend.md](backend.md) |
 | Envoy, the `x-oidc-*` contract, JWT verification | [oidc-authentication.md](oidc-authentication.md) |
 | Who is allowed to see what | [authorization.md](authorization.md) |
+| Which team a user lands on, its connection, the startup repair | [team-identity.md](team-identity.md) |
 | Turning a saved search into a DFE rule | [query-to-rule-pipeline.md](query-to-rule-pipeline.md) |
 | FerretDB, PostgreSQL, service topology | [deployment.md](deployment.md) |
 | Why we chose what we chose | [../decisions/](../decisions/) |

@@ -1,13 +1,13 @@
-// DFE role claim - enforced only once the engine issues one.
+// DFE role - who may change what the whole team sees.
 //
-// Team membership is today's whole authorisation for deleting and restoring the
-// shipped dashboards: the engine JWT carries `sub` and `groups`, groups select
-// the team, and there is no role to gate on. A read-only console account is a
-// team member like any other, so it can delete a shipped dashboard team-wide.
+// Deleting or restoring a shipped dashboard changes it for every member, so only
+// the `admin` and `owner` roles may. jwt-verify takes the role from the engine's
+// `hyperdx_role` on GET /api/v1/auth/me, resolved from the account's groups and
+// cached for 30 seconds, and falls back to the token's `role` claim for an engine
+// that sends no `hyperdx_role`.
 //
-// The check is gated on the claim's PRESENCE. A token without one keeps today's
-// behaviour exactly, and a deployment starts refusing non-admins the moment the
-// engine issues the claim - no release has to land in step with the other.
+// The check is gated on the role's PRESENCE: a session with none (an engine that
+// issues neither, or header-dev) keeps team membership as the whole authorisation.
 //
 // This is a NEW file - it does not modify any upstream HyperDX files.
 
@@ -19,7 +19,7 @@ declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
-      // Set from the engine JWT's `role` claim, when the token carries one.
+      // The engine's `hyperdx_role` for the session, else the token's `role` claim.
       dfeRole?: string;
     }
   }
@@ -33,9 +33,9 @@ export const ROLE_FORBIDDEN = {
 };
 
 /**
- * True when the caller carries a role claim that is not a team-admin one.
+ * True when the caller carries a role that is not a team-admin one.
  *
- * A missing claim is not a refusal - see the module note.
+ * A missing role is not a refusal - see the module note.
  */
 export function dfeRoleRefuses(req: Request): boolean {
   if (!isDfeEnabled) {
@@ -48,7 +48,7 @@ export function dfeRoleRefuses(req: Request): boolean {
   return !TEAM_ADMIN_ROLES.has(role.toLowerCase());
 }
 
-/** 403 a caller whose role claim is present and is neither admin nor owner. */
+/** 403 a caller whose role is present and is neither admin nor owner. */
 export function requireTeamAdminRole(
   req: Request,
   res: Response,

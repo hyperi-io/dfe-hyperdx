@@ -1,5 +1,6 @@
 // DFE Team Provisioning
-// Find-or-create teams from OIDC group claims.
+// Find-or-create a team by name: the session's ClickHouse identity in
+// oidc-proxy mode, the first group header in header-dev mode.
 // This is a NEW controller — it does not modify any upstream HyperDX files.
 
 import * as dfeConfig from '@/dfe/config';
@@ -8,7 +9,7 @@ import Team from '@/models/team';
 import { setupTeamDefaults } from '@/setupDefaults';
 import logger from '@/utils/logger';
 
-// Team name is the OIDC group / org identity here, so it must be unique. The
+// Team name is the session's ClickHouse identity here, so it must be unique. The
 // constraint is what makes find-or-create race-safe (a concurrent create
 // collides on it). Ensured from the dfe layer - idempotent createIndex - so the
 // upstream Team model stays pristine and off the fork conflict surface.

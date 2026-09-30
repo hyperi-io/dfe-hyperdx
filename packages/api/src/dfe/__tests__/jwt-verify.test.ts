@@ -41,8 +41,12 @@ jest.mock('@/dfe/controllers/user-provisioning', () => ({
 }));
 
 jest.mock('@/dfe/controllers/org-connection', () => ({
-  seedTeam: jest.fn(),
+  ensureOrgConnection: jest.fn(),
   engineOrigin: () => 'https://engine.example.test',
+}));
+
+jest.mock('@/dfe/tasks/team-connection-repair', () => ({
+  scheduleTeamConnectionRepair: jest.fn(),
 }));
 
 const actualJose = jest.requireActual('jose');
@@ -77,16 +81,18 @@ const { placeUserOnTeam } = jest.requireMock<{ placeUserOnTeam: jest.Mock }>(
   '@/dfe/controllers/user-provisioning',
 );
 
-const { seedTeam } = jest.requireMock<{ seedTeam: jest.Mock }>(
-  '@/dfe/controllers/org-connection',
-);
+const { ensureOrgConnection } = jest.requireMock<{
+  ensureOrgConnection: jest.Mock;
+}>('@/dfe/controllers/org-connection');
 
 // The config module exports consts, so a test that varies them has to write
 // through a mutable view. One alias rather than a cast per assignment.
 const config = dfeConfig as Record<string, unknown>;
 
 const ISSUER = 'https://engine.example.test';
-const TEAM = { _id: 'team-oid', name: 'sre' };
+// The ClickHouse identity the engine hands the session, which names its team.
+const IDENTITY = 'dfe_org_acme';
+const TEAM = { _id: 'team-oid', name: IDENTITY };
 const USER = { _id: 'user-oid', email: 'jo@example.test' };
 
 let privateKey: CryptoKey;
@@ -120,14 +126,40 @@ const makeRes = (): Response =>
 const res = {} as Response;
 
 const ENGINE_ME = `${ISSUER}/api/v1/auth/me`;
+const ENGINE_CONNECTION = `${ISSUER}/api/v1/hyperdx/connection`;
 
 // The engine's GET /api/v1/auth/me: `groups` is what the BOUND account holds.
 const engineAnswers = (groups: string[], extra: Record<string, unknown> = {}) =>
   (global.fetch as jest.Mock).mockResolvedValueOnce({
     ok: true,
     status: 200,
-    json: async () => ({ user_id: USER.email, groups, ...extra }),
+    json: async () => ({
+      user_id: USER.email,
+      groups,
+      hyperdx_identity: IDENTITY,
+      ...extra,
+    }),
   });
+
+// An engine that predates hyperdx_identity and hyperdx_role.
+const olderEngineAnswers = (groups: string[], username: string) => {
+  (global.fetch as jest.Mock)
+    .mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ user_id: USER.email, groups }),
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        name: 'acme',
+        host: 'http://ch:8123',
+        username,
+        password: 'pw',
+      }),
+    });
+};
 
 const engineStatus = (status: number) =>
   (global.fetch as jest.Mock).mockResolvedValueOnce({
@@ -151,7 +183,7 @@ const expectRefused = (
 ) => {
   expect(outcome.reply.sendStatus).toHaveBeenCalledWith(status);
   expect(findOrCreateTeamByName).not.toHaveBeenCalled();
-  expect(seedTeam).not.toHaveBeenCalled();
+  expect(ensureOrgConnection).not.toHaveBeenCalled();
   expect(outcome.req.login).not.toHaveBeenCalled();
   expect(outcome.next).not.toHaveBeenCalled();
 };
@@ -172,13 +204,18 @@ describe('engineJwtMiddleware', () => {
       created: false,
     });
     (findOrCreateUserFromOIDC as jest.Mock).mockResolvedValue({ user: USER });
+    ensureOrgConnection.mockResolvedValue('present');
     config.DFE_ENGINE_JWKS_URL = `${ISSUER}/.well-known/jwks.json`;
     config.DFE_ENGINE_ISSUER = ISSUER;
     config.DFE_AUTH_DEFAULT_TEAM = undefined;
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ user_id: USER.email, groups: ['sre'] }),
+      json: async () => ({
+        user_id: USER.email,
+        groups: ['sre'],
+        hyperdx_identity: IDENTITY,
+      }),
     });
   });
 
@@ -189,7 +226,7 @@ describe('engineJwtMiddleware', () => {
 
     await engineJwtMiddleware(req, res, next);
 
-    expect(findOrCreateTeamByName).toHaveBeenCalledWith('sre');
+    expect(findOrCreateTeamByName).toHaveBeenCalledWith(IDENTITY);
     expect(findOrCreateUserFromOIDC).toHaveBeenCalledWith(USER.email, TEAM._id);
     expect(req.login).toHaveBeenCalledWith(
       USER,
@@ -248,15 +285,37 @@ describe('engineJwtMiddleware', () => {
       );
     });
 
-    it('takes the team from the groups the engine grants', async () => {
-      engineAnswers(['org-a-analysts']);
+    it('names the team after the ClickHouse identity the engine hands the caller', async () => {
+      engineAnswers(['org-a-analysts'], { hyperdx_identity: 'dfe_org_a' });
 
       await run({ sub: USER.email, groups: ['platform-admins'] });
 
-      expect(findOrCreateTeamByName).toHaveBeenCalledWith('org-a-analysts');
+      expect(findOrCreateTeamByName).toHaveBeenCalledWith('dfe_org_a');
       expect(findOrCreateTeamByName).not.toHaveBeenCalledWith(
         'platform-admins',
       );
+      expect(findOrCreateTeamByName).not.toHaveBeenCalledWith('org-a-analysts');
+    });
+
+    it('refuses a session the engine hands no ClickHouse identity', async () => {
+      engineAnswers(['dfe-infra'], { hyperdx_identity: '' });
+
+      expectRefused(await run({ sub: USER.email, groups: ['dfe-infra'] }), 403);
+    });
+
+    it('on an engine that predates the identity field, asks the connection read', async () => {
+      olderEngineAnswers(['sre'], 'dfe_org_older');
+
+      const outcome = await run({ sub: USER.email, groups: ['sre'] });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        ENGINE_CONNECTION,
+        expect.objectContaining({
+          headers: { Authorization: `Bearer ${outcome.token}` },
+        }),
+      );
+      expect(findOrCreateTeamByName).toHaveBeenCalledWith('dfe_org_older');
+      expect(outcome.req.login).toHaveBeenCalled();
     });
 
     it('refuses a token whose claim groups the engine does not grant', async () => {
@@ -308,7 +367,7 @@ describe('engineJwtMiddleware', () => {
         );
       }
 
-      expect(teams).toEqual(['platform', 'platform']);
+      expect(teams).toEqual([IDENTITY, IDENTITY]);
     });
 
     it('moves an existing user onto the team the engine selects', async () => {
@@ -318,16 +377,19 @@ describe('engineJwtMiddleware', () => {
     });
   });
 
-  describe('seeding is not tied to the request that created the team', () => {
-    // A team created by a request the engine could not answer, or by the
-    // engine's own service principal, would otherwise stay empty for good.
-    it('seeds a team that already existed', async () => {
+  describe('the team connection', () => {
+    it('is ensured on every request, not only the one that created the team', async () => {
+      // A failed first seed used to be permanent: only the creating request seeded.
       const { token } = await run({ sub: USER.email, groups: ['sre'] });
 
-      expect(seedTeam).toHaveBeenCalledWith(token, TEAM._id);
+      expect(ensureOrgConnection).toHaveBeenCalledWith(
+        token,
+        TEAM._id,
+        IDENTITY,
+      );
     });
 
-    it('seeds a team this request created', async () => {
+    it('is ensured on a team this request created', async () => {
       (findOrCreateTeamByName as jest.Mock).mockResolvedValue({
         team: TEAM,
         created: true,
@@ -335,17 +397,80 @@ describe('engineJwtMiddleware', () => {
 
       const { token } = await run({ sub: USER.email, groups: ['sre'] });
 
-      expect(seedTeam).toHaveBeenCalledWith(token, TEAM._id);
+      expect(ensureOrgConnection).toHaveBeenCalledWith(
+        token,
+        TEAM._id,
+        IDENTITY,
+      );
     });
 
-    it('seeds after the user is on the team, before the login completes', async () => {
+    it('is ensured after the user is on its identity team, before the login completes', async () => {
       const { req } = await run({ sub: USER.email, groups: ['sre'] });
 
-      const seeded = seedTeam.mock.invocationCallOrder[0];
-      expect(placeUserOnTeam.mock.invocationCallOrder[0]).toBeLessThan(seeded);
+      const ensured = ensureOrgConnection.mock.invocationCallOrder[0];
+      expect(placeUserOnTeam.mock.invocationCallOrder[0]).toBeLessThan(ensured);
       expect(
         (req.login as jest.Mock).mock.invocationCallOrder[0],
-      ).toBeGreaterThan(seeded);
+      ).toBeGreaterThan(ensured);
+    });
+
+    it.each(['refused', 'mismatch'])(
+      'a %s team connection refuses the session',
+      async seed => {
+        ensureOrgConnection.mockResolvedValueOnce(seed);
+
+        const outcome = await run({ sub: USER.email, groups: ['sre'] });
+
+        expect(outcome.reply.sendStatus).toHaveBeenCalledWith(403);
+        expect(outcome.req.login).not.toHaveBeenCalled();
+        expect(outcome.next).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['present', 'seeded', 'unavailable'])(
+      'a %s team connection lets the login through',
+      async seed => {
+        ensureOrgConnection.mockResolvedValueOnce(seed);
+
+        const outcome = await run({ sub: USER.email, groups: ['sre'] });
+
+        expect(outcome.req.login).toHaveBeenCalled();
+        expect(outcome.next).toHaveBeenCalledWith();
+      },
+    );
+  });
+
+  describe('the dashboard role', () => {
+    const roleOf = (req: Request) => req.dfeRole;
+
+    it("takes the engine's live role over the token claim", async () => {
+      engineAnswers(['dfe-admins'], { hyperdx_role: 'admin' });
+
+      const outcome = await run({ sub: USER.email, role: 'member' });
+
+      expect(roleOf(outcome.req)).toBe('admin');
+    });
+
+    it('a demoted account loses the role while its token still claims admin', async () => {
+      engineAnswers(['dfe-viewers'], { hyperdx_role: 'member' });
+
+      const outcome = await run({ sub: USER.email, role: 'admin' });
+
+      expect(roleOf(outcome.req)).toBe('member');
+    });
+
+    it('falls back to the token claim on an engine that sends no role', async () => {
+      olderEngineAnswers(['dfe-admins'], IDENTITY);
+
+      const outcome = await run({ sub: USER.email, role: 'admin' });
+
+      expect(roleOf(outcome.req)).toBe('admin');
+    });
+
+    it('is unset when neither the engine nor the token says', async () => {
+      const outcome = await run({ sub: USER.email });
+
+      expect(roleOf(outcome.req)).toBeUndefined();
     });
   });
 
@@ -559,7 +684,7 @@ describe('engineJwtMiddleware', () => {
         // The service identity binds no account, so there is no session to ask about.
         expect(global.fetch).not.toHaveBeenCalled();
         // Nor an org connection: the engine answers it none.
-        expect(seedTeam).not.toHaveBeenCalled();
+        expect(ensureOrgConnection).not.toHaveBeenCalled();
       },
     );
 

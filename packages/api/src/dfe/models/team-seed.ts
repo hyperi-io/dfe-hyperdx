@@ -1,9 +1,11 @@
-// Whether a team holds its org connection, and which request is seeding it now.
+// Which request is seeding a team's org connection right now.
 //
-// The identity middleware keeps trying to seed a team until one attempt lands,
-// on whichever replica serves the request. The claim here is atomic across
+// The identity middleware seeds any team it finds holding no connection, on
+// whichever replica serves the request. The claim here is atomic across
 // replicas, so a login's parallel requests never write two connections onto one
-// team, and an expired claim is how a failed attempt gets retried.
+// team, and an expired claim is how a failed attempt gets retried. Whether a team
+// is seeded is its connections, never this claim, so a deleted connection is
+// seeded again.
 //
 // This is a NEW file - it does not modify any upstream HyperDX files.
 
@@ -15,7 +17,6 @@ import type { ObjectId } from '@/models';
 export interface IDfeTeamSeed {
   team: ObjectId;
   claimedAt: Date;
-  seededAt: Date | null;
 }
 
 const DfeTeamSeed = mongoose.model<IDfeTeamSeed>(
@@ -32,10 +33,6 @@ const DfeTeamSeed = mongoose.model<IDfeTeamSeed>(
         type: Date,
         required: true,
       },
-      seededAt: {
-        type: Date,
-        default: null,
-      },
     },
     { timestamps: true },
   ),
@@ -43,15 +40,15 @@ const DfeTeamSeed = mongoose.model<IDfeTeamSeed>(
 
 export default DfeTeamSeed;
 
-export type TeamSeedClaim = 'claimed' | 'seeded' | 'busy';
+export type TeamSeedClaim = 'claimed' | 'busy';
 
 /**
- * Claim the right to seed a team, unless it is seeded or another request holds
- * an unexpired claim on it.
+ * Claim the right to seed a team, unless another request holds an unexpired
+ * claim on it.
  *
- * The upsert either takes the one document per team or collides with it on the
- * unique `team` index, and a collision is read back to tell a seeded team from
- * one another request is still seeding.
+ * A lapsed claim is taken in place. Otherwise the insert either creates the one
+ * document per team or collides with it on the unique `team` index, and a
+ * collision means another request is seeding.
  */
 export async function claimTeamSeed(
   teamId: string,
@@ -60,32 +57,24 @@ export async function claimTeamSeed(
   // Without the unique index built, two first claims both insert.
   await DfeTeamSeed.init();
   const now = new Date();
+  const lapsed = await DfeTeamSeed.updateOne(
+    {
+      team: teamId,
+      claimedAt: { $lt: new Date(now.getTime() - leaseMs) },
+    },
+    { $set: { claimedAt: now } },
+  );
+  if (lapsed.matchedCount > 0) {
+    return 'claimed';
+  }
+  // An insert, not an upsert: FerretDB answers an upsert collision with InternalError, not a duplicate key.
   try {
-    await DfeTeamSeed.findOneAndUpdate(
-      {
-        team: teamId,
-        seededAt: null,
-        claimedAt: { $lt: new Date(now.getTime() - leaseMs) },
-      },
-      { $set: { claimedAt: now } },
-      { upsert: true },
-    );
+    await DfeTeamSeed.create({ team: teamId, claimedAt: now });
     return 'claimed';
   } catch (err) {
-    if (!isDuplicateKey(err)) {
-      throw err;
+    if (isDuplicateKey(err)) {
+      return 'busy';
     }
+    throw err;
   }
-  const seed = await DfeTeamSeed.findOne({ team: teamId })
-    .select('seededAt')
-    .lean();
-  return seed?.seededAt ? 'seeded' : 'busy';
-}
-
-/** Record that the team holds its connection, so no request seeds it again. */
-export async function markTeamSeeded(teamId: string): Promise<void> {
-  await DfeTeamSeed.updateOne(
-    { team: teamId },
-    { $set: { seededAt: new Date() } },
-  );
 }
