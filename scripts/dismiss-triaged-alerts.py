@@ -64,10 +64,19 @@ ABSENT = (
 VERDICTS: dict[str, tuple[str, str]] = {
     # Absent from the production image.
     "tar": ("not_used", f"{ABSENT} Reaches only via cacache and node-gyp."),
-    "minimatch": ("not_used", ABSENT),
+    "minimatch": (
+        "not_used",
+        "Absent from the api focus. 3.1.2 ships only in Next's trace for "
+        "pages/api/[...all], which loads the api only when "
+        "HDX_PREVIEW_INLINE_API is 'true', and no DFE deploy sets it. 9.0.4 is "
+        "dev only.",
+    ),
     "js-yaml": (
         "not_used",
-        f"{ABSENT} Both copies are dev - 3.15.0 via jest, 4.1.1 via cosmiconfig.",
+        "Absent from the api focus. 4.1.1 ships only in Next's trace for "
+        "pages/api/[...all], which loads the api only when "
+        "HDX_PREVIEW_INLINE_API is 'true', and no DFE deploy sets it. 3.15.0 is "
+        "dev only, via jest.",
     ),
     "postcss": ("not_used", ABSENT),
     "nanoid": ("not_used", ABSENT),
@@ -86,7 +95,12 @@ VERDICTS: dict[str, tuple[str, str]] = {
     "ws": ("not_used", ABSENT),
     "elliptic": ("not_used", ABSENT),
     "yaml": ("not_used", ABSENT),
-    "@babel/runtime": ("not_used", ABSENT),
+    "@babel/runtime": (
+        "not_used",
+        "Dev via @changesets/cli. The image's Next trace ships only "
+        "helpers/interopRequireDefault.js, not the regex helper the advisory "
+        "concerns.",
+    ),
     "smol-toml": ("not_used", f"{ABSENT} Reaches only via knip and nx."),
     "csv-parse": (
         "not_used",
