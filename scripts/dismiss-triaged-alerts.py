@@ -23,16 +23,23 @@ real, and it is pinned in security/overrides.yaml instead.
 Re-run it after a sync. Alerts GitHub has reopened against a new version are
 picked up again, and anything new stays open until a human has looked at it.
 
+--refresh also walks the DISMISSED alerts and re-dismisses any whose reason or
+comment differs from its verdict, so a corrected verdict reaches the alerts
+dismissed under the old one. GitHub only dismisses an open alert, so each is
+reopened and then dismissed again. A dismissed alert with no verdict is left
+alone.
+
     scripts/dismiss-triaged-alerts.py --dry-run
     scripts/dismiss-triaged-alerts.py
+    scripts/dismiss-triaged-alerts.py --dry-run --refresh
+    scripts/dismiss-triaged-alerts.py --refresh
 """
-
-from __future__ import annotations
 
 import argparse
 import json
 import subprocess
 import sys
+from dataclasses import dataclass
 
 REPO = "hyperi-io/dfe-hyperdx"
 DOC = "docs/fork/security-sync.md"
@@ -83,8 +90,7 @@ VERDICTS: dict[str, tuple[str, str]] = {
     "smol-toml": ("not_used", f"{ABSENT} Reaches only via knip and nx."),
     "csv-parse": (
         "not_used",
-        "Dev only - @changesets/cli via tty-table. Absent from the production "
-        "image.",
+        "Dev only - @changesets/cli via tty-table. Absent from the production image.",
     ),
     "@humanfs/node": (
         "not_used",
@@ -99,6 +105,12 @@ VERDICTS: dict[str, tuple[str, str]] = {
         "not_used",
         "Dev only - @storybook/builder-webpack5 is its one parent. GitHub's "
         "scope field reads the lockfile, not the image, and calls this runtime.",
+    ),
+    "webpack-dev-middleware": (
+        "not_used",
+        "Dev only - @storybook/builder-webpack5 under @storybook/nextjs, an app "
+        "devDependency, and only storybook dev serves it. GitHub's scope field "
+        "reads the lockfile, not the image, and calls this runtime.",
     ),
     # Build-time only: they shape the bundle, they do not run in it.
     "browserslist": (
@@ -117,16 +129,33 @@ VERDICTS: dict[str, tuple[str, str]] = {
         "Selectors come from our own stylesheets, never from a request.",
     ),
     # In the image, but the version we resolve is outside the advisory range.
-    "ajv": ("not_used", "Resolves 8.20.0, above the < 8.18.0 range."),
-    "cross-spawn": ("not_used", "Resolves 7.0.6, above the < 7.0.5 range."),
+    "ajv": (
+        "not_used",
+        "The image resolves 8.20.0, above both the < 6.14.0 and < 8.18.0 "
+        "ranges. The 6.12.6 copy is build tooling - schema-utils 3 under the "
+        "webpack plugins.",
+    ),
+    "cross-spawn": (
+        "not_used",
+        "The image resolves 7.0.6, above both the < 6.0.6 and < 7.0.5 ranges. "
+        "The 5.1.0 copy is dev only - spawndamnit under @changesets/cli.",
+    ),
     "semver": (
         "not_used",
-        "Resolves 6.3.1, BELOW the >= 7.0.0 range rather than above it.",
+        "Every image copy resolves 7.5.2 or later, outside both ranges. The "
+        "5.7.1 and 7.0.0 copies are dev only - nodemon, simple-update-notifier "
+        "and @changesets/cli.",
     ),
     "@hono/node-server": (
         "not_used",
         "Resolves 1.19.17, below the >= 2.0.0 range. The traversal is also "
-        "Windows-only and the image is Alpine.",
+        "Windows-only and the image is Linux.",
+    ),
+    "axios": (
+        "not_used",
+        "The image's copy, via @slack/webhook, resolves 1.20.0, the fix. The "
+        "1.18.1 these match is nx's exact pin, a root devDependency absent from "
+        "the image, and nx 23.2.1 still pins it.",
     ),
     # In the image and in range, but nothing an attacker can drive.
     "fast-uri": (
@@ -166,10 +195,10 @@ VERDICTS: dict[str, tuple[str, str]] = {
     ),
     "lodash": (
         "not_used",
-        "Our workspaces declare ^4.18.1 and resolve 4.18.1, above the range. "
-        "The 4.17.x copies are dev only (@stoplight, concurrently, "
-        "migrate-mongo) plus the browser SDK, which compiles no templates and "
-        "takes no attacker-supplied paths.",
+        "Our workspaces resolve 4.18.1, above the range. concurrently runs the "
+        "entrypoint on its own 4.17.21 and never calls template, unset or omit. "
+        "Other 4.17.x copies are dev or the browser SDK, which compiles no "
+        "templates and takes no attacker paths.",
     ),
     # OpenTelemetry: in range. bin/hyperdx preloads a tracing NodeSDK whenever
     # HYPERDX_API_KEY or OTEL_EXPORTER_OTLP_HEADERS is set; index.ts starts
@@ -234,17 +263,88 @@ VERDICTS: dict[str, tuple[str, str]] = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class StaleDismissal:
+    """A dismissed alert whose reason or comment differs from its verdict.
+
+    Attributes:
+        number: Alert number.
+        package: Package the alert is raised against.
+        old_reason: The dismissed_reason GitHub holds now.
+        new_reason: The dismissed_reason the verdict records.
+        comment_changes: Whether the dismissed_comment differs from the verdict's.
+        body: The dismissed_comment to write.
+    """
+
+    number: int
+    package: str
+    old_reason: str
+    new_reason: str
+    comment_changes: bool
+    body: str
+
+
+def dismissal_body(comment: str) -> str:
+    """Return the dismissed_comment written for a verdict's comment."""
+    return f"{comment} See {DOC}."
+
+
+def stale_dismissals(
+    dismissed: list[dict], verdicts: dict[str, tuple[str, str]]
+) -> list[StaleDismissal]:
+    """List the dismissed alerts that disagree with their verdict.
+
+    Args:
+        dismissed: Dismissed alerts as the Dependabot API returns them.
+        verdicts: package -> (dismissed_reason, comment), shaped like VERDICTS.
+
+    Returns:
+        One entry per alert to re-dismiss. An alert with no verdict is omitted.
+    """
+    stale = []
+    for alert in dismissed:
+        package = alert["dependency"]["package"]["name"]
+        verdict = verdicts.get(package)
+        if verdict is None:
+            continue
+        reason, comment = verdict
+        body = dismissal_body(comment)
+        old_reason = alert.get("dismissed_reason") or ""
+        comment_changes = (alert.get("dismissed_comment") or "") != body
+        if old_reason == reason and not comment_changes:
+            continue
+        stale.append(
+            StaleDismissal(
+                alert["number"], package, old_reason, reason, comment_changes, body
+            )
+        )
+    return stale
+
+
 def gh(args: list[str]) -> str:
     """Run gh and return stdout, raising with stderr attached on failure."""
     result = subprocess.run(
-        ["gh", *args], capture_output=True, text=True, check=False
+        ["gh", *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
     )
     if result.returncode != 0:
         raise RuntimeError(f"gh {' '.join(args)} failed: {result.stderr.strip()}")
     return result.stdout
 
 
-def open_alerts() -> list[dict]:
+def alerts(state: str) -> list[dict]:
+    """Return every Dependabot alert in one state.
+
+    Args:
+        state: The state the API filters on, such as open or dismissed.
+
+    Returns:
+        The alerts across every page.
+    """
     raw = gh(
         [
             "api",
@@ -253,7 +353,7 @@ def open_alerts() -> list[dict]:
             "-X",
             "GET",
             "-f",
-            "state=open",
+            f"state={state}",
             "-f",
             "per_page=100",
         ]
@@ -261,27 +361,43 @@ def open_alerts() -> list[dict]:
     return json.loads(raw)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Print what would be dismissed."
+def patch(number: int, fields: list[str]) -> None:
+    """Send one PATCH to an alert.
+
+    Args:
+        number: Alert number.
+        fields: key=value pairs for the request body.
+    """
+    args = ["api", "-X", "PATCH", f"repos/{REPO}/dependabot/alerts/{number}"]
+    for field in fields:
+        args += ["-f", field]
+    gh([*args, "--silent"])
+
+
+def dismiss(number: int, reason: str, body: str) -> None:
+    """Dismiss an open alert with its reason and comment.
+
+    Args:
+        number: Alert number.
+        reason: GitHub's dismissed_reason.
+        body: The dismissed_comment, already within COMMENT_LIMIT.
+    """
+    patch(
+        number,
+        ["state=dismissed", f"dismissed_reason={reason}", f"dismissed_comment={body}"],
     )
-    args = parser.parse_args()
 
-    for package, (_, comment) in VERDICTS.items():
-        full = f"{comment} See {DOC}."
-        if len(full) > COMMENT_LIMIT:
-            print(
-                f"{package}: comment is {len(full)} chars, limit is "
-                f"{COMMENT_LIMIT}. Shorten it.",
-                file=sys.stderr,
-            )
-            return 1
 
-    alerts = open_alerts()
+def dismiss_open(dry_run: bool) -> None:
+    """Dismiss every open alert that has a verdict, and keep the rest open.
+
+    Args:
+        dry_run: Print what would be dismissed without changing anything.
+    """
+    found = alerts("open")
     dismissed = skipped = 0
 
-    for alert in alerts:
+    for alert in found:
         package = alert["dependency"]["package"]["name"]
         number = alert["number"]
         verdict = VERDICTS.get(package)
@@ -291,32 +407,88 @@ def main() -> int:
             continue
 
         reason, comment = verdict
-        body = f"{comment} See {DOC}."
-        if args.dry_run:
+        if dry_run:
             print(f"  would dismiss #{number} {package} ({reason})")
-            dismissed += 1
-            continue
-
-        gh(
-            [
-                "api",
-                "-X",
-                "PATCH",
-                f"repos/{REPO}/dependabot/alerts/{number}",
-                "-f",
-                "state=dismissed",
-                "-f",
-                f"dismissed_reason={reason}",
-                "-f",
-                f"dismissed_comment={body}",
-                "--silent",
-            ]
-        )
-        print(f"  dismissed #{number} {package}")
+        else:
+            dismiss(number, reason, dismissal_body(comment))
+            print(f"  dismissed #{number} {package}")
         dismissed += 1
 
-    verb = "would dismiss" if args.dry_run else "dismissed"
-    print(f"\n{verb} {dismissed}, kept {skipped} open of {len(alerts)}.")
+    verb = "would dismiss" if dry_run else "dismissed"
+    print(f"\n{verb} {dismissed}, kept {skipped} open of {len(found)}.")
+
+
+def refresh_dismissed(dry_run: bool) -> None:
+    """Re-dismiss every dismissed alert whose reason or comment has gone stale.
+
+    Args:
+        dry_run: Print what would change without changing anything.
+
+    Raises:
+        RuntimeError: A re-dismiss failed after its reopen, which leaves that
+            alert open until a plain run dismisses it.
+    """
+    dismissed = alerts("dismissed")
+    unrecorded = 0
+    for alert in dismissed:
+        package = alert["dependency"]["package"]["name"]
+        if package not in VERDICTS:
+            print(f"  KEEP  #{alert['number']} {package} - no verdict recorded")
+            unrecorded += 1
+
+    stale = stale_dismissals(dismissed, VERDICTS)
+    verb = "would refresh" if dry_run else "refreshed"
+    for item in stale:
+        if not dry_run:
+            patch(item.number, ["state=open"])
+            try:
+                dismiss(item.number, item.new_reason, item.body)
+            except RuntimeError as exc:
+                raise RuntimeError(
+                    f"#{item.number} is reopened but not dismissed; a plain run "
+                    f"dismisses it again. {exc}"
+                ) from exc
+        comment = "comment changes" if item.comment_changes else "comment unchanged"
+        print(
+            f"  {verb} #{item.number} {item.package}: "
+            f"{item.old_reason} -> {item.new_reason}, {comment}"
+        )
+
+    current = len(dismissed) - len(stale) - unrecorded
+    print(
+        f"\n{verb} {len(stale)}, {current} already match, {unrecorded} have no "
+        f"verdict, of {len(dismissed)} dismissed."
+    )
+
+
+def main() -> int:
+    """Check every verdict fits GitHub's limit, then apply the verdicts."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print what would change."
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Also re-dismiss dismissed alerts whose reason or comment differs "
+        "from the current verdict.",
+    )
+    args = parser.parse_args()
+
+    for package, (_, comment) in VERDICTS.items():
+        full = dismissal_body(comment)
+        if len(full) > COMMENT_LIMIT:
+            print(
+                f"{package}: comment is {len(full)} chars, limit is "
+                f"{COMMENT_LIMIT}. Shorten it.",
+                file=sys.stderr,
+            )
+            return 1
+
+    dismiss_open(args.dry_run)
+    if args.refresh:
+        print()
+        refresh_dismissed(args.dry_run)
     return 0
 
 

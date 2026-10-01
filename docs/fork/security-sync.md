@@ -233,6 +233,9 @@ below has the trace.
 Alert 227 was left undetermined by the previous pass. It is settled: not
 reachable.
 
+Corrected 2026-10-01: the image has been Debian trixie since #103, not Alpine.
+The traversal is Windows-only, so 265 still does not bite.
+
 The same file is why systeminformation IS real - `hostMetrics.start()` on line
 18 is the chain into `networkStats()`.
 
@@ -965,3 +968,114 @@ the focus at `Dockerfile:87`, and three more things ship beside it:
   the critical's range and inside GHSA-r292-9mhp-454m. npm runs once, at build,
   for `npm install -g concurrently@9.1.0` (`Dockerfile:127`), and nothing at
   runtime calls it.
+
+## 2026-10-01 - axios, webpack-dev-middleware, and seven comments that named the wrong copy
+
+16 open alerts: 12 axios (#310-#321), 3 brace-expansion (#299, #302, #305) and
+webpack-dev-middleware (#298). All 16 are `not_used`. None clears THE BAR and
+none has a lockfile fix, so nothing is pinned or re-resolved.
+
+The image was read three ways on `b07c0deb3`:
+`yarn workspaces focus @hyperdx/api --production` in a clean worktree, a full
+`yarn install --mode=skip-build` for what `Dockerfile:99` and `Dockerfile:100`
+copy, and the published `ghcr.io/hyperi-io/dfe-hyperdx:latest` (0.2.8, revision
+6fafb089) for what the Next trace carries.
+
+### axios - fixed in the image, still pinned by nx
+
+Two copies, and all 12 ranges end at `< 1.20.0`:
+
+```text
+@hyperdx/api -> @slack/webhook@7.0.7 -> axios@1.20.0
+hyperdx (root) -> nx@23.1.1 -> axios@1.18.1      nx pins "1.18.1" exactly
+```
+
+The production focus holds one axios, 1.20.0, which #111 put there.
+
+The Next trace carries axios too. `pages/api/[...all].ts` imports
+`@hyperdx/api/build/serverless` behind `HDX_PREVIEW_INLINE_API`, and the trace
+follows that import into `@slack/webhook`
+(`.next/server/pages/api/[...all].js.nft.json` in 0.2.8). In a full install nx's
+1.18.1 is hoisted to `node_modules/axios` and 1.20.0 sits at
+`node_modules/@slack/webhook/node_modules/axios`. Node resolves `axios` from
+`@slack/webhook` to the nested 1.20.0, which is the copy the trace should take.
+NOT VERIFIED with a Next build.
+
+No lockfile fix exists. nx pins axios exactly, and nx 23.2.1, the latest
+(2026-09-09), still pins `axios: 1.18.1` and `brace-expansion: 5.0.9`.
+
+**The published image is behind main.** 0.2.8 predates #111 and carries axios
+1.18.1 at `/app/node_modules/axios` and `/app/packages/app/node_modules/axios`.
+There the check-alerts task posts to a webhook URL a tenant user configures
+(`tasks/checkAlerts/transports/slack.ts:25`) through 1.18.1. Whether any of the
+12 advisories is reachable that way in 0.2.8 was not traced. The dismissals
+describe main, and the image catches up at the next release.
+
+### webpack-dev-middleware - Storybook's dev server
+
+#298, GHSA-g84c-rxfj-3j2c, high. Path traversal in `getFilenameFromUrl` when
+`publicPath` has no trailing slash. The range is `< 7.4.5`, and the advisory's
+own text puts the fix at 8.3.0 with no backport to 6.x or 7.x.
+
+```text
+@hyperdx/app -> @storybook/nextjs@10.1.4 -> @storybook/builder-webpack5@10.1.4 -> webpack-dev-middleware@6.1.3
+```
+
+`@storybook/nextjs` is an app devDependency (`packages/app/package.json:115`),
+and only `storybook dev` serves the middleware. It is in neither the production
+focus nor the 0.2.8 image. GitHub's `scope: runtime` is the lockfile reading
+again.
+
+There is no fix to take. `@storybook/builder-webpack5` 10.6.1, the latest, still
+declares `webpack-dev-middleware: ^6.1.2`.
+
+### brace-expansion - verdict kept
+
+#299, #302 and #305 match only 5.0.8, nx's exact pin, as the section above
+found. The production focus has no brace-expansion. 0.2.8 carries 1.1.17 in the
+Next trace, below these `>= 4.0.0` ranges, and 5.0.7 in the base image's npm,
+inside them but run only at build.
+
+### Seven comments that described the wrong copy
+
+A verdict is one comment per package, and a package's alerts can name different
+ranges and different copies. Each of these comments was true of the advisory it
+was written for and false on another alert.
+
+| Alerts        | Package     | The comment said                   | Measured                                                                                                                                                                      |
+| ------------- | ----------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #5            | cross-spawn | 7.0.6, above `< 7.0.5`             | #5 also covers `< 6.0.6`. The image has 7.0.6 only. The in-range 5.1.0 is spawndamnit under `@changesets/cli`                                                                 |
+| #1, #22       | semver      | resolves 6.3.1                     | The image has 7.5.2, 7.5.4 and 7.6.2, plus 7.8.5 in the trace. The in-range 5.7.1 and 7.0.0 come from nodemon and `@changesets/cli`, both dev                                 |
+| #31           | ajv         | 8.20.0, above `< 8.18.0`           | #31 also covers `< 6.14.0`. The image has 8.20.0 only. The 6.12.6 is schema-utils 3 under two webpack plugins                                                                 |
+| #19, #88, #89 | lodash      | concurrently's 4.17.21 is dev only | concurrently is an api dependency (`packages/api/package.json:37`) and `entry.prod.sh:45` runs it, so its 4.17.21 ships. Its `dist` never calls `template`, `unset` or `omit` |
+
+All seven stay `not_used`, and the verdicts in
+`scripts/dismiss-triaged-alerts.py` now carry what is measured here.
+
+### Correcting a dismissal means reopening it
+
+GitHub's docs say "You can only dismiss open alerts." So
+`scripts/dismiss-triaged-alerts.py --refresh` reopens each dismissed alert whose
+reason or comment differs from its verdict, then dismisses it again. A dismissed
+alert with no verdict is left alone.
+
+`--dry-run --refresh` against the live repo lists 27. #184 and #156 move to
+`tolerable_risk`. #126-#128, #97 and ten more protobufjs alerts, four js-yaml
+alerts and the seven above take new comments. The other 55 already match.
+
+A dismissed alert whose copy leaves the lockfile turns `fixed` by itself. The
+tar alerts did that on 2026-10-01, and GitHub cleared their dismissal fields.
+
+### The audit ignore list, measured
+
+| Run                                               | With the `.yarnrc.yml` list | List emptied                |
+| ------------------------------------------------- | --------------------------- | --------------------------- |
+| `yarn npm audit --severity moderate`, the CI gate | nothing                     | `eslint (deprecation)` only |
+| `yarn npm audit --recursive`                      | 20 findings                 | 39 findings                 |
+
+Of the list's 25 entries, `--recursive` no longer reports 1113714 (ajv),
+1121860, 1123911 and 1138115 (js-yaml), or 1130736 and 1130737
+(brace-expansion). `--all --recursive` still reports the first four, so only
+1130736 and 1130737 are gone from every run. The 20 findings left under
+`--recursive` are the 12 axios ids, three brace-expansion ids and five more, all
+dev only.
