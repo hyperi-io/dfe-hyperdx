@@ -159,10 +159,10 @@ VERDICTS: dict[str, tuple[str, str]] = {
     ),
     "protobufjs": (
         "not_used",
-        "The advisory needs an attacker-controlled definition or JSON "
-        "descriptor loaded through reflection, and says applications decoding "
-        "with trusted schemas are not affected. We serialise OTLP against a "
-        "compiled schema and load no descriptor.",
+        "@hyperdx/browser inlines protobufjs/minimal as a prebuilt bundle, "
+        "so the recorder's old copy never ships to the browser. The advisory "
+        "also needs an attacker-controlled descriptor via reflection; we "
+        "decode OTLP against a compiled schema.",
     ),
     "lodash": (
         "not_used",
@@ -171,12 +171,15 @@ VERDICTS: dict[str, tuple[str, str]] = {
         "migrate-mongo) plus the browser SDK, which compiles no templates and "
         "takes no attacker-supplied paths.",
     ),
-    # OpenTelemetry: in range, but api/src/index.ts starts metrics only.
+    # OpenTelemetry: in range. bin/hyperdx preloads a tracing NodeSDK whenever
+    # HYPERDX_API_KEY or OTEL_EXPORTER_OTLP_HEADERS is set; index.ts starts
+    # metrics separately either way.
     "@opentelemetry/core": (
-        "not_used",
-        "Baggage propagation needs a propagator on a tracing SDK. "
-        "packages/api/src/index.ts starts a MeterProvider and HostMetrics "
-        "only - no NodeSDK, no tracer, no propagators registered.",
+        "tolerable_risk",
+        "Reached: bin/hyperdx's preload starts a NodeSDK whenever "
+        "HYPERDX_API_KEY or OTEL_EXPORTER_OTLP_HEADERS is set, defaulting to "
+        "tracecontext plus baggage propagators. Bounded by Node's 16 KB "
+        "header cap, so tolerable.",
     ),
     "@opentelemetry/propagator-jaeger": (
         "not_used",
@@ -186,20 +189,22 @@ VERDICTS: dict[str, tuple[str, str]] = {
     ),
     "@opentelemetry/exporter-prometheus": (
         "not_used",
-        "The crash needs the exporter's own HTTP server. We never instantiate "
-        "it; our metrics endpoint is prom-client directly in "
-        "dfe/observability/metrics.ts. It arrives only because sdk-node "
-        "bundles every exporter.",
+        "The crash needs the exporter's own HTTP server. The preloaded "
+        "NodeSDK builds it (sdk.js:105-106, port 9464) only when "
+        "OTEL_METRICS_EXPORTER includes prometheus, and nothing sets that. "
+        "Our metrics endpoint is prom-client in metrics.ts.",
     ),
     "@opentelemetry/sdk-node": (
         "not_used",
-        "Same Prometheus exporter crash. No exporter is instantiated - "
-        "packages/api/src/index.ts starts metrics only.",
+        "Same Prometheus exporter crash. bin/hyperdx's preload does start "
+        "this SDK, but the exporter binds only when OTEL_METRICS_EXPORTER "
+        "includes prometheus, and nothing sets that.",
     ),
     "@opentelemetry/auto-instrumentations-node": (
         "not_used",
-        "Same Prometheus exporter crash. No exporter is instantiated - "
-        "packages/api/src/index.ts starts metrics only.",
+        "Same Prometheus exporter crash. bin/hyperdx's preload does start "
+        "this SDK, but the exporter binds only when OTEL_METRICS_EXPORTER "
+        "includes prometheus, and nothing sets that.",
     ),
     # Already above the range on the copy that matters.
     "ip-address": (
