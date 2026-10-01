@@ -281,8 +281,8 @@ jobs:
           git push --force-with-lease origin '${{ steps.merge.outputs.branch }}'
 
       # An App token beats a PAT: scoped, auditable, and not tied to a person's
-      # account (see the CI standard). `hyperi-container-mgt` is the app whose id
-      # and key are already org-wide, so it needs no new secret here - only the
+      # account (see the CI standard). `hyperi-container-mgt` is the app whose client
+      # id and key are already org-wide, so it needs no new secret here - only the
       # Dependabot-alerts READ permission added to the app itself. Until that is
       # granted this mints a token without it and the triage falls back, loudly.
       - name: Mint an App token for the Dependabot read
@@ -293,7 +293,7 @@ jobs:
         continue-on-error: true # no token is a degraded triage, not a failed sync
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         with:
-          app-id: ${{ vars.CONTAINER_MGT_APP_ID }}
+          client-id: ${{ vars.CONTAINER_MGT_CLIENT_ID }}
           private-key: ${{ secrets.CONTAINER_MGT_APP_PRIVATE_KEY }}
 
       # The judgement calls, drafted for the reviewer. Never a gate: reachability
