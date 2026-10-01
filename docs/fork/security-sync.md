@@ -93,7 +93,8 @@ only comes in through `evp_bytestokey` and `fsevents`. That is install-time
 native-build tooling. It is gone by the time the image is built, and it is
 absent from the 331.
 
-Twelve tar alerts, all the same story.
+Twelve tar alerts, all the same story. Re-traced and cleared by lockfile in the
+2026-10-01 section.
 
 ### protobufjs - the one critical that IS real
 
@@ -110,12 +111,17 @@ Four copies in the tree, and only one is in range:
 | `@hyperdx/browser` -> `@hyperdx/otel-web-session-recorder@0.16.2` | **6.11.4** | **yes**  |
 
 `@hyperdx/browser` is imported at `DBSearchPage.tsx:28`, `AppNav.tsx` and
-`AppNavFeedback.tsx`, so the old copy goes into the frontend bundle.
+`AppNavFeedback.tsx`, but the old copy never reaches the browser.
+`@hyperdx/browser` 0.22.1 ships a prebuilt bundle with `protobufjs/minimal`
+inlined and no external `require`, so the `node_modules` copy ships nowhere.
+Corrected 2026-10-01 - this line first said the old copy went into the frontend
+bundle.
 
-The wart: the vulnerable copy is a transitive of a HyperDX package we do not
-control, so there is nothing to bump directly. It needs a `resolutions` entry
-raising protobufjs across the tree, and then someone has to confirm the session
-recorder still works.
+The vulnerable copy is a transitive of a HyperDX package we do not control, so
+there is nothing to bump directly. No `resolutions` entry was needed though. A
+lockfile re-resolve inside the recorder's own `~6.11.2` range moved it to 6.11.6
+(#114), which carries the type-name filter. Corrected 2026-10-01 - this
+paragraph first said a `resolutions` pin was the only way.
 
 **Then read the advisory properly, and it clears itself.** Its own text:
 
@@ -194,11 +200,10 @@ and never matches. Depth 2 is the real number - **21**, not 15.
 Six more turned out to be in the image: `@hono/node-server` and five
 `@opentelemetry/*`. Only `@babel/runtime` was genuinely absent.
 
-### The OpenTelemetry six, and why none of them bite
+### The OpenTelemetry six
 
 Five of the six are inside their vulnerable ranges, so version alone does not
-clear them. What clears them is that `packages/api/src/index.ts` starts METRICS
-ONLY:
+clear them. `packages/api/src/index.ts` starts metrics only:
 
 ```
 const meterProvider = new MeterProvider({ readers: [getHyperDXMetricReader()] })
@@ -206,15 +211,24 @@ const hostMetrics = new HostMetrics({ meterProvider })
 hostMetrics.start()
 ```
 
-No `NodeSDK`, no tracer provider, no HTTP instrumentation, no propagators
-registered.
+That is not the whole process though. `packages/api/bin/hyperdx` starts the api
+and every task with `node -r @hyperdx/node-opentelemetry/build/src/tracing`, and
+that preload calls `initSDK()`. Whenever `HYPERDX_API_KEY` or
+`OTEL_EXPORTER_OTLP_HEADERS` is set it builds a `NodeSDK` with a tracer
+provider, the auto-instrumentations (HTTP included) and the default propagators,
+tracecontext plus baggage. With neither set it logs "OpenTelemetry SDK
+initialization skipped" and starts nothing.
 
-| Alert         | Package                                                   | Have            | Range               | Why it does not bite                                                                                                                                                                                                                            |
-| ------------- | --------------------------------------------------------- | --------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 126, 127, 128 | exporter-prometheus, auto-instrumentations-node, sdk-node | 0.57.2 / 0.56.1 | `< 0.217.0`         | Prometheus exporter crash needs the exporter's own HTTP server. We never instantiate it - our metrics endpoint is `prom-client` directly in `dfe/observability/metrics.ts`. The package only arrives because `sdk-node` bundles every exporter. |
-| 184           | core                                                      | 1.30.1          | `< 2.8.0`           | Unbounded memory in W3C Baggage propagation. Baggage needs a propagator on a tracing SDK, and no tracing SDK is started.                                                                                                                        |
-| 227           | propagator-jaeger                                         | 1.30.1          | `< 2.9.0`           | Needs `OTEL_PROPAGATORS` to include jaeger. That string appears NOWHERE in the repo - not code, compose or env - and OTel's defaults are tracecontext plus baggage.                                                                             |
-| 265           | @hono/node-server                                         | 1.19.17         | `>= 2.0.0, < 2.0.5` | Below the range, not above it. Also Windows-only path traversal, and we ship Alpine.                                                                                                                                                            |
+Corrected 2026-10-01. This section first said there was no `NodeSDK`, no tracer
+provider, no HTTP instrumentation and no propagators. The 2026-10-01 section
+below has the trace.
+
+| Alert         | Package                                                   | Have            | Range               | Why it does not bite                                                                                                                                                                                                                                                                                                                                            |
+| ------------- | --------------------------------------------------------- | --------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 126, 127, 128 | exporter-prometheus, auto-instrumentations-node, sdk-node | 0.57.2 / 0.56.1 | `< 0.217.0`         | Prometheus exporter crash needs the exporter's own HTTP server. `sdk-node` builds a `PrometheusExporter` (`sdk.js:105-106`), which binds 9464, only when `OTEL_METRICS_EXPORTER` includes `prometheus`. Nothing in the repo sets it, so there is no server unless an operator opts in. Our metrics endpoint is `prom-client` in `dfe/observability/metrics.ts`. |
+| 184           | core                                                      | 1.30.1          | `< 2.8.0`           | Unbounded memory in W3C Baggage propagation. REACHABLE whenever the SDK starts - see the 2026-10-01 section. Bounded by Node's 16 KB header cap, so tolerable risk rather than not used.                                                                                                                                                                        |
+| 227           | propagator-jaeger                                         | 1.30.1          | `< 2.9.0`           | Needs `OTEL_PROPAGATORS` to include jaeger. That string appears NOWHERE in the repo - not code, compose or env - and OTel's defaults are tracecontext plus baggage.                                                                                                                                                                                             |
+| 265           | @hono/node-server                                         | 1.19.17         | `>= 2.0.0, < 2.0.5` | Below the range, not above it. Also Windows-only path traversal, and we ship Alpine.                                                                                                                                                                                                                                                                            |
 
 Alert 227 was left undetermined by the previous pass. It is settled: not
 reachable.
@@ -798,3 +812,156 @@ a Next release vendors 2.0.3 or later. Check it on the next sync with:
   the image. Its reason now names the parent.
 - Dismissing #293 and #294 is the same `not_used` verdict. It needs repo admin,
   so it is not done here.
+
+## 2026-10-01 - four claims the dismissals stood on, and the tar critical
+
+Four statements in the 2026-08-26 pass were wrong, and the dismissals for alerts
+97, 126-128 and 184 point at this file. Each is corrected in place above with a
+dated note. The evidence is here.
+
+### protobufjs never reaches the browser
+
+`@hyperdx/browser` 0.22.1 ships one file, `build/index.js`, 512738 bytes. It has
+no `require(` call and no ES import of any package. It does carry `LongBits`,
+`BufferWriter`, `BufferReader` and the `invalid wire type` error, which is
+`protobufjs/minimal` inlined. `Root.prototype.load`, `illegal token` and
+`resolveAll` are absent, so there is no reflection or parser in it. The app
+imports `@hyperdx/browser` and nothing else from that family (`_app.tsx:9`,
+`DBSearchPage.tsx:28`, `AppNav.tsx:6`, `AppNavFeedback.tsx:3`).
+
+So the 6.11.x copy under `@hyperdx/otel-web-session-recorder/node_modules` is
+never bundled. The published image agrees.
+`ghcr.io/hyperi-io/dfe-hyperdx:latest` (0.2.8, revision 6fafb089) carries
+protobufjs 7.6.5, 7.6.2 and 7.5.8 and no 6.x copy anywhere. #114 has since moved
+the 7.x copies to 7.6.6.
+
+No `resolutions` entry was ever needed. #114 re-resolved the recorder's copy to
+6.11.6 inside its `~6.11.2` range, and 6.11.6 strips non-word characters from
+type names at `src/type.js:32`, the GHSA-xq3m-2v4x-88gg fix.
+
+### The tracing SDK does start
+
+`packages/api/bin/hyperdx` runs the api and every task as
+`node -r @hyperdx/node-opentelemetry/build/src/tracing`, and `entry.prod.sh`
+lines 41, 48 and 50 launch through it. That module calls `initSDK({})`
+(`@hyperdx/node-opentelemetry` 0.9.0, `build/src/otel.js:93`). It returns early
+only when neither `HYPERDX_API_KEY` nor `OTEL_EXPORTER_OTLP_HEADERS` is set
+(`otel.js:110`). Otherwise it builds a `NodeSDK` with a span processor and the
+auto-instrumentations, HTTP enabled, and starts it.
+
+`NodeSDK.start()` registers the tracer provider whenever it has a span
+processor, which is always unless `OTEL_TRACES_EXPORTER=none`. With no explicit
+propagator it builds one from `OTEL_PROPAGATORS`, and that defaults to
+tracecontext plus baggage (`@opentelemetry/core` 1.30.1 `environment.js:108`,
+`sdk-trace-base` `BasicTracerProvider.js:209-211`). `docker-compose.yml:57`
+passes `HYPERDX_API_KEY` through, so any deployment that sets a key runs all of
+it.
+
+Prometheus is the narrow one. `start()` always calls
+`configureMetricProviderFromEnv()`, which builds a `PrometheusExporter`
+(`sdk-node` `sdk.js:105-106`) only when `OTEL_METRICS_EXPORTER` includes
+`prometheus`. The exporter's constructor binds 9464 unless `preventServerStart`
+is set. `git grep OTEL_METRICS_EXPORTER` finds nothing. So alerts 126-128 still
+do not bite, but because nobody opts in, not because nothing starts the SDK.
+
+### #184 - reachable, bounded, tolerable risk
+
+With the SDK running, every inbound request on the api port reaches the sink:
+
+```text
+http server 'request'
+  -> instrumentation-http 0.57.2  http.js:385  propagation.extract(ROOT_CONTEXT, headers)
+  -> CompositePropagator -> W3CBaggagePropagator.extract  (@opentelemetry/core 1.30.1)
+```
+
+That runs before express, so before any auth middleware. In a DFE deployment the
+OIDC gateway stops an unauthenticated request first, but anything that reaches
+the pod port directly gets to the propagator.
+
+What bounds it is the advisory's own Impact section. Node caps the combined
+headers at 16 KB by default, the header is already in memory, and the extra cost
+is splitting it into entry objects. The image raises nothing - neither the
+`Dockerfile` nor `entry.prod.sh` sets `NODE_OPTIONS`. The 128 KB
+`--max-http-header-size` lives in `packages/api/.env.development` and its
+example, and the `Dockerfile` copies neither.
+
+No lockfile fix exists. `sdk-node` 0.57.2, `sdk-trace-base` 1.30.1,
+`sdk-trace-node` 1.30.1 and `instrumentation-http` 0.57.2 all pin core at
+exactly `1.30.1`, and `@hyperdx/node-opentelemetry` `^0.9.0` holds them there.
+2.8.0 needs a newer `@hyperdx/node-opentelemetry`, which is a change to
+upstream's `package.json`.
+
+Verdict: the dismissal holds, on a different reason. It is `tolerable_risk`, not
+`not_used`. Moderate, at most 16 KB of parsing per request, and it does not
+clear THE BAR. The `not_used` comment on #184 and the `@opentelemetry/core`
+entry in `scripts/dismiss-triaged-alerts.py` still carry the old claim.
+Re-dismissing needs repo admin.
+
+### tar - the critical is out of the lockfile
+
+Alert 213, GHSA-23hp-3jrh-7fpw, npm 1123940. Decompression and parse DoS,
+`<= 7.5.18`. The only parent was Yarn's implicit `node-gyp@npm:latest`, locked
+at 10.2.0:
+
+```text
+@hyperdx/app -> @storybook/nextjs -> node-polyfill-webpack-plugin -> crypto-browserify
+  -> browserify-cipher -> browserify-aes -> evp_bytestokey -> node-gyp@10.2.0 -> tar@6.2.1
+node-gyp@10.2.0 -> make-fetch-happen@13.0.1 -> cacache@18.0.4 -> tar@6.2.1
+```
+
+plus `fsevents` under rollup, jest, nodemon and playwright, which never installs
+on Linux.
+
+It never ran. A full Linux install builds nx, esbuild, msw, protobufjs,
+core-js-pure, @scarf/scarf and unrs-resolver, and nothing through node-gyp. The
+image installs with `--mode=skip-build` (`Dockerfile:38`). Neither tar nor
+node-gyp is in the `yarn workspaces focus @hyperdx/api --production` tree, or
+under `/app` in the published image.
+
+Fixed anyway, because it is one command. `yarn up --recursive node-gyp` moves
+`node-gyp@npm:latest` to 13.0.2 (2026-08-26), whose `tar ^7.5.4` locks 7.5.22
+(2026-07-24). That clears every tar range in the audit, the highest being
+GHSA-r292-9mhp-454m at `<= 7.5.20`. cacache, make-fetch-happen and their subtree
+drop out. `yarn npm audit --all --recursive` with the ignore list emptied loses
+exactly the twelve tar advisories and gains none. node-gyp 13 wants Node
+`^22.22.2 || ^24.15.0 || >=26`, and both `.nvmrc` (22.23.1) and the image
+(24.21.0) qualify.
+
+### brace-expansion - which ids still match
+
+`yarn.lock` holds 1.1.21, 2.1.7, 5.0.8 and 5.0.12. Only 5.0.8 is in range of
+anything, and it is `nx@23.1.1` pinning `brace-expansion: "npm:5.0.8"` exactly.
+nx is a root devDependency, and the production focus tree has no brace-expansion
+at all.
+
+| npm id  | Advisory            | Range             | Matches 5.0.8 |
+| ------- | ------------------- | ----------------- | ------------- |
+| 1130734 | GHSA-rgw5-rvv9-x895 | `>=4.0.0 <5.0.9`  | yes           |
+| 1240103 | GHSA-q2hr-2g5m-vwhr | `>=4.0.0 <5.0.12` | yes           |
+| 1240107 | GHSA-qhr7-859c-m2p7 | `>=4.0.0 <5.0.11` | yes           |
+| 1240111 | GHSA-6j4f-fj2g-mc7p | `>=4.0.0 <5.0.10` | yes           |
+| 1130736 | GHSA-rgw5-rvv9-x895 | `>=2.0.0 <2.1.4`  | no - 2.1.7    |
+| 1130737 | GHSA-rgw5-rvv9-x895 | `<1.1.18`         | no - 1.1.21   |
+
+None of them reach the CI gate. `yarn npm audit --severity moderate` audits the
+root workspace's direct dependencies only, and with the ignore list emptied it
+reports nothing but the eslint deprecation. The numeric ids matter to
+`--recursive` runs like the one this file recommends.
+
+### What the image carries that no audit sees
+
+The published image is the root `Dockerfile` (`.hyperi-ci.yaml`
+`release.container`), not `docker/hyperdx/Dockerfile`. The production tree is
+the focus at `Dockerfile:87`, and three more things ship beside it:
+
+- `Dockerfile:99` copies `packages/common-utils/node_modules` from the FULL
+  install. A local full install puts only `dotenv` there.
+- `Dockerfile:100` copies the Next standalone trace. In 0.2.8 it carries its own
+  `minimatch` with brace-expansion 1.1.17, inside 1130737's `<1.1.18`. The
+  lockfile has since moved to 1.1.21.
+- The node base image's own npm at `/usr/local/lib/node_modules/npm` carries tar
+  7.5.19, node-gyp 12.4.0 and brace-expansion 5.0.7. None of it is in
+  `yarn.lock`, so neither the audit nor Dependabot sees it. tar 7.5.19 is above
+  the critical's range and inside GHSA-r292-9mhp-454m. npm runs once, at build,
+  for `npm install -g concurrently@9.1.0` (`Dockerfile:127`), and nothing at
+  runtime calls it.
