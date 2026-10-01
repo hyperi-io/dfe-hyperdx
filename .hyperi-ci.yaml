@@ -14,6 +14,19 @@ quality:
   exclude_paths:
     # Spike records name the files they proposed at the time, not files the repo holds.
     - .hyperi/spikes
+  # Every flagged line here is upstream's, byte-identical to the merge base, so editing it is conflict surface on every sync.
+  charset_exclude:
+    - .github/actions/e2e-setup/action.yml
+    - .github/actions/e2e-teardown/action.yml
+    - .github/scripts/__tests__/release-notes.test.mjs
+    - .github/scripts/release-notes.mjs
+    - .github/workflows/docker-build.yml
+    - .github/workflows/release-reminder.yml
+    - scripts/ci/ratchet.mjs
+    - scripts/ci/smoke-all-in-one.sh
+    - scripts/dev-env.sh
+    - scripts/ensure-dev-portal.sh
+    - scripts/test-e2e.sh
 test:
   enabled: true
   coverage: true
