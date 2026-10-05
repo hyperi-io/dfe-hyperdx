@@ -43,4 +43,7 @@ jobs:
       tag: ${{ inputs.tag || '' }}
       from-head: ${{ inputs.from-head || '' }}
       bump: ${{ inputs.bump || 'auto' }}
+      # The full jest suite and the Next build are the heavy jobs; Quality and the rest stay on the default runner.
+      runner-test: ubuntu-24.04-8core
+      runner-build: ubuntu-24.04-8core
     secrets: inherit
