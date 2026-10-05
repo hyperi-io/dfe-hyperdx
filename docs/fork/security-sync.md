@@ -551,8 +551,8 @@ command fails from an ordinary Linux box on a home network, and so does plain
 `curl` with a one-package body.
 
 The endpoint is not down. It is answering less than half the time. Twelve
-identical `curl` POSTs from dragonfly at 14:29 AEST, two seconds apart, body
-`{"lodash":["4.17.20"]}`:
+identical `curl` POSTs from that home-network box at 14:29 AEST, two seconds
+apart, body `{"lodash":["4.17.20"]}`:
 
 | Attempts | Result                           |
 | -------- | -------------------------------- |
@@ -562,8 +562,8 @@ identical `curl` POSTs from dragonfly at 14:29 AEST, two seconds apart, body
 A run that draws a hang gets a hard CI failure, and a blocking gate on a 42%
 pass rate gates nothing except whoever pushed at the wrong minute.
 
-The rest of the picture, measured the same afternoon on desktop-derek and on
-dragonfly, which is a separate network path:
+The rest of the picture, measured the same afternoon on a 32-core build host and
+on that home-network box, which take separate network paths:
 
 | Request                                              | Result              |
 | ---------------------------------------------------- | ------------------- |
