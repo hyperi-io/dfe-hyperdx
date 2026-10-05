@@ -548,7 +548,7 @@ header check is what holds when a deployment authenticates some other way.
   exactly like the steps around it, so a skipped run pays nothing.
 
 - `.fork-deleted` + the deletion check in `.githooks/fork-surface-check.py` -
-  the 15 upstream workflows we do not carry. `.fork-surface` cannot cover a
+  the 16 upstream workflows we do not carry. `.fork-surface` cannot cover a
   deletion: it reads `--diff-filter=ACMR` against the merge base, where a file
   we removed is unchanged and therefore invisible, so a sync reinstates it in
   silence. The check simply fails when a listed path exists.
