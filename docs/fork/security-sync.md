@@ -1079,3 +1079,75 @@ Of the list's 25 entries, `--recursive` no longer reports 1113714 (ajv),
 1130736 and 1130737 are gone from every run. The 20 findings left under
 `--recursive` are the 12 axios ids, three brace-expansion ids and five more, all
 dev only.
+
+## 2026-10-06 - the 2.40.0 sync
+
+The sync brings nothing new into range. Asked of npm's bulk advisory endpoint,
+the moderate-and-above set for the synced lockfile is main's minus image-size's
+two (GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr), because 2.40.0 resolves
+image-size 2.0.4. Dependabot shows 0 open and 98 dismissed, so #293 and #294
+should turn `fixed` once this reaches main.
+
+### The merge driver undid main's lockfile fixes
+
+The driver takes upstream's `yarn.lock` and `yarn install` re-derives only what
+our `package.json` asks for, so every fix main held in the lockfile alone went
+back to 2.40.0's version. `yarn up -R` put each one back inside its declared
+range.
+
+| Package                             | main                  | 2.40.0's lockfile           | synced                |
+| ----------------------------------- | --------------------- | --------------------------- | --------------------- |
+| next                                | 16.3.6                | 16.3.4                      | 16.3.6                |
+| axios, for `@slack/webhook` (image) | 1.20.0                | 1.18.1                      | 1.20.0                |
+| @grpc/grpc-js                       | 1.14.5                | 1.14.4                      | 1.14.5                |
+| hono                                | 4.13.9                | 4.12.34                     | 4.13.10               |
+| protobufjs                          | 6.11.6, 7.6.6         | 6.11.4, 7.5.8, 7.6.2, 7.6.5 | 6.11.6, 7.6.6         |
+| node-gyp, tar                       | 13.0.2, 7.5.22        | 10.2.0, 6.2.1               | 13.0.2, 7.5.22        |
+| brace-expansion, besides nx's 5.0.8 | 1.1.21, 2.1.7, 5.0.12 | 1.1.17, 2.1.3, 2.1.4        | 1.1.21, 2.1.7, 5.0.12 |
+| ip-address                          | 10.7.2                | 9.0.5, 10.1.0, 10.7.1       | 10.7.2                |
+
+### The register, and the re-checks
+
+- systeminformation `^5.31.7` stays. 2.40.0's own lockfile still resolves
+  5.30.7, under the floor. The synced tree resolves 5.33.14. No patches.
+- ip-address: `packages/api` now declares upstream's `^10.7.1` and resolves
+  10.7.2, so the SSRF guard stays above the 2026-08-26 range.
+- Next 16.3.6 still vendors the pre-fix image-size: `rg` finds
+  `No codestream found in JXL container` in
+  `next/dist/compiled/image-size/index.js`. The 2026-09-27 verdict stands, since
+  production only runs `validate()`.
+
+### braces - GHSA-vfj7-8cjw-p6xm, npm 1240992, high
+
+`yarn npm audit --recursive` reports it before the sync and after. Stack
+exhaustion on deeply nested brace patterns, `<= 3.0.3`. 3.0.3, from 2024-05-21,
+is the latest release, so there is no fix to take.
+
+It is in the image:
+
+```text
+@hyperdx/api -> http-proxy-middleware@4.1.1 -> micromatch@4.0.8 -> braces@3.0.3
+```
+
+It does not bite. braces expands the PATTERN, never the string being matched,
+and the one proxy the api mounts (`routers/api/clickhouseProxy.ts:209`) passes a
+function `pathFilter`, so `path-filter.js` never calls micromatch. Every other
+parent - jest, nodemon via chokidar, fast-glob, stylelint, lint-staged and
+`@changesets/cli` - is build or test tooling. Verdict `not_used`. Dependabot has
+raised no alert for it, and the CI gate, which audits the root workspace's
+direct dependencies, does not report it.
+
+### Upstream main, 22 commits past 2.40.0
+
+Three are security fixes. `@grpc/grpc-js` 1.14.5 (#3263) and hono 4.13.9 (#3264)
+are lockfile bumps the synced tree already carries.
+
+#3129 stops signing the session cookie with the default `EXPRESS_SESSION_SECRET`
+committed to upstream's source. The fork still falls back to that literal
+(`packages/api/src/config.ts:16`), and none of `docker-compose.dfe.yml`, the
+root `Dockerfile` or `entry.prod.sh` sets the variable. In OIDC mode it buys an
+attacker little: `oidc-identity.ts` logs in with `session: false` and
+`legacy-auth-lockdown.ts` 404s the routes that mint a session, so there is no
+live session id to sign for. Read from the code, not run. A deployment closes it
+outright by setting `EXPRESS_SESSION_SECRET`, and the next sync brings
+upstream's random fallback.
