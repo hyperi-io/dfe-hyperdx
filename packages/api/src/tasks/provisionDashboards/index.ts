@@ -136,7 +136,10 @@ export function resolveDashboardRefs(
   }
 
   for (const filter of resolved.filters ?? []) {
-    rewrite(filter, 'source', sources);
+    // A static-list filter carries its values inline and names no source.
+    if ('source' in filter) {
+      rewrite(filter, 'source', sources);
+    }
   }
 
   if (unresolved) {
