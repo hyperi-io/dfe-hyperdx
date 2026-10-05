@@ -125,7 +125,7 @@ so they cannot collide with upstream. Compose files and collector config are in
 ## Provenance
 
 This documentation was assembled from Derek's original HyperDX-DFE embedding
-design, the DFE Casbin RBAC work, the embedding code from devex, and a review of
-the HyperDX codebase. Where a design has since changed, these docs describe what
+design, the DFE Casbin RBAC work, the embedding code from our internal
+development environment, and a review of the HyperDX codebase. Where a design has since changed, these docs describe what
 the code does NOW and the superseded reasoning lives in
 [../decisions/](../decisions/).
