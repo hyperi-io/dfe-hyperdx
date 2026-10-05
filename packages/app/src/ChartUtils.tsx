@@ -9,7 +9,13 @@ import {
   JSDataType,
   ResponseJSON,
 } from '@hyperdx/common-utils/dist/clickhouse';
+import {
+  DEFAULT_PROMQL_REDUCER,
+  getQueriedPromqlSeries,
+  isRangeQuery,
+} from '@hyperdx/common-utils/dist/core/promql';
 import { isMetricChartConfig } from '@hyperdx/common-utils/dist/core/renderChartConfig';
+import { SERIES_KEY_JOINER } from '@hyperdx/common-utils/dist/core/seriesNameTemplate';
 import {
   convertDateRangeToGranularityString,
   convertGranularityToSeconds,
@@ -27,15 +33,18 @@ import {
   BuilderSavedChartConfig,
   ChartConfigWithDateRange,
   ChartConfigWithOptDateRange,
+  DateRange,
   DisplayType,
   Filter,
   isSearchableSource,
   MetricsDataType as MetricsDataTypeV2,
+  PromqlChartConfig,
   SourceKind,
   SQLInterval,
   TMetricSource,
   TSource,
 } from '@hyperdx/common-utils/dist/types';
+import { substituteChartConfigVariables } from '@hyperdx/common-utils/dist/variables';
 import { notifications } from '@mantine/notifications';
 
 import DateRangeIndicator from './components/charts/DateRangeIndicator';
@@ -94,9 +103,10 @@ export const DEFAULT_CHART_CONFIG: Omit<
 function getTimeChartGranularity(
   granularity: string | undefined,
   dateRange: [Date, Date],
+  minGranularitySeconds?: number,
 ) {
   return granularity === 'auto' || granularity == null
-    ? convertDateRangeToGranularityString(dateRange, 80)
+    ? convertDateRangeToGranularityString(dateRange, 80, minGranularitySeconds)
     : granularity;
 }
 
@@ -111,6 +121,75 @@ function getTimeChartDateRange(
 }
 
 export const MAX_TIME_CHART_SERIES = DEFAULT_SERIES_LIMIT;
+
+/**
+ * A PromQL config's resolved granularity, and its date range aligned to that
+ * granularity's buckets when it runs a range query, so its samples land on the
+ * same boundaries as the timeseries charts' and stay put across refreshes.
+ */
+function getAlignedRangeAndGranularity(
+  config: PromqlChartConfig & DateRange,
+): Pick<PromqlChartConfig & DateRange, 'granularity' | 'dateRange'> {
+  const granularity = getTimeChartGranularity(
+    config.granularity,
+    config.dateRange,
+  );
+  return {
+    granularity,
+    dateRange: isRangeQuery(config)
+      ? getTimeChartDateRange(
+          config.dateRange,
+          config.alignDateRangeToGranularity,
+          granularity,
+        )
+      : config.dateRange,
+  };
+}
+
+/**
+ * Converts the given config into one that is suitable for a tile that shows
+ * 1 value per series (number, pie, and bar tiles). The reducer defaults to
+ * the last value.
+ */
+export function convertToReducedPromqlChartConfig(
+  config: PromqlChartConfig & DateRange,
+): PromqlChartConfig & DateRange {
+  return {
+    ...config,
+    ...getAlignedRangeAndGranularity(config),
+    promqlExpression: getQueriedPromqlSeries(config).map(series => ({
+      ...series,
+      reducer: series.reducer ?? DEFAULT_PROMQL_REDUCER,
+    })),
+  };
+}
+
+/**
+ * The config for the sparkline behind a PromQL number tile: the tile's query
+ * with no reducer, so the buckets are plotted rather than collapsed.
+ *
+ * Intentionally matches convertToReducedPromqlChartConfig except for the reducer,
+ * so that react-query keys remain consistent between the reduced and sparkline versions.
+ */
+export function convertToPromqlSparklineChartConfig(
+  config: PromqlChartConfig & DateRange,
+): PromqlChartConfig & DateRange {
+  const reduced = convertToReducedPromqlChartConfig(config);
+  return {
+    ...reduced,
+    promqlExpression: getQueriedPromqlSeries(reduced).map(series => ({
+      ...series,
+      reducer: undefined,
+    })),
+  };
+}
+
+/** A PromQL table tile's queried config. */
+export function convertToPromqlTableChartConfig(
+  config: PromqlChartConfig & DateRange,
+): PromqlChartConfig & DateRange {
+  return { ...config, ...getAlignedRangeAndGranularity(config) };
+}
 
 export function convertToTimeChartConfig(
   config: ChartConfigWithDateRange,
@@ -128,6 +207,7 @@ export function convertToTimeChartConfig(
   const granularity = getTimeChartGranularity(
     config.granularity,
     config.dateRange,
+    config.minGranularitySeconds,
   );
 
   const dateRange = getTimeChartDateRange(
@@ -172,12 +252,14 @@ export function useTimeChartSettings(
     | 'fillNulls'
     | 'granularity'
     | 'alignDateRangeToGranularity'
+    | 'minGranularitySeconds'
   >,
 ) {
   return useMemo(() => {
     const granularity = getTimeChartGranularity(
       config.granularity,
       config.dateRange,
+      config.minGranularitySeconds,
     );
 
     const dateRange = getTimeChartDateRange(
@@ -195,7 +277,7 @@ export function useTimeChartSettings(
   }, [config]);
 }
 
-export const ChartKeyJoiner = ' · ';
+export const ChartKeyJoiner = SERIES_KEY_JOINER;
 const PreviousPeriodSuffix = ' (previous)';
 
 /**
@@ -437,6 +519,11 @@ export const K8S_FILESYSTEM_NUMBER_FORMAT: NumberFormat = {
 
 export const K8S_MEM_NUMBER_FORMAT: NumberFormat = {
   output: 'byte',
+};
+
+export const GPU_UTILIZATION_NUMBER_FORMAT: NumberFormat = {
+  output: 'percent',
+  mantissa: 1,
 };
 
 function inferValueColumns(
@@ -1151,12 +1238,30 @@ export const convertV1ChartConfigToV2 = (
 };
 
 /**
+ * Expand a builder config's variable references, falling back to the config as
+ * written when one of them can't be expanded (a malformed reference, or a macro
+ * naming a variable the dashboard doesn't declare).
+ *
+ * Idempotent: the result carries `variables: undefined`, so expanding again at
+ * an inner layer is a no-op.
+ */
+export function tryExpandConfigVariables<
+  T extends Parameters<typeof substituteChartConfigVariables>[0],
+>(config: T): T {
+  try {
+    return substituteChartConfigVariables(config);
+  } catch {
+    return config;
+  }
+}
+
+/**
  * Build search URL for viewing events based on group-by values
  * Used by both chart clicks and table row clicks
  */
 export function buildEventsSearchUrl({
   source,
-  config,
+  config: rawConfig,
   dateRange,
   groupFilters,
   valueRangeFilter,
@@ -1170,6 +1275,13 @@ export function buildEventsSearchUrl({
   if (!source?.id) {
     return null;
   }
+
+  // The destination page has no variable machinery, so every expression must be
+  // final SQL/Lucene before it goes in the URL.
+  const config = tryExpandConfigVariables({
+    ...rawConfig,
+    whereLanguage: rawConfig.whereLanguage || 'lucene',
+  });
 
   const isMetricChart = isMetricChartConfig(config);
   if (isMetricChart) {
@@ -1328,7 +1440,7 @@ function extractGroupColumns(
 export function buildTableRowSearchUrl({
   row,
   source,
-  config,
+  config: rawConfig,
   dateRange,
 }: {
   row: Record<string, any>;
@@ -1339,6 +1451,10 @@ export function buildTableRowSearchUrl({
   if (!source?.id) {
     return null;
   }
+
+  // The row keys are result-set column names, so they're already expanded — the
+  // group-by expressions have to be expanded here to match them.
+  const config = tryExpandConfigVariables(rawConfig);
 
   // Extract group-by column names and build filters from row values
   const groupFilters: Array<{ column: string; value: any }> = [];

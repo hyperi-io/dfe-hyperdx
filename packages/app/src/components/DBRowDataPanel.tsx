@@ -14,6 +14,11 @@ import {
 import { Box } from '@mantine/core';
 
 import { useQueriedChartConfig } from '@/hooks/useChartConfig';
+import {
+  getKnownColumnsList,
+  getSelectAllColumnsQuerySettings,
+  useSelectAllColumnsQuerySettings,
+} from '@/hooks/useMaterializedAliasColumnsOption';
 import { WithClause } from '@/hooks/useRowWhere';
 import {
   getDisplayedTimestampValueExpression,
@@ -94,12 +99,10 @@ export function useRowData({
   // target tables declare different column sets. When the source declares a
   // "known columns" list (columns known to exist across all target tables) we
   // select that instead of `*` when fetching full row data.
-  const knownColumns =
-    isLogSource(source) || isTraceSource(source)
-      ? source.knownColumnsListExpression?.trim()
-      : undefined;
+  const knownColumns = getKnownColumnsList(source);
 
   const baseConfig = {
+    source: source.id,
     connection: source.connection,
     select: [
       {
@@ -213,6 +216,8 @@ export function useRowData({
     ...(aliasWith && aliasWith.length > 0 ? { with: aliasWith } : {}),
   };
 
+  const additionalQuerySettings = useSelectAllColumnsQuerySettings(source);
+
   const baseQueryKey = ['row_side_panel', rowId, aliasWith, source];
   // Both halves of the filter are needed for `renderChartConfig` to emit one, so
   // a source with no usable timestamp expression can't be bounded at all.
@@ -228,6 +233,7 @@ export function useRowData({
     {
       queryKey: [...baseQueryKey, dateRange],
       enabled: rowId != null && hasWindow,
+      additionalQuerySettings,
     },
   );
 
@@ -248,6 +254,7 @@ export function useRowData({
   const fallbackResult = useQueriedChartConfig(baseConfig, {
     queryKey: [...baseQueryKey, undefined],
     enabled: rowId != null && isFallbackActive,
+    additionalQuerySettings,
   });
 
   const queryResult = isFallbackActive ? fallbackResult : boundedResult;
@@ -379,6 +386,9 @@ export function RowDataPanel({
           data={firstRow}
           jsonColumns={jsonColumns}
           mapColumns={mapColumns}
+          showMaterializedAliasColumnsOption={
+            getSelectAllColumnsQuerySettings(source) != null
+          }
         />
       </Box>
     </div>

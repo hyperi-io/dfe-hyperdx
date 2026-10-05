@@ -4,8 +4,17 @@ import {
   hasMacro,
   isMissingFiltersMacro,
   replaceMacros,
+  substitutePromqlChartConfigTemplates,
 } from '@/macros';
-import type { MetricTable } from '@/types';
+import type { ChartVariable, MetricTable } from '@/types';
+
+const variable = (name: string, values: string[]): ChartVariable => ({
+  name,
+  values,
+});
+
+const SERVICE = variable('service', ['api', 'web']);
+const EMPTY_SERVICE = variable('service', []);
 
 const ALL_METRIC_TABLES: MetricTable = {
   gauge: 'otel_metrics_gauge',
@@ -462,6 +471,17 @@ describe('replaceMacros with variables', () => {
       ).toBe("SELECT '$100 $nope'");
     });
 
+    it('escapes a regex reference for the SQL literal it sits in', () => {
+      // Raw SQL and the chart builder share one substitution path, so both get
+      // a pattern ClickHouse's literal parser hands to the regex engine intact.
+      expect(
+        replaceMacros({
+          sqlTemplate: "WHERE match(msg, '${service:regex}')",
+          variables: [{ name: 'service', values: ['v1.2'] }],
+        }),
+      ).toBe("WHERE match(msg, 'v1\\\\.2')");
+    });
+
     it('treats an empty variables array as a provided context', () => {
       expect(() =>
         replaceMacros({
@@ -492,6 +512,20 @@ describe('replaceMacros with variables', () => {
           variables: nested,
         }),
       ).toBe(`WHERE ${timeFilterOn('Timestamp')}`);
+    });
+
+    it('leaves a csv column expression unescaped, quotes and all', () => {
+      // `csv` is the raw escape hatch: it carries identifiers, and escaping a
+      // column expression for the surrounding literal would corrupt it.
+      expect(
+        replaceMacros({
+          sqlTemplate: 'WHERE $__timeFilter(${mapCol:csv})',
+          variables: [
+            ...nested,
+            { name: 'mapCol', values: ["toDateTime(Attributes['ts'])"] },
+          ],
+        }),
+      ).toBe(`WHERE ${timeFilterOn("toDateTime(Attributes['ts'])")}`);
     });
 
     it('renders a bare reference in the quoted sqlstring format', () => {
@@ -576,5 +610,154 @@ describe('replaceMacros with variables', () => {
         }),
       ).toThrow(MalformedMacroArgsError);
     });
+  });
+});
+
+const PROMQL_DATE_RANGE: [Date, Date] = [
+  new Date('2024-01-01T00:00:00Z'),
+  new Date('2024-01-01T01:00:00Z'),
+];
+
+describe('substitutePromqlChartConfigTemplates', () => {
+  const promqlConfig = (
+    promqlExpression: string,
+    variables?: ChartVariable[],
+  ) => ({
+    configType: 'promql' as const,
+    promqlExpression,
+    connection: 'local',
+    variables,
+    dateRange: PROMQL_DATE_RANGE,
+  });
+
+  it('leaves references as written when there is no variable context', () => {
+    expect(
+      substitutePromqlChartConfigTemplates(
+        promqlConfig('up{service=~"$service"}'),
+      ).promqlExpression,
+    ).toBe('up{service=~"$service"}');
+  });
+
+  it('expands the expression and consumes the variables', () => {
+    expect(
+      substitutePromqlChartConfigTemplates(
+        promqlConfig('up{service=~"$service"}', [SERVICE]),
+      ),
+    ).toMatchObject({
+      promqlExpression: 'up{service=~"(api|web)"}',
+      variables: undefined,
+    });
+  });
+
+  it('renders an empty selection as an unconstrained matcher', () => {
+    expect(
+      substitutePromqlChartConfigTemplates(
+        promqlConfig('up{service=~"$service"}', [EMPTY_SERVICE]),
+      ).promqlExpression,
+    ).toBe('up{service=~".*"}');
+  });
+
+  it('expands every expression of a multi-expression config', () => {
+    expect(
+      substitutePromqlChartConfigTemplates({
+        configType: 'promql' as const,
+        connection: 'local',
+        promqlExpression: [
+          { expression: 'up{service=~"$service"}', alias: 'up' },
+          { expression: 'rate(errors{service=~"$service"}[5m])' },
+        ],
+        variables: [SERVICE],
+        dateRange: PROMQL_DATE_RANGE,
+      }),
+    ).toMatchObject({
+      promqlExpression: [
+        { expression: 'up{service=~"(api|web)"}', alias: 'up' },
+        { expression: 'rate(errors{service=~"(api|web)"}[5m])' },
+      ],
+      variables: undefined,
+    });
+  });
+});
+
+describe('substitutePromqlChartConfigTemplates macros', () => {
+  const substitute = (
+    promqlExpression: string,
+    {
+      variables,
+      granularity = '5 minute',
+      dateRange = PROMQL_DATE_RANGE,
+    }: {
+      variables?: ChartVariable[];
+      granularity?: string;
+      dateRange?: [Date, Date];
+    } = {},
+  ) =>
+    substitutePromqlChartConfigTemplates({
+      configType: 'promql' as const,
+      connection: 'local',
+      promqlExpression,
+      variables,
+      granularity,
+      dateRange,
+    }).promqlExpression;
+
+  it('expands macros without a variable context', () => {
+    expect(
+      substitute(
+        'rate(a[$__rate_interval]) + avg_over_time(b[$__interval]) + increase(c[$__range])',
+      ),
+    ).toBe('rate(a[315s]) + avg_over_time(b[300s]) + increase(c[3600s])');
+  });
+
+  it('expands macros and variables together', () => {
+    expect(
+      substitute('rate(up{service=~"$service"}[$__rate_interval])', {
+        variables: [SERVICE],
+      }),
+    ).toBe('rate(up{service=~"(api|web)"}[315s])');
+  });
+
+  it('expands every expression of a multi-expression config', () => {
+    expect(
+      substitutePromqlChartConfigTemplates({
+        configType: 'promql' as const,
+        connection: 'local',
+        promqlExpression: [
+          { expression: 'rate(a[$__interval])' },
+          { expression: 'increase(b[$__range])' },
+        ],
+        granularity: '1 minute',
+        dateRange: PROMQL_DATE_RANGE,
+      }).promqlExpression,
+    ).toEqual([
+      { expression: 'rate(a[60s])' },
+      { expression: 'increase(b[3600s])' },
+    ]);
+  });
+
+  it('leaves a selected value that looks like a macro inert', () => {
+    expect(
+      substitute('up{path=~"${path:csv}"}', {
+        variables: [variable('path', ['$__interval'])],
+      }),
+    ).toBe('up{path=~"$__interval"}');
+  });
+
+  it('leaves SQL-only and unknown macros as written', () => {
+    expect(substitute('up{a="$__filter($service)"} $__foo $__intervals')).toBe(
+      'up{a="$__filter($service)"} $__foo $__intervals',
+    );
+  });
+
+  it('throws for a macro given arguments', () => {
+    expect(() => substitute('rate(a[$__interval(1)])')).toThrow(
+      "Macro 'interval' expects 0 argument(s), but got 1",
+    );
+  });
+
+  it('throws for a macro with an unclosed argument list', () => {
+    expect(() => substitute('up offset $__interval(')).toThrow(
+      MalformedMacroArgsError,
+    );
   });
 });

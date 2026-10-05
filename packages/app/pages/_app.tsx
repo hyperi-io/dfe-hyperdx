@@ -24,6 +24,7 @@ import {
 import { isBlockedRoute } from '@/dfe/embedFeatures';
 import { useEmbedColorScheme } from '@/dfe/EmbedThemeSync';
 import { ibmPlexMono, inter, roboto, robotoMono } from '@/fonts';
+import { fetchServerVersion, installHdxDebug } from '@/hdxDebug';
 import { AppThemeProvider, useAppTheme } from '@/theme/ThemeProvider';
 import { ThemeWrapper } from '@/ThemeWrapper';
 import { NextApiConfigResponseData } from '@/types';
@@ -76,7 +77,7 @@ function AppHeadContent() {
   return (
     <Head>
       <title>{theme.displayName}</title>
-      <meta name="viewport" content="width=device-width, initial-scale=0.75" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
       <meta name="google" content="notranslate" />
       <SystemColorSchemeScript />
     </Head>
@@ -144,6 +145,14 @@ function AppContent({
 }
 
 export default function MyApp({ Component, pageProps }: AppPropsWithLayout) {
+  // Expose build identity + debug helpers on window.hdx (all environments).
+  // Installed once; the backend/API version (deployed separately) is fetched
+  // from /api/health and read live via window.hdx's getters.
+  useEffect(() => {
+    installHdxDebug();
+    fetchServerVersion();
+  }, []);
+
   // port to react query ? (needs to wrap with QueryClientProvider)
   useEffect(() => {
     if (IS_LOCAL_MODE) {

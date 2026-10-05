@@ -276,6 +276,8 @@ export default [
           assertFunctionNames: [
             'expectFieldSuggestion',
             'expectValueSuggestion',
+            'expectTileBlockedOn',
+            'expectTileLoaded',
           ],
         },
       ],
