@@ -449,10 +449,14 @@ header check is what holds when a deployment authenticates some other way.
 
   **`DashboardsListPage.tsx` (catalogued)** loses `PRESET_DASHBOARDS`, the
   import only it used and the block that rendered it, and gains one import and
-  one element. `dfe/__tests__/forkDeltas.test.ts` pins the swap. Upstream's
-  `tests/e2e/features/dashboards-list.spec.ts` still asserts the preset links
-  and is left untouched, like the specs for the three pages this fork does not
-  ship.
+  one element. `dfe/__tests__/forkDeltas.test.ts` pins the swap. Both injected
+  components render only under a QueryClientProvider
+  (`dfe/QueryClientOnly.tsx`), because upstream's own
+  `DashboardsListPage.test.tsx` mounts the page with its data hooks mocked and
+  no QueryClient, and an unguarded query of ours failed all 21 of its tests.
+  Upstream's `tests/e2e/features/dashboards-list.spec.ts` still asserts the
+  preset links and is left untouched, like the specs for the three pages this
+  fork does not ship.
 
   **`Spotlights.tsx` (catalogued)**, the Cmd+K command palette, offered the same
   three presets. Upstream's list stays as written and the loop that adds it

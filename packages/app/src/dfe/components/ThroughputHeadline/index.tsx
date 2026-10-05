@@ -10,6 +10,7 @@ import {
 } from '@/ChartUtils';
 import { sparklinePointsFromGraphResults } from '@/components/NumberTileBackgroundChart';
 import { Sparkline } from '@/components/Sparkline';
+import { QueryClientOnly } from '@/dfe/QueryClientOnly';
 import {
   findThroughputSource,
   summariseThroughput,
@@ -131,11 +132,19 @@ function ThroughputFigure({ source }: { source: TMetricSource }) {
   );
 }
 
+export default function DfeThroughputHeadline() {
+  return (
+    <QueryClientOnly>
+      <ThroughputSection />
+    </QueryClientOnly>
+  );
+}
+
 /**
  * Renders nothing for a team without the self-monitoring metric source, so a
  * tenant team never sees operator telemetry.
  */
-export default function DfeThroughputHeadline() {
+function ThroughputSection() {
   const { data: sources } = useSources();
   const source = findThroughputSource(sources);
   if (source === undefined) return null;

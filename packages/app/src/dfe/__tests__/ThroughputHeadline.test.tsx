@@ -1,7 +1,17 @@
 import { MetricsDataType, SourceKind } from '@hyperdx/common-utils/dist/types';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { screen } from '@testing-library/react';
 
 import DfeThroughputHeadline from '@/dfe/components/ThroughputHeadline';
+
+// The data hooks are mocked below, so the client only satisfies the guard.
+function renderHeadline() {
+  return renderWithMantine(
+    <QueryClientProvider client={new QueryClient()}>
+      <DfeThroughputHeadline />
+    </QueryClientProvider>,
+  );
+}
 
 const mockUseSources = jest.fn();
 jest.mock('@/source', () => ({
@@ -59,7 +69,7 @@ describe('DfeThroughputHeadline', () => {
     });
     mockUseQueriedChartConfig.mockReturnValue({ data: undefined });
 
-    renderWithMantine(<DfeThroughputHeadline />);
+    renderHeadline();
 
     expect(screen.queryByTestId('dfe-throughput')).not.toBeInTheDocument();
     expect(mockUseQueriedChartConfig).not.toHaveBeenCalled();
@@ -72,7 +82,7 @@ describe('DfeThroughputHeadline', () => {
       isError: false,
     });
 
-    renderWithMantine(<DfeThroughputHeadline />);
+    renderHeadline();
 
     expect(screen.getByText('DFE throughput')).toBeInTheDocument();
     expect(screen.getByText('No data yet')).toBeInTheDocument();
@@ -86,7 +96,7 @@ describe('DfeThroughputHeadline', () => {
       isError: true,
     });
 
-    renderWithMantine(<DfeThroughputHeadline />);
+    renderHeadline();
 
     expect(
       screen.getByText('Throughput is unavailable right now'),
@@ -109,7 +119,7 @@ describe('DfeThroughputHeadline', () => {
       isError: false,
     });
 
-    renderWithMantine(<DfeThroughputHeadline />);
+    renderHeadline();
 
     // 144,000 rows over two complete minutes; the suffix is locale-dependent.
     const expected = new Intl.NumberFormat(undefined, {
@@ -126,7 +136,7 @@ describe('DfeThroughputHeadline', () => {
   it('queries the loader counter through the metric source', () => {
     mockUseQueriedChartConfig.mockReturnValue({ data: undefined });
 
-    renderWithMantine(<DfeThroughputHeadline />);
+    renderHeadline();
 
     const [config] = mockUseQueriedChartConfig.mock.calls[0];
     expect(config.source).toBe('m1');

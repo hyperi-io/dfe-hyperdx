@@ -12,10 +12,19 @@ import { IconRestore } from '@tabler/icons-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { hdxServer } from '@/api';
+import { QueryClientOnly } from '@/dfe/QueryClientOnly';
 
 type RestoreResponse = { cleared: number; reprovisioned: boolean };
 
 export default function RestoreShippedDashboards() {
+  return (
+    <QueryClientOnly>
+      <RestoreButton />
+    </QueryClientOnly>
+  );
+}
+
+function RestoreButton() {
   const queryClient = useQueryClient();
 
   const restore = useMutation({
