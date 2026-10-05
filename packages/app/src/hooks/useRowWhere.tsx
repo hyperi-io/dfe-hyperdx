@@ -7,6 +7,7 @@ import {
   convertCHDataTypeToJSType,
   JSDataType,
 } from '@hyperdx/common-utils/dist/clickhouse';
+import { quoteResultColumnNameIfNeeded } from '@hyperdx/common-utils/dist/core/metadata';
 import { aliasMapToWithClauses } from '@hyperdx/common-utils/dist/core/utils';
 import { WithClauseSchema } from '@hyperdx/common-utils/dist/types';
 
@@ -20,6 +21,9 @@ export const INTERNAL_ROW_FIELDS = {
   ID: '__hyperdx_id',
   ALIAS_WITH: '__hyperdx_alias_with',
 } as const;
+
+export const getRowId = (row: Record<string, any>): string =>
+  row[INTERNAL_ROW_FIELDS.ID];
 
 // Result type for row WHERE clause with alias support
 export type RowWhereResult = {
@@ -97,7 +101,7 @@ export function processRowToWhereClause(
 
           // Currently we can't distinguish null or 'null'
           if (dynamicValue == null || dynamicValue === 'null') {
-            return SqlString.format(`isNull(??)`, [valueExpr]);
+            return SqlString.format(`isNull(?)`, [SqlString.raw(valueExpr)]);
           }
           const dynamicStr =
             typeof dynamicValue === 'string'
@@ -165,9 +169,11 @@ export default function useRowWhere({
       new Map(
         meta?.map(c => {
           // if aliasMap is provided, use the alias as the valueExpr
-          // but if the alias is not found, use the column name as the valueExpr
+          // but if the alias is not found, fall back to the column name.
+          // Alias entries are already SQL expressions; a result column name
+          // needs quoting when it isn't one (e.g. `x-host-header`).
           const valueExpr =
-            aliasMap != null ? (aliasMap[c.name] ?? c.name) : c.name;
+            aliasMap?.[c.name] ?? quoteResultColumnNameIfNeeded(c.name);
 
           return [
             c.name,

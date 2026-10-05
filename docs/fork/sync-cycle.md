@@ -151,6 +151,12 @@ until `yarn install` re-derives them. Use `--mode=update-lockfile` first if you
 want the resolution step on its own. Do NOT use `--immutable` here; it is the
 right flag everywhere else and the wrong one at exactly this point.
 
+`yarn install` re-derives only what our `package.json` asks for. A fix main
+carries in the lockfile alone - a `yarn up -R` inside a declared range - is gone
+after the merge, and nothing fails. Diff the resolved versions against
+`origin/main` and run `yarn up -R` again on every package main had moved past
+upstream. The 2.40.0 sync lost seven PRs of them, Next's RCE fix among them.
+
 ### 6. The invariants
 
 Checked here and again on every PR by `fork-surface.yml`:
@@ -370,13 +376,13 @@ why it has to stay accurate.
 Sync cost over time is the evidence the [de-fork decision](leaving-upstream.md)
 should be taken against, so it gets recorded.
 
-|                        | 2026-07-23 (dry run) | 2026-08-04 (2.29.0 -> 2.33.0, full run) | 2026-09-21 (2.36.0 -> 2.39.1, aborted) |
-| ---------------------- | -------------------- | --------------------------------------- | -------------------------------------- |
-| upstream commits ahead | 122                  | 164                                     | 116                                    |
-| conflicting files      | 11                   | 12                                      | 14                                     |
-| replayed by rerere     | n/a                  | n/a                                     | **0 of 9**                             |
-| `yarn.lock` conflicted | yes                  | **no**                                  | no                                     |
-| delta gate             | 81 `src/dfe` tests   | 211 suites / 4795 tests                 | not reached                            |
+|                        | 2026-07-23 (dry run) | 2026-08-04 (2.29.0 -> 2.33.0, full run) | 2026-09-21 (2.36.0 -> 2.39.1, aborted) | 2026-10-06 (2.36.0 -> 2.40.0, full run) |
+| ---------------------- | -------------------- | --------------------------------------- | -------------------------------------- | --------------------------------------- |
+| upstream commits ahead | 122                  | 164                                     | 116                                    | 164                                     |
+| conflicting files      | 11                   | 12                                      | 14                                     | 18                                      |
+| replayed by rerere     | n/a                  | n/a                                     | **0 of 9**                             | **0 of 13**                             |
+| `yarn.lock` conflicted | yes                  | **no**                                  | no                                     | no                                      |
+| delta gate             | 81 `src/dfe` tests   | 211 suites / 4795 tests                 | not reached                            | 427 suites / 9159 tests, 5 packages     |
 
 What changed between the two rows is the merge driver and the generated security
 layer. The lockfile stopped conflicting outright: the driver took upstream's
@@ -423,6 +429,27 @@ hyperdxio's npm scopes and Docker Hub namespaces), and 9 carry content -
 hunks), `DBDashboardPage.tsx` (2), `AppNav.tsx`, `SQLInlineEditor.tsx`,
 `useRowWhere.tsx` and `scripts/ci/ratchet-baseline.json` (2). Thirteen hunks in
 all.
+
+### 2026-10-06 - the merge was the easy part
+
+2.40.0 hit the 2.39.1 attempt's nine content conflicts plus four more:
+`package.json`, `packages/api/package.json`, `DBRowJsonViewer.tsx` and
+`DashboardsListPage.tsx`, which upstream rewrote with tabs and a header action
+group. The other five were the deleted upstream workflows again. `rr-cache` held
+25 entries and replayed none of the 13 content conflicts.
+`config.standalone.auth.yaml` left the surface, since our only delta was quote
+style, and upstream's new `jscpd.yml` joined `.fork-deleted`.
+
+Three breakages got past a merge git called resolved:
+
+- **The lockfile.** The driver took upstream's, so every security fix main held
+  in `yarn.lock` alone went back to upstream's version, Next 16.3.6 to 16.3.4
+  among them. Nothing failed. See step 5.
+- **`provisionDashboards/index.ts`** merged clean and failed `tsc`: upstream's
+  new `STATIC_LIST` filter has no `source` for our reference resolver to read.
+- **Upstream's new `DashboardsListPage.test.tsx`** mounts the page with no
+  QueryClient, and both components we inject there query. All 21 of its tests
+  failed until they went behind `dfe/QueryClientOnly.tsx`.
 
 ### Expect `Build All-in-One Image` to fail on a sync PR
 

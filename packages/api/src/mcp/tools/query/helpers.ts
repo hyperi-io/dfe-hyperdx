@@ -1,4 +1,7 @@
-import { ClickHouseError } from '@clickhouse/client-common';
+import {
+  ClickHouseError,
+  type ClickHouseSettings,
+} from '@clickhouse/client-common';
 import { getMetadata } from '@hyperdx/common-utils/dist/core/metadata';
 import {
   convertToCategoricalChartConfig,
@@ -6,8 +9,10 @@ import {
   splitAndTrimWithBracket,
 } from '@hyperdx/common-utils/dist/core/utils';
 import { isBuilderSavedChartConfig } from '@hyperdx/common-utils/dist/guards';
+import { UnknownVariableError } from '@hyperdx/common-utils/dist/macroErrors';
 import type {
   ChartConfigWithDateRange,
+  ChartVariable,
   MetricTable,
 } from '@hyperdx/common-utils/dist/types';
 import {
@@ -67,19 +72,18 @@ export const SAFE_BODY_EXPR_CHARS = /^[\w.':\[\]\-]+$/;
 // ─── Safety limits ───────────────────────────────────────────────────────────
 
 /** ClickHouse settings applied to all MCP query-tool executions.
- *  readonly=2 so max_execution_time can be set
- *  (readonly=1 rejects all setting changes). */
-const MCP_CLICKHOUSE_SETTINGS = {
+ *  readonly=2 so max_execution_time can be set (readonly=1 rejects it). */
+export const MCP_CLICKHOUSE_SETTINGS: ClickHouseSettings = {
   max_execution_time: 30,
-  readonly: 2,
-} as const;
+  readonly: '2',
+};
 
 /**
- * HTTP request timeout for MCP query-tool ClickHouse clients.
- * Set slightly above max_execution_time so ClickHouse can return a clean
- * timeout error before the HTTP connection is aborted.
+ * HTTP request timeout for MCP query-tool ClickHouse clients. Set above
+ * max_execution_time so ClickHouse returns a clean timeout before the HTTP
+ * connection is aborted.
  */
-const MCP_REQUEST_TIMEOUT = 32_000; // 30s query limit + 2s buffer
+export const MCP_REQUEST_TIMEOUT = 32_000; // 30s query limit + 2s buffer
 
 // ─── Increase top-N cap hint ────────────────────────────────────────────────
 
@@ -400,6 +404,8 @@ export async function runConfigTile(
     maxResults?: number;
     granularity?: string;
     abortSignal?: AbortSignal;
+    /** Dashboard variables and their selected values. Omitted when not in a dashboard context. */
+    variables?: ChartVariable[];
   },
 ) {
   if (!isConfigTile(tile)) {
@@ -442,6 +448,7 @@ export async function runConfigTile(
           whereLanguage:
             (builderConfig.whereLanguage as 'lucene' | 'sql') ?? 'lucene',
           bodyExpression: selectStr || undefined,
+          variables: options?.variables,
           // Forward the batch deadline's abort signal so an event-patterns
           // tile that overruns is cancelled server-side alongside the generic
           // chart-config path, rather than escaping cancellation and letting
@@ -570,6 +577,7 @@ export async function runConfigTile(
       implicitColumnExpression: implicitColumn,
       useTextIndexForImplicitColumn,
       dateRange: [startDate, endDate] as [Date, Date],
+      variables: options?.variables,
     } satisfies ChartConfigWithDateRange;
 
     // Apply seriesLimit as LIMIT to categorical charts (pie/bar)
@@ -647,6 +655,7 @@ export async function runConfigTile(
     ...savedConfig,
     ...sourceFields,
     dateRange: [startDate, endDate] as [Date, Date],
+    variables: options?.variables,
   } satisfies ChartConfigWithDateRange;
 
   const metadata = getMetadata(clickhouseClient);
@@ -679,6 +688,9 @@ const SERVER_CH_ERROR_TYPES = new Set([
   'SOCKET_TIMEOUT',
   'POCO_EXCEPTION',
   'ALL_CONNECTION_TRIES_FAILED',
+  // A query hitting max_execution_time is a resource failure, not a user
+  // mistake; the `user` default hid these in error views.
+  'TIMEOUT_EXCEEDED',
 ]);
 
 /**
@@ -832,7 +844,7 @@ export function clickHouseErrorResult(
         (e.cause instanceof Error ? e.cause.message : '') ||
         String(e)
       : String(e);
-  const hint = errorHint(raw);
+  const hint = errorHint(raw, e);
   const base = hint ? `${raw}\n\nHINT: ${hint}` : raw;
   const text = `${prefix ? `${prefix}: ` : ''}${base}${suffix ? ` ${suffix}` : ''}`;
 
@@ -842,8 +854,34 @@ export function clickHouseErrorResult(
   return isServerError(e) ? mcpServerError(text) : mcpUserError(text);
 }
 
+/** Walk the cause chain looking for an error of the given class. */
+function findCause<T>(
+  error: unknown,
+  is: (e: unknown) => e is T,
+  depth = 5,
+): T | undefined {
+  let current = error;
+  for (let i = 0; i <= depth; i++) {
+    if (is(current)) return current;
+    if (!(current instanceof Error)) return undefined;
+    current = current.cause;
+  }
+  return undefined;
+}
+
 /** @internal Exported for testing only. */
-export function errorHint(msg: string): string | null {
+export function errorHint(msg: string, error?: unknown): string | null {
+  const unknownVariableError = findCause(
+    error,
+    (e): e is UnknownVariableError => e instanceof UnknownVariableError,
+  );
+  if (unknownVariableError) {
+    return (
+      "A variable exists only when one of the dashboard's filters sets " +
+      'isVariableEnabled. Call clickstack_get_dashboard to see the declared ' +
+      'filters and the names they can be referenced by.'
+    );
+  }
   if (
     /Cannot (convert|parse) string .* (to|as) (type )?DateTime64/i.test(msg)
   ) {
@@ -868,6 +906,16 @@ export function errorHint(msg: string): string | null {
     return (
       'Add a LIMIT, narrow the time range, or use a smaller granularity. ' +
       'The result row count is too large to serialize back to the agent.'
+    );
+  }
+  // Match only real timeouts. A bare `max_execution_time` substring would also
+  // hijack SETTING_CONSTRAINT_VIOLATION / readonly errors ("Setting
+  // max_execution_time shouldn't be greater than…"), which need a different fix.
+  if (/TIMEOUT_EXCEEDED|Timeout exceeded/i.test(msg)) {
+    return (
+      'The query exceeded its execution-time limit. Narrow the time range so ' +
+      'ClickHouse can prune partitions, add filters to reduce the rows scanned, ' +
+      'or lower the requested LIMIT.'
     );
   }
   if (/TOO_MANY_ROWS_OR_BYTES|RESULT_IS_TOO_LARGE/i.test(msg)) {

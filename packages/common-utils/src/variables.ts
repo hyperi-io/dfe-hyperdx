@@ -1,14 +1,27 @@
+import lucene from '@hyperdx/lucene';
+
+import { getPromqlSeries } from './core/promql';
 import {
   escapeSqlString,
   isQuoteEscapedByBackslash,
   splitAndTrimWithBracket,
 } from './core/utils';
-import { MacroExpansionError, MalformedMacroArgsError } from './macroErrors';
+import {
+  MacroExpansionError,
+  MalformedMacroArgsError,
+  UnknownVariableError,
+} from './macroErrors';
+import {
+  decodeSpecialTokensToSource,
+  encodeSpecialTokens,
+  IMPLICIT_FIELD,
+} from './queryParser';
 import {
   ChartConfigWithOptDateRange,
   ChartVariable,
   DASHBOARD_VARIABLE_NAME_PATTERN,
   DASHBOARD_VARIABLE_NAME_PATTERN_ANCHORED,
+  DisplayType,
   SavedChartConfig,
   SearchConditionLanguage,
   SelectList,
@@ -21,6 +34,7 @@ export const VARIABLE_FORMATS = [
   'regex',
   'csv',
   'lucene',
+  'markdown',
 ] as const;
 
 export type VariableFormat = (typeof VARIABLE_FORMATS)[number];
@@ -33,6 +47,19 @@ const escapeRegexValue = (value: string) =>
 
 const escapeLuceneValue = (value: string) =>
   value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+/** Escape `\` and `"` so a value survives inside a double-quoted PromQL string. */
+const escapePromqlStringValue = (value: string) =>
+  value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+/**
+ * Backslash-escape every ASCII punctuation character (CommonMark renders each
+ * escape as the literal character), so a value renders as plain text rather
+ * than as markdown syntax. Newlines become spaces so a value can't split the
+ * surrounding block.
+ */
+const escapeMarkdownValue = (value: string) =>
+  value.replace(/\r\n|\r|\n/g, ' ').replace(/[!-/:-@[-`{-~]/g, '\\$&');
 
 /**
  * Render a variable's selected values in the requested format. Every format
@@ -58,6 +85,8 @@ export function formatVariableValues(
       return values.length === 0
         ? '("")'
         : `(${values.map(value => `"${escapeLuceneValue(value)}"`).join(' OR ')})`;
+    case 'markdown':
+      return values.map(escapeMarkdownValue).join(', ');
     default:
       format satisfies never; // Unreachable
       throw new Error(`Unknown variable format '${format}'`);
@@ -180,7 +209,14 @@ export function findBalancedParens(input: string, start: number): number {
 export function scanTemplateTokens(
   input: string,
   macroNames: readonly string[],
-  { onMalformed = 'throw' }: { onMalformed?: 'throw' | 'skip' } = {},
+  {
+    onMalformed = 'throw',
+    skipSqlComments = true,
+  }: {
+    onMalformed?: 'throw' | 'skip';
+    /** Whether SQL comments are skipped over rather than scanned for references. */
+    skipSqlComments?: boolean;
+  } = {},
 ): TemplateToken[] {
   // Longest name first so `$__filters` isn't matched as `$__filter` + `s`, etc.
   const sortedMacroNames = [...macroNames].sort((a, b) => b.length - a.length);
@@ -202,7 +238,7 @@ export function scanTemplateTokens(
   let i = 0;
   while (i < input.length) {
     // Consume any comments starting at this position
-    if (!inSingleQuote && !inDoubleQuote) {
+    if (skipSqlComments && !inSingleQuote && !inDoubleQuote) {
       const commentEnd = findCommentEnd(input, i);
       if (commentEnd > i) {
         text += input.slice(i, commentEnd);
@@ -388,18 +424,65 @@ export function expandTemplate(
 
 // -- Variable expansion -----------------------------------------------------
 
+export type TemplateLanguage =
+  | NonNullable<SearchConditionLanguage>
+  | 'markdown';
+
 export type VariableContext = {
   variables: ChartVariable[];
-  /** Format used by references that don't request one. */
+  /** The language the renderer will parse this template as. */
+  inputLanguage: TemplateLanguage;
+};
+
+type LanguageSettings = {
+  /** Format used by a reference that doesn't request one. */
   defaultFormat: VariableFormat;
   /**
-   * When true, `$__filter` and `$__conditionalAll` are left exactly as
-   * written. They expand to SQL predicates, so they have no meaning in a
-   * Lucene expression — expanding one there would splice SQL into a query
-   * that is about to be parsed as Lucene.
+   * Leaves `$__filter` / `$__conditionalAll` exactly as written. They expand to
+   * SQL predicates, so they have no meaning in a Lucene or PromQL expression.
    */
   disableMacros?: boolean;
+  /**
+   * Escapes a `regex`-format expansion for the string literal it always sits
+   * inside. Only `regex` needs this: `sqlstring` and `lucene` quote and escape
+   * themselves, and `csv` is the raw escape hatch that carries identifiers.
+   */
+  escapeRegexForLiteral?: (rendered: string) => string;
+  /**
+   * Whether SQL comments (`--`, `#`, block comments) are skipped over rather
+   * than scanned for references.
+   */
+  skipSqlComments?: boolean;
 };
+
+/** Settings controlling how variables and templates are expanded for each template language. */
+const LANGUAGE_SETTINGS: Record<TemplateLanguage, LanguageSettings> = {
+  sql: {
+    defaultFormat: 'sqlstring',
+    escapeRegexForLiteral: rendered => escapeSqlString(rendered),
+  },
+  lucene: { defaultFormat: 'lucene', disableMacros: true },
+  promql: {
+    defaultFormat: 'regex',
+    disableMacros: true,
+    escapeRegexForLiteral: escapePromqlStringValue,
+  },
+  markdown: {
+    defaultFormat: 'markdown',
+    disableMacros: true,
+    // Markdown doesn't have SQL comments, we wouldn't want to skip # ... (a markdown header)
+    skipSqlComments: false,
+  },
+};
+
+const SETTINGS_BY_LANGUAGE = new Map(Object.entries(LANGUAGE_SETTINGS));
+
+/** Get the settings for a template language, without an eslint warning */
+function languageSettings(language: TemplateLanguage): LanguageSettings {
+  const settings = SETTINGS_BY_LANGUAGE.get(language);
+  if (!settings) throw new Error(`Unknown template language '${language}'.`);
+  return settings;
+}
 
 const sqlNoOp = (name: string) =>
   `(1=1 /** no values selected for variable '${name}' */)`;
@@ -458,13 +541,14 @@ function requireVariable(
 ): ChartVariable {
   const variable = ctx.variables.find(v => v.name === variableName);
   if (!variable) {
-    throw new MacroExpansionError(
+    const available = ctx.variables.map(v => v.name);
+    throw new UnknownVariableError(
       macroName,
+      variableName,
+      available,
       `Macro '$__${macroName}' references unknown variable '${variableName}'. ` +
         `Available variables: ${
-          ctx.variables.length > 0
-            ? ctx.variables.map(v => v.name).join(', ')
-            : '(none)'
+          available.length > 0 ? available.join(', ') : '(none)'
         }.`,
     );
   }
@@ -555,79 +639,272 @@ export function expandVariableToken(
     );
   }
 
-  return formatVariableValues(
-    variable.values,
-    requestedFormat ?? ctx.defaultFormat,
-  );
+  const settings = languageSettings(ctx.inputLanguage);
+  const format = requestedFormat ?? settings.defaultFormat;
+  const rendered = formatVariableValues(variable.values, format);
+
+  return format === 'regex' && settings.escapeRegexForLiteral
+    ? settings.escapeRegexForLiteral(rendered)
+    : rendered;
+}
+
+/** Expand the given token if it's a variable, otherwise return the raw text. */
+function expandVariableOnly(
+  token: TemplateToken,
+  ctx: VariableContext,
+): string {
+  if (token.kind === 'text') return token.text;
+  if (token.kind === 'macro') return token.raw;
+  return expandVariableToken(token, ctx);
 }
 
 /**
- * Expand references, leaving each variable macro exactly as written — argument
- * list and all, so the `$name` argument that names the variable survives too.
- *
- * The macros are still *scanned* rather than left to the text branch, which is
- * what makes "exactly as written" true: their arguments are never visited, so
- * nothing inside one is substituted. A macro missing its closing paren is
- * tolerated (`skip`), since this runs over expressions as they are typed.
+ * Renders Lucene syntax for a field being exact-matched against any of the given values.
+ * eg. `field:"value1" OR field:"value2" OR field:"value3"`
+ **/
+const formatDistributedLuceneValues = (field: string, values: string[]) =>
+  `(${values
+    .map(value => `${field}:"${escapeLuceneValue(value)}"`)
+    .join(' OR ')})`;
+
+/** A non-text token's placeholder term and its span in the sentinel string. */
+type Sentinel = {
+  token: Exclude<TemplateToken, { kind: 'text' }>;
+  sentinel: string;
+  offset: number;
+};
+
+/** What a rewritten reference emits, and the span of text it replaces. */
+type LuceneRewrite = { start: number; end: number; text: string };
+
+/**
+ * The values a variable reference renders when it renders in the lucene format.
+ * `undefined` if the token is not a lucene formatted variable reference or if
+ * the referenced variable is not found.
  */
-function substituteReferencesOnly(input: string, ctx: VariableContext): string {
-  return scanTemplateTokens(input, VARIABLE_MACRO_NAMES, {
-    onMalformed: 'skip',
-  })
-    .map(token => {
-      if (token.kind === 'text') return token.text;
-      if (token.kind === 'macro') return token.raw;
-      return expandVariableToken(token, ctx);
-    })
-    .join('');
+function getLuceneFormattedValues(
+  token: TemplateToken,
+  ctx: VariableContext,
+): string[] | undefined {
+  if (token.kind === 'text' || token.kind === 'macro') return undefined;
+  const requestedFormat = token.kind === 'braced' ? token.format : undefined;
+
+  const settings = languageSettings(ctx.inputLanguage);
+  if ((requestedFormat ?? settings.defaultFormat) !== 'lucene')
+    return undefined;
+  return ctx.variables.find(variable => variable.name === token.name)?.values;
 }
 
-function substituteWithContext(input: string, ctx: VariableContext): string {
-  if (ctx.disableMacros) return substituteReferencesOnly(input, ctx);
+/**
+ * Index every `NodeTerm` in an AST by the offset of its term text,
+ * writing them to `termsByOffset`.
+ * */
+function indexLuceneTermsByOffset(
+  node: lucene.AST | lucene.Node | null | undefined,
+  termsByOffset: Map<number, lucene.NodeTerm>,
+): void {
+  if (node == null) return;
+
+  if ('termLocation' in node) {
+    termsByOffset.set(
+      // A quoted node's `termLocation` starts at the opening quote,
+      // so +1 to get offset of the actual term text.
+      node.termLocation.start.offset + (node.quoted ? 1 : 0),
+      node,
+    );
+    return;
+  }
+
+  if ('left' in node) {
+    indexLuceneTermsByOffset(node.left, termsByOffset);
+    if ('right' in node) indexLuceneTermsByOffset(node.right, termsByOffset);
+  }
+}
+
+/**
+ * Returns the lucene exact-match behavior for a quoted field reference, if the
+ * given sentinel is a quoted field reference in the given sentinel string.
+ * Otherwise returns undefined.
+ *
+ * @param runStart is the offset the last rewrite ended at.
+ */
+function rewriteQuotedVariableReference(
+  sentinel: Sentinel,
+  sentinelString: string,
+  termsByOffset: Map<number, lucene.NodeTerm>,
+  ctx: VariableContext,
+  runStart: number,
+): LuceneRewrite | undefined {
+  // If the variable does not exist, then no rewrite is possible
+  const values = getLuceneFormattedValues(sentinel.token, ctx);
+  if (values == null) return undefined;
+
+  // Find the Lucene AST node that corresponds to this token's sentinel
+  const node = termsByOffset.get(sentinel.offset);
+
+  // If the sentinel is not being used in the form Field:"$var", apply no rewrite.
+  if (
+    node == null ||
+    node.term !== sentinel.sentinel ||
+    !node.quoted ||
+    node.field === IMPLICIT_FIELD ||
+    node.fieldLocation == null
+  ) {
+    return undefined;
+  }
+
+  // The offset in the sentinel string where the field name starts
+  const fieldStart = node.fieldLocation.start.offset;
+
+  // If the field starts in a section that has been rewritten already,
+  // skip the rewrite to avoid overlapping rewrites.
+  if (fieldStart < runStart) return undefined;
+
+  // Find the closing quote from the sentinel rather than from `termLocation.end`,
+  // which swallows whatever whitespace follows the term.
+  const sentinelEnd = sentinel.offset + sentinel.sentinel.length;
+  if (sentinelString.charAt(sentinelEnd) !== '"') return undefined;
+
+  // `-field:x` is parsed with the `-` riding on `node.field`, and `-(…)`
+  // is not a shape the grammar accepts, so a negated reference has to come out
+  // as `NOT (…)` instead.
+  const negated = node.field.startsWith('-');
+  // The field is parsed from the encoded sentinel string, so restore the
+  // original spelling of any special sequences (e.g. an escaped colon).
+  const field = decodeSpecialTokensToSource(
+    negated ? node.field.slice(1) : node.field,
+  );
+  if (field === '') return undefined;
+
+  const span = { start: fieldStart, end: sentinelEnd + 1 };
+
+  // An empty selection stays the grouped no-op: `field:("")` compiles to `1=1`,
+  // where a distributed `field:""` would compare against the empty string
+  // instead. `-field:(…)` parses, so the `-` can stay on the field.
+  if (values.length === 0) {
+    return { ...span, text: `${negated ? '-' : ''}${field}:("")` };
+  }
+
+  return {
+    ...span,
+    text: `${negated ? 'NOT ' : ''}${formatDistributedLuceneValues(field, values)}`,
+  };
+}
+
+/**
+ * Substitute rendered values for variable tokens, with lucene-aware rewrites
+ * that provide exact-match semantics for quoted Field:"$var" references.
+ */
+function substituteTokensWithLuceneRewrites(
+  tokens: TemplateToken[],
+  ctx: VariableContext,
+): string {
+  // If no reference is rendered in the lucene format, the rewrite path is unnecessary.
+  const anyRewritable = tokens.some(
+    token => getLuceneFormattedValues(token, ctx) != null,
+  );
+  if (!anyRewritable) {
+    return tokens.map(token => expandVariableOnly(token, ctx)).join('');
+  }
+
+  // Build the sentinel string, a string with all variable references replaced by
+  // unique placeholders, and record the locations of each of those placeholders.
+  // eg. Transform `field:"$service" AND $other` into `field:"__hdx_sentinel_0" AND __hdx_sentinel_1`.
+  // Text is encoded the same way the renderer encodes before parsing, so the
+  // grammar accepts sequences like `http://`; all recorded offsets are in
+  // encoded space, and untouched output is decoded back to its source spelling.
+  let sentinelString = '';
+  const sentinelLocations: Sentinel[] = [];
+  for (const token of tokens) {
+    if (token.kind === 'text') {
+      sentinelString += encodeSpecialTokens(token.text);
+      continue;
+    }
+    const sentinel = `__hdx_sentinel_${sentinelLocations.length}`;
+    sentinelLocations.push({ token, sentinel, offset: sentinelString.length });
+    sentinelString += sentinel;
+  }
+
+  // Parse the sentinel string into a lucene AST
+  let ast: lucene.AST;
+  try {
+    ast = lucene.parse(sentinelString);
+  } catch {
+    // If the lucene is not valid, fall back to the non-rewrite path
+    return tokens.map(token => expandVariableOnly(token, ctx)).join('');
+  }
+
+  // Get the offset of every term's text in the sentinel string.
+  const termsByOffset = new Map<number, lucene.NodeTerm>();
+  indexLuceneTermsByOffset(ast, termsByOffset);
+
+  // Build the final output by replacing each sentinel with its rewritten expansion.
+  let rewrittenOutput = '';
+  let runStart = 0;
+  for (const region of sentinelLocations) {
+    const exactMatchRewrite = rewriteQuotedVariableReference(
+      region,
+      sentinelString,
+      termsByOffset,
+      ctx,
+      runStart,
+    );
+    if (exactMatchRewrite) {
+      const untouched = decodeSpecialTokensToSource(
+        sentinelString.slice(runStart, exactMatchRewrite.start),
+      );
+      const rewrite = exactMatchRewrite.text;
+      rewrittenOutput += untouched + rewrite;
+      runStart = exactMatchRewrite.end;
+    } else {
+      const untouched = decodeSpecialTokensToSource(
+        sentinelString.slice(runStart, region.offset),
+      );
+      const expanded = expandVariableOnly(region.token, ctx);
+      rewrittenOutput += untouched + expanded;
+      runStart = region.offset + region.sentinel.length;
+    }
+  }
+  const remaining = decodeSpecialTokensToSource(sentinelString.slice(runStart));
+  return rewrittenOutput + remaining;
+}
+
+/**
+ * Expand variable references and the variable macros in a template fragment,
+ * for the language its renderer will parse it as. Macro expansion is performed
+ * only for SQL templates. Default formats and escaping depend on the language.
+ *
+ * Only variable-related macros are expanded here - the full suite of macros
+ * (eg. `$__timeFilter`) are supported only for raw SQL chart types, and are
+ * handled elsewhere.
+ */
+export function substituteVariables(
+  input: string,
+  ctx: VariableContext,
+): string {
+  if (ctx.inputLanguage === 'lucene') {
+    return substituteTokensWithLuceneRewrites(
+      // Variable macros are not supported in lucene, but we still scan for them so that
+      // downstream expansion doesn't attempt to expand variables referenced in their args.
+      scanTemplateTokens(input, VARIABLE_MACRO_NAMES, { onMalformed: 'skip' }),
+      ctx,
+    );
+  }
+
+  const settings = languageSettings(ctx.inputLanguage);
+  if (settings.disableMacros) {
+    return scanTemplateTokens(input, VARIABLE_MACRO_NAMES, {
+      onMalformed: 'skip',
+      skipSqlComments: settings.skipSqlComments,
+    })
+      .map(token => expandVariableOnly(token, ctx))
+      .join('');
+  }
 
   return expandTemplate(input, {
     macroNames: VARIABLE_MACRO_NAMES,
     expandMacro: token => expandVariableToken(token, ctx),
     expandReference: token => expandVariableToken(token, ctx),
-  });
-}
-
-/**
- * Expand variable references and the variable macros in a template fragment.
- *
- * Standard macros (`$__timeFilter` and friends) are *not* known here, so they
- * pass through as text — raw SQL goes through `replaceMacros`, which scans for
- * both sets in one pass. This entry point is for the surfaces that only carry
- * variables (chart-builder where/having, PromQL expressions).
- */
-export function substituteVariables(
-  input: string,
-  variables: ChartVariable[],
-  {
-    defaultFormat = 'sqlstring',
-    disableMacros,
-  }: { defaultFormat?: VariableFormat; disableMacros?: boolean } = {},
-): string {
-  return substituteWithContext(input, {
-    variables,
-    defaultFormat,
-    disableMacros,
-  });
-}
-
-/**
- * Expand a template for the language its renderer will parse it as.
- * A Lucene expression renders values in the `lucene` format and gets no macros.
- */
-export function substituteVariablesForLanguage(
-  input: string,
-  variables: ChartVariable[],
-  language: SearchConditionLanguage,
-): string {
-  const isLucene = language === 'lucene';
-  return substituteVariables(input, variables, {
-    defaultFormat: isLucene ? 'lucene' : 'sqlstring',
-    disableMacros: isLucene,
   });
 }
 
@@ -638,7 +915,7 @@ export function substituteVariablesForLanguage(
  * structural rather than tied to one config type so both runtime configs (which
  * carry `variables`) and saved configs (which don't) can be walked.
  */
-type BuilderVariableFields = {
+export type BuilderVariableFields = {
   select: SelectList;
   where?: string;
   whereLanguage?: SearchConditionLanguage;
@@ -654,7 +931,7 @@ type BuilderVariableFields = {
  */
 type TemplateMapper = (
   template: string,
-  language: SearchConditionLanguage,
+  language: NonNullable<SearchConditionLanguage>,
 ) => string;
 
 const mapSelectList = (list: SelectList, map: TemplateMapper): SelectList =>
@@ -694,7 +971,7 @@ const mapSortList = (
  * Calls the given map function to rewrite every chart builder expression
  * that may contain variable references, leaving the rest of the config untouched.
  */
-function mapBuilderVariableTemplates<T extends BuilderVariableFields>(
+export function mapBuilderVariableTemplates<T extends BuilderVariableFields>(
   config: T,
   map: TemplateMapper,
 ): T {
@@ -736,8 +1013,8 @@ export function substituteChartConfigVariables<
 
   const substituted = mapBuilderVariableTemplates(
     config,
-    (template, language) =>
-      substituteVariablesForLanguage(template, variables, language),
+    (template, inputLanguage) =>
+      substituteVariables(template, { variables, inputLanguage }),
   );
 
   return { ...substituted, variables: undefined };
@@ -786,7 +1063,10 @@ export type VariableReference = {
  * template written that way is reported as using the macro; expansion is what
  * rejects it.
  */
-export function getVariableReferences(input: string): VariableReference[] {
+export function getVariableReferences(
+  input: string,
+  { skipSqlComments }: { skipSqlComments?: boolean } = {},
+): VariableReference[] {
   const references: VariableReference[] = [];
 
   /** Returns the referenced name, or undefined when the argument isn't one. */
@@ -811,6 +1091,7 @@ export function getVariableReferences(input: string): VariableReference[] {
   const visit = (text: string, guardedBy?: string) => {
     for (const token of scanTemplateTokens(text, VARIABLE_MACRO_NAMES, {
       onMalformed: 'skip',
+      skipSqlComments,
     })) {
       if (token.kind === 'text') continue;
       if (token.kind !== 'macro') {
@@ -897,18 +1178,21 @@ export function validateVariableReferencesInTemplate(
     /** The sentence subject of each message, e.g. `SQL references ...`. */
     subject?: string;
     /** The language the renderer parses this template as. */
-    language?: SearchConditionLanguage;
+    language?: TemplateLanguage;
   } = {},
 ): VariableReferenceIssues {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  const references = getVariableReferences(template);
+  const settings = languageSettings(language);
+  const references = getVariableReferences(template, {
+    skipSqlComments: settings.skipSqlComments,
+  });
 
   // Attempt to expand macros, so that errors during expansion can be surfaced.
   if (variables != null && hasVariableMacro(template)) {
     try {
-      substituteVariablesForLanguage(template, variables, language);
+      substituteVariables(template, { variables, inputLanguage: language });
     } catch (e) {
       // Surface only MacroExpansionError, anything else is a bug the user can't act
       // on, or could be from the user typing an incomplete template
@@ -952,16 +1236,34 @@ export function validateVariableReferencesInTemplate(
     );
   }
 
-  // Macros are not supported in lucene
-  if (language === 'lucene') {
-    if (macroReferences.length > 0) {
-      const [{ name }] = macroReferences;
-      errors.push(
-        `${formatReferenceList(macroReferences)} has no meaning in a Lucene expression — it is left as written and matched as literal text. Switch this input to SQL, or reference the variable directly, as in <field>:$${name}.`,
+  // A macro-less language leaves a macro exactly as written, so writing one can
+  // only ever have been a mistake.
+  if (settings.disableMacros && macroReferences.length > 0) {
+    const [{ name }] = macroReferences;
+    const macros = formatReferenceList(macroReferences);
+    warnings.push(
+      language === 'promql'
+        ? `${macros} has no meaning in a PromQL expression — it is left as written and sent to Prometheus verbatim. Reference the variable directly, as in {<label>=~"$${name}"}.`
+        : language === 'markdown'
+          ? `${macros} has no meaning in markdown — it is left as written. Reference the variable directly, as in $${name}.`
+          : `${macros} has no meaning in a Lucene expression — it is left as written and matched as literal text. Switch this input to SQL, or reference the variable directly, as in <field>:$${name}.`,
+    );
+  }
+
+  // Markdown rendering falls back to the text as written rather than failing
+  // like a query would, so nothing else reports an unrecognized format there.
+  if (language === 'markdown') {
+    const badFormat = valueReferences.filter(
+      r =>
+        knownVariableNames.has(r.name) &&
+        r.format != null &&
+        !isVariableFormat(r.format),
+    );
+    if (badFormat.length > 0) {
+      warnings.push(
+        `${formatReferenceList(badFormat)} uses an unknown format, so no variables are substituted. Expected one of: ${VARIABLE_FORMATS.join(', ')}.`,
       );
     }
-    // The two checks below are specific to the `sqlstring` default format.
-    return { errors, warnings };
   }
 
   // An unrecognized format throws during expansion, so it is already reported.
@@ -971,27 +1273,48 @@ export function validateVariableReferencesInTemplate(
       (r.format == null || isVariableFormat(r.format)),
   );
 
-  const quoted = resolved.filter(
-    r => (r.format ?? 'sqlstring') === 'sqlstring' && r.inStringLiteral,
-  );
-  if (quoted.length > 0) {
-    const [{ name }] = quoted;
-    errors.push(
-      `${formatReferenceList(quoted)} is wrapped in quotes, but the default sqlstring format already quotes each value. Did you mean to use $__filter(<expression>, $${name}) or \${${name}:csv} instead?`,
+  // The two checks below are specific to SQL's `sqlstring` default format.
+  if (language === 'sql') {
+    const quoted = resolved.filter(
+      r =>
+        (r.format ?? settings.defaultFormat) === 'sqlstring' &&
+        r.inStringLiteral,
     );
+    if (quoted.length > 0) {
+      const [{ name }] = quoted;
+      errors.push(
+        `${formatReferenceList(quoted)} is wrapped in quotes, but the default sqlstring format already quotes each value. Did you mean to use $__filter(<expression>, $${name}) or \${${name}:csv} instead?`,
+      );
+    }
+
+    const unguarded = resolved.filter(
+      r =>
+        (r.format ?? settings.defaultFormat) === 'sqlstring' &&
+        !r.inStringLiteral &&
+        r.guardedBy !== r.name,
+    );
+    if (unguarded.length > 0) {
+      const [{ name }] = unguarded;
+      warnings.push(
+        `${formatReferenceList(unguarded)} has no valid empty-selection value — it renders as NULL before anything is selected. Prefer $__filter(<expression>, $${name}) or $__conditionalAll(<condition>, $${name}) so the query stays valid when no values are selected.`,
+      );
+    }
   }
 
-  const unguarded = resolved.filter(
-    r =>
-      (r.format ?? 'sqlstring') === 'sqlstring' &&
-      !r.inStringLiteral &&
-      r.guardedBy !== r.name,
-  );
-  if (unguarded.length > 0) {
-    const [{ name }] = unguarded;
-    warnings.push(
-      `${formatReferenceList(unguarded)} has no valid empty-selection value — it renders as NULL before anything is selected. Prefer $__filter(<expression>, $${name}) or $__conditionalAll(<condition>, $${name}) so the query stays valid when no values are selected.`,
+  // A regex expansion — PromQL's default — is only valid as a matcher value:
+  // both `(api|web)` and the empty-selection `.*` are syntax errors anywhere
+  // else, so `up{service=~$svc}` and `${svc}_total` are mistakes.
+  if (language === 'promql') {
+    const unquoted = resolved.filter(
+      r =>
+        (r.format ?? settings.defaultFormat) === 'regex' && !r.inStringLiteral,
     );
+    if (unquoted.length > 0) {
+      const [{ name }] = unquoted;
+      warnings.push(
+        `${formatReferenceList(unquoted)} expands to a regular expression, which is only valid inside a quoted matcher value. Wrap it as {<label>=~"$${name}"}, or use \${${name}:csv} to interpolate the values as written.`,
+      );
+    }
   }
 
   return { errors, warnings };
@@ -1001,9 +1324,13 @@ export function validateVariableReferencesInTemplate(
  * Returns the names of every variable the template could reference.
  * Never throws: it runs over saved SQL that may be mid-edit or malformed.
  */
-export function getReferencedVariableNames(input: string): string[] {
+export function getReferencedVariableNames(
+  input: string,
+  language: TemplateLanguage = 'sql',
+): string[] {
+  const { skipSqlComments } = languageSettings(language);
   const names = new Set<string>(
-    getVariableReferences(input).map(ref => ref.name),
+    getVariableReferences(input, { skipSqlComments }).map(ref => ref.name),
   );
   return Array.from(names);
 }
@@ -1029,12 +1356,16 @@ export function filterReferencedVariables(
   if ('configType' in config && config.configType === 'sql') {
     names = getReferencedVariableNames(config.sqlTemplate);
   } else if ('configType' in config && config.configType === 'promql') {
-    // PromQL queries don't support variables yet.
-    return [];
+    names = getPromqlSeries(config).flatMap(series =>
+      getReferencedVariableNames(series.expression),
+    );
   } else {
     names = getBuilderVariableReferences(config).map(
       reference => reference.name,
     );
+    if (config.displayType === DisplayType.Markdown && config.markdown) {
+      names.push(...getReferencedVariableNames(config.markdown, 'markdown'));
+    }
   }
 
   const referenced = new Set(names);

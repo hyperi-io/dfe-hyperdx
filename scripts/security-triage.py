@@ -338,7 +338,13 @@ def collect_audit() -> tuple[list[dict], list[dict], str]:
     source = "Dependabot"
     if not advisories:
         advisories = collect_yarn_audit()
-        source = f"yarn npm audit - Dependabot unavailable ({reason})"
+        # No reason means Dependabot answered and simply has nothing open.
+        gap = (
+            f"Dependabot unavailable ({reason})"
+            if reason
+            else "Dependabot has no open high or critical alert"
+        )
+        source = f"yarn npm audit - {gap}"
 
     if not advisories:
         return [], [], "No high or critical advisories reported."

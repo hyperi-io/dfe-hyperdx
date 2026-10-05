@@ -20,6 +20,7 @@
 .github/workflows/deep-review.yml
 .github/workflows/e2e-tests.yml
 .github/workflows/external-contributor-alerts.yml
+.github/workflows/jscpd.yml
 .github/workflows/knip.yml
 .github/workflows/main.yml
 .github/workflows/pr-triage.yml

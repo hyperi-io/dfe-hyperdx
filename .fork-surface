@@ -50,7 +50,6 @@ README.md
 agent_docs/tech_stack.md
 docker/hyperdx/entry.prod.sh
 docker/nginx/README.md
-docker/otel-collector/config.standalone.auth.yaml
 docker/otel-collector/custom.config.yaml
 docker/otel-collector/schema/README.md
 nx.json
