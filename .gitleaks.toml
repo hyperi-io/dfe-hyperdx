@@ -35,6 +35,13 @@ paths = [
   '''(^|/)packages/app/src/components/ClickStackOnboarding/__tests__/installSnippets\.test\.ts$''',
   '''(^|/)packages/app/tests/e2e/fixtures/e2e-fixtures\.json$''',
   '''(^|/)packages/app/tests/e2e/utils/constants\.ts$''',
+  # Arrived with 2.40.0, each a test of what a fake value does:
+  #   useWhatsNewUnseen.test.tsx stores release strings like `2.37.0-sha0724861`,
+  #   review-comments.test.mjs proves the code-review script hides a made-up
+  #   `glpat-` token, and McpInstallPanel.test.tsx renders a placeholder UUID.
+  '''(^|/)packages/app/src/components/AppNav/__tests__/useWhatsNewUnseen\.test\.tsx$''',
+  '''(^|/)\.github/scripts/code-review/__tests__/review-comments\.test\.mjs$''',
+  '''(^|/)packages/app/src/components/ClickStackOnboarding/__tests__/McpInstallPanel\.test\.tsx$''',
 ]
 
 # Regex patterns for known false positives
@@ -70,6 +77,12 @@ regexes = [
   # value, not by path, so the rest of that suite stays scanned. Only shows up on
   # a PR: the push scan does not deepen history far enough to reach the commit.
   '''not-a-real-jwt''',
+
+  # The two sample keys upstream's RevealSnippet story renders
+  # (packages/app/src/components/RevealSnippet/RevealSnippet.stories.tsx:6-7,
+  # 2.40.0). By value, so the rest of that file stays scanned.
+  '''hdx_ing_9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c''',
+  '''a1b2c3d4-e5f6-7890-abcd-ef1234567890''',
   #     '''YOUR_.*_TOKEN''',
   #     '''your-.*-token''',
   #     '''test-token''',
