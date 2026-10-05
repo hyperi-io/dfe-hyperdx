@@ -64,8 +64,8 @@ jobs:
       # Go compile with an error naming neither the disk nor the job.
       - name: Free disk space
         if:
-          steps.changed-files.outputs.any_changed == 'true' || github.event_name
-          == 'workflow_dispatch'
+          github.event_name != 'pull_request' ||
+          steps.changed-files.outputs.any_changed == 'true'
         run: scripts/ci/free-disk-space.sh 40
       - name: Setup Docker Buildx
         if:
@@ -182,8 +182,8 @@ jobs:
       # Go compile with an error naming neither the disk nor the job.
       - name: Free disk space
         if:
-          steps.changed-files.outputs.any_changed == 'true' || github.event_name
-          == 'workflow_dispatch'
+          github.event_name != 'pull_request' ||
+          steps.changed-files.outputs.any_changed == 'true'
         run: scripts/ci/free-disk-space.sh 40
       - name: Setup Docker Buildx
         if:
