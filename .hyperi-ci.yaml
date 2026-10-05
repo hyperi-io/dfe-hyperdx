@@ -22,6 +22,7 @@ quality:
     - .github/scripts/release-notes.mjs
     - .github/workflows/docker-build.yml
     - .github/workflows/release-reminder.yml
+    - scripts/ci/dupes.mjs
     - scripts/ci/ratchet.mjs
     - scripts/ci/smoke-all-in-one.sh
     - scripts/dev-env.sh
