@@ -1151,3 +1151,28 @@ attacker little: `oidc-identity.ts` logs in with `session: false` and
 live session id to sign for. Read from the code, not run. A deployment closes it
 outright by setting `EXPRESS_SESSION_SECRET`, and the next sync brings
 upstream's random fallback.
+
+## 2026-10-07 - nx 23.1.1, two new advisories
+
+Two advisories against nx 23.1.1 turned the audit gate red on every PR. Both are
+`not_used` here and go in `.yarnrc.yml`'s `npmAuditIgnoreAdvisories`.
+
+| npm id  | Advisory            | Severity | Range              | Issue                                                        |
+| ------- | ------------------- | -------- | ------------------ | ------------------------------------------------------------ |
+| 1241217 | GHSA-w3vv-58gj-gw77 | high     | `>=23.0.0 <23.1.2` | Nx daemon and plugin worker sockets readable by local users  |
+| 1241219 | GHSA-hrvq-x7jp-36xv | moderate | `>=23.0.0 <23.2.1` | Path traversal in `nx migrate` package-migrations extraction |
+
+nx is a root devDependency (`package.json:30`) and nothing else declares it. The
+`nx` key in `packages/api/package.json` is project config, not a dependency.
+`docker/hyperdx/Dockerfile:103` runs
+`yarn workspaces focus @hyperdx/api --production`, which drops root
+devDependencies, so nx is not in the image. Read from the Dockerfile and
+manifests, not from a built image.
+
+Neither sink exists in a deployment. The daemon socket lives only on a machine
+running nx -- a developer box or a CI runner -- and `nx migrate` runs only when
+someone invokes it.
+
+`yarn npm audit --severity moderate` on the tree with both ids ignored reports
+no suggestions. Delete both ids once upstream's root `package.json` moves nx to
+23.2.1 or later.
