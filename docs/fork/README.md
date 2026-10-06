@@ -58,7 +58,7 @@ game, and [design.md](design.md) is how.
 
 ---
 
-## The four rules
+## The five rules
 
 1. **New code goes under a `dfe/` directory.** Those paths do not exist
    upstream, so they carry zero conflict risk. This is the default.
@@ -70,6 +70,7 @@ game, and [design.md](design.md) is how.
    every later sync a fresh hand-resolve.
 4. **Never merge upstream onto `main` by hand.** The sync workflow does it on a
    bot branch and opens a PR.
+5. **All our work happens in the fork.** Features, fixes and security fixes land here, and raising them upstream is not part of the process. When upstream fixes something we carry, `--check`, `--apply` and `--drift` say so and we delete our copy. The long-term plan is in [leaving-upstream.md](leaving-upstream.md).
 
 Our files follow HyperI documentation standards. Upstream's files are left
 exactly as they are, including their docs - `agent_docs/`, `AGENTS.md` and the

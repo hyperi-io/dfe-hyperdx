@@ -27,8 +27,7 @@ in how DFE runs this fork. Reachability is a human judgement.
     NNNN-<slug>.patch
 
 The numeric prefix is the apply order and reverses for unapply, so it is
-load-bearing. Add a header comment to each patch recording the advisory, the
-vector, and the upstream issue - the same fields the register carries.
+load-bearing. Add a header comment to each patch recording the advisory, the vector, and the upstream issue or release that tracks the fix (or `none`) - the same fields the register carries. We do not raise the fix upstream: the patch is ours, and `--apply` reports it stale once upstream fixes the code on its own.
 
 ## Making one
 

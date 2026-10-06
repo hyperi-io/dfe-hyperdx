@@ -1,9 +1,6 @@
 # Leaving the upstream dependency
 
-**Forking is a position, not a destination.** The intent is to stop tracking
-hyperdxio/hyperdx eventually - once HyperDX settles, or once we can allocate
-enough resource to own the whole thing. This doc exists so that decision gets
-made deliberately rather than drifted into.
+**Forking is a position, not a destination.** The intent is to stop tracking hyperdxio/hyperdx once HyperDX's rate of change slows and stabilises, most likely by merging the code into DFE and vendoring it there (C below). Until then all our work stays in the fork. This doc exists so that decision gets made deliberately rather than drifted into.
 
 ---
 
@@ -14,7 +11,7 @@ flowchart LR
     now(["forked, syncing<br/>periodically"])
     now --> a["A. STAY FORKED<br/>keep syncing"]
     now --> b["B. DE-FORK<br/>upstream absorbs our delta,<br/>we become a consumer"]
-    now --> c["C. HARD FORK<br/>stop merging, own the code"]
+    now --> c["C. HARD FORK<br/>stop merging, vendor into DFE"]
 
     a -->|delta stays small,<br/>upstream stays fast| a
     b -->|best outcome| done(["plain dependency"])
@@ -36,14 +33,9 @@ accelerates.
 **B. Upstream absorbs our delta, and we de-fork to a plain dependency.** The
 best outcome, and not hypothetical. In 2.33.0 upstream added a "kiosk mode" that
 hides the nav on dashboards - our embed feature arriving under a different name.
-`packages/app/src/layout.tsx` now carries both conditions. Every time upstream
-lands something we already hold, our delta shrinks and the case for B
-strengthens. Getting there means raising our extensions upstream one at a time.
+`packages/app/src/layout.tsx` now carries both conditions. Every time upstream lands something we already hold, our delta shrinks and the case for B strengthens. We do not push our delta upstream to get there, so B only happens when upstream lands what we hold on its own.
 
-**C. Hard fork - stop merging, own the code.** The expensive one, and the
-default we slide into by neglect rather than choose. Only right when our delta
-is large enough that upstream's releases stop being worth the merge, and we have
-the people to carry a full observability platform.
+**C. Hard fork - stop merging, vendor the code into DFE.** The expected way out, and the expensive one. Right once upstream's rate of change has slowed enough that its releases stop being worth the merge, and we have the people to carry a full observability platform. Taken as a decision, never slid into by neglect.
 
 ---
 

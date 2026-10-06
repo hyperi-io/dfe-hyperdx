@@ -203,8 +203,7 @@ not a vector. If you cannot write down what input reaches which call, there is
 nothing to pin.
 
 **A dependency pin.** Add an entry to `security/overrides.yaml` with every field
-filled in, then `--apply && yarn install`. Raise it upstream and put the link in
-`upstream:` -- ours is the stopgap, theirs is the fix.
+filled in, then `--apply && yarn install`. We fix it here and do not raise it upstream. `upstream:` takes the upstream issue or release that tracks the fix where one exists, else `none`. `--check` reads upstream's lockfile, so the pin still unwinds the moment upstream catches up on its own.
 
 **A code fix.** Fix the file in your working tree, then:
 

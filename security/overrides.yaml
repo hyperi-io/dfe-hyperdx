@@ -19,7 +19,7 @@
 # certainly be fixed upstream, at which point our pin is dead weight that has
 # to be found and removed. The cost is not the pin, it is the unwinding.
 #
-# THE UNWIND. That is what `vector` and `upstream` are for, and what
+# THE UNWIND. That is what `vector` is for, and what
 # `scripts/security-override.py --check` automates: it compares each entry
 # against what UPSTREAM's lockfile resolves at our merge base and FAILS when
 # upstream has caught up, so a redundant pin nags us to delete it. That inverse
@@ -32,8 +32,9 @@
 #   2. Add the matching entry to `resolutions` in the root package.json, and
 #      note it in docs/fork/what-we-changed.md's change catalogue (package.json is catalogued
 #      surface, so the edit is an exception that must be documented).
-#   3. Raise it upstream and put the link in `upstream`. Ours is a stopgap;
-#      theirs is the fix.
+#   3. Set `upstream` to the upstream issue or release that tracks the fix, or
+#      `none`. We fix it here and do not raise it upstream: `--check` reads
+#      upstream's lockfile, so the unwind never waits on a link.
 #
 # REMOVING ONE
 #   `--check` tells you when. Delete the entry, delete the resolutions line,
@@ -57,7 +58,7 @@ overrides:
       network configuration gets code execution inside the API process rather
       than only on the host. The sink is provably live; the source is
       host-local, not remote, which is why this is the only pin we carry.
-    upstream: https://github.com/hyperdxio/hyperdx/issues/TODO-FILE-THIS
+    upstream: https://github.com/hyperdxio/hyperdx/issues/3306
     added: 2026-08-26
 # Example of the shape (keep commented - an empty register is the goal state):
 #
@@ -71,5 +72,5 @@ overrides:
 #       The receiver hands untrusted event bodies to some-parser.parse() on the
 #       ingest path, so a crafted payload reaches the vulnerable branch without
 #       authentication.
-#     upstream: https://github.com/hyperdxio/hyperdx/issues/0000
+#     upstream: none            # or the upstream issue/release that tracks it
 #     added: 2026-07-23
