@@ -43,4 +43,6 @@ jobs:
       tag: ${{ inputs.tag || '' }}
       from-head: ${{ inputs.from-head || '' }}
       bump: ${{ inputs.bump || 'auto' }}
+      # PRs run the release's container build of the root Dockerfile (linux/amd64, no push), so a broken Dockerfile fails the PR instead of the release.
+      branch-build: 'true'
     secrets: inherit
