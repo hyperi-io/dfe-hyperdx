@@ -1191,7 +1191,7 @@ package directories.
 
 ### Re-resolved
 
-```
+```sh
 yarn up -R @modelcontextprotocol/sdk sharp shell-quote pbkdf2 source-map-js \
   compression postcss-selector-parser fast-copy smol-toml
 ```
