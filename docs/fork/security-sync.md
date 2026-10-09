@@ -1335,3 +1335,93 @@ dependencies, so it reports neither.
 
 - ip-address: every declaration resolves 10.7.2, above the 2026-08-26 range.
 - systeminformation `^5.31.7` stays, resolving 5.33.14.
+
+## 2026-10-09 - next 16.3.8, and handlebars held by the age gate
+
+The rescan after the merge above raised nine alerts from advisories published
+2026-10-07 and 2026-10-08: six against next and three against handlebars. next
+moves by lockfile. handlebars has a fix inside its declared range that
+`npmMinimalAgeGate: 7d` will not admit yet, so its three alerts stay open.
+Nothing is dismissed.
+
+### next 16.3.6 -> 16.3.8
+
+```sh
+yarn up -R next
+```
+
+The same route as #109: `packages/app` asks for `next ^16.3.4`, so next and its
+nine `@next/*` packages move and nothing else in the lock does. The range also
+admits 16.4.0, published 2026-10-06T18:35Z, and the age gate holds it back, so
+the lockfile takes 16.3.8 (2026-09-30T16:07Z). That stops being true on
+2026-10-13, after which `yarn up -R next` takes 16.4.0 unless the range is
+pinned.
+
+| Alert | Advisory            | Severity | Needs                                              | Here                                      |
+| ----- | ------------------- | -------- | -------------------------------------------------- | ----------------------------------------- |
+| 346   | GHSA-cjq9-62q9-8jv4 | high     | an allow-listed host in `images.remotePatterns`    | none configured                           |
+| 347   | GHSA-mcj8-r9mp-w47p | moderate | a root-level catch-all page plus SSG or ISR routes | no root catch-all page                    |
+| 350   | GHSA-4jqv-mc3x-m676 | moderate | Pages Router SSG or ISR pages, self-hosted         | Pages Router, self-hosted - not ruled out |
+| 348   | GHSA-f87g-xv8r-7p7x | moderate | App Router metadata image routes                   | no App Router                             |
+| 351   | GHSA-3w37-wq28-93x7 | moderate | `use cache` with Draft Mode                        | no `use cache` in `packages/app`          |
+| 349   | GHSA-39w2-rjm5-chcv | low      | `next dev`                                         | the image runs `node server.js`           |
+
+The image optimiser does run in the image. `images: { unoptimized: true }` sits
+only in the ClickStack static-export branch of `next.config.mjs` (`:173-179`),
+and the image builds with `NEXT_OUTPUT_STANDALONE`. #74's description said the
+app runs with `images.unoptimized`, which is true of that export only. With no
+`images.remotePatterns`, the optimiser fetches local paths, which is why #346
+does not bite.
+
+Alert 350 is the one left open by reading. Apart from `login` and `register`
+(`getServerSideProps`) and `_error` (`getInitialProps`), no page under
+`packages/app/pages` has a data-fetching method, so Next prerenders them as
+static HTML. Whether that counts as the advisory's SSG for cache replacement was
+not traced. 16.3.8 carries the fix either way.
+
+The vendored image-size in 16.3.8 still carries the pre-fix JXL parser:
+`rg -c 'No codestream found in JXL container'` finds it once in
+`next/dist/compiled/image-size/index.js`. The 2026-09-27 verdict stands.
+
+### handlebars 4.7.9 - in the image, fix held by the gate
+
+| Alert | Advisory            | Severity | Needs                                                           |
+| ----- | ------------------- | -------- | --------------------------------------------------------------- |
+| 352   | GHSA-p8wg-vrv2-v86f | critical | an attacker template rendered with `allowProtoMethodsByDefault` |
+| 353   | GHSA-8r5x-fm3f-whwj | critical | an attacker OBJECT, not a string, passed to `compile()`         |
+| 354   | GHSA-xw65-4hp5-5hc7 | moderate | `precompile()` output inlined in an HTML `<script>`             |
+
+It ships. handlebars `^4.7.9` is a runtime dependency of `@hyperdx/api`
+(`packages/api/package.json:45`) and of `@hyperdx/common-utils`
+(`packages/common-utils/package.json:20`), and the production focus installs
+`node_modules/handlebars` 4.7.9. Dependabot's `runtime` is right this time.
+
+The api compiles tenant-authored templates in the check-alerts task: the alert
+name (`tasks/checkAlerts/template.ts:352`), the alert message (`:835`, `:950`,
+`:958`) and the webhook body (`transports/generic.ts:225`). common-utils
+compiles its own through `core/handlebarsEnv.ts:78`. So the input is
+attacker-reachable for any tenant user who can write an alert or a webhook, and
+an injection there runs in the task process, which reads every team's data.
+
+None of the three preconditions is met:
+
+- `allowProtoMethodsByDefault` and `allowProtoPropertiesByDefault` appear
+  nowhere in `packages/`, so #352's lookup never reaches `Function.prototype`.
+- Every template source is a Mongoose `String` field (`models/alert.ts:206-213`,
+  `models/webhook.ts:63-66`) or a literal, so `compile()` only ever gets a
+  string, and #353 needs an object. `handlebarsEnv.ts:78` passes an AST, but one
+  `hb.parse()` has just built from a string.
+- Nothing calls `precompile()`, so #354 has no output to inline.
+
+Read from the code, not exercised. A reachable input-type slip would make #353 a
+cross-tenant RCE, which is why the fix should land as soon as the gate allows
+rather than wait for a sync.
+
+4.7.10 (2026-10-05T22:37Z) is inside `^4.7.9`, and `yarn up -R handlebars`
+leaves the lock on 4.7.9: the effective `npmMinimalAgeGate` is 10080 minutes,
+and 4.7.10 is three days old. It passes on its own after 2026-10-12T22:37Z.
+Before then, `.yarnrc.yml`'s `npmPreapprovedPackages` admits it: Yarn 4.13.0
+reads each entry as a descriptor or a name glob and tests the version against a
+descriptor's range, so `handlebars@4.7.10` admits that one version and nothing
+newer. #352-#354 stay open with no verdict in
+`scripts/dismiss-triaged-alerts.py`.
