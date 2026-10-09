@@ -527,6 +527,12 @@ header check is what holds when a deployment authenticates some other way.
   the next advisory against the same package too. Each id carries its reason and
   the traces are in [security-sync.md](security-sync.md). Upstream churns this
   file rarely, so the conflict is small.
+
+  One temporary entry sits in upstream's `npmPreapprovedPackages`:
+  `handlebars@4.7.10`, which admits that single version past `npmMinimalAgeGate`
+  so the lockfile can take the fix for three alerts. Delete the line and its
+  comment once the version is older than the gate, from 2026-10-12T22:37Z.
+
 - `.github/workflows/docker-build.yml` - two deltas, both for the same failure
   (#51). A `Free disk space` step calling `scripts/ci/free-disk-space.sh 40` in
   each of the two jobs that run OCB, and all three jobs moved from

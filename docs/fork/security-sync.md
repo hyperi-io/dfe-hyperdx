@@ -1425,3 +1425,31 @@ reads each entry as a descriptor or a name glob and tests the version against a
 descriptor's range, so `handlebars@4.7.10` admits that one version and nothing
 newer. #352-#354 stay open with no verdict in
 `scripts/dismiss-triaged-alerts.py`.
+
+## 2026-10-10 - handlebars 4.7.10
+
+`.yarnrc.yml` now pre-approves `handlebars@4.7.10`, so the lockfile takes the
+fix. #352-#354 clear by re-resolve and are not dismissed. All three list 4.7.10
+as `first_patched_version`.
+
+```sh
+yarn up -R handlebars
+```
+
+| Alert | Advisory            | Severity | Was   | Now    |
+| ----- | ------------------- | -------- | ----- | ------ |
+| 352   | GHSA-p8wg-vrv2-v86f | critical | 4.7.9 | 4.7.10 |
+| 353   | GHSA-8r5x-fm3f-whwj | critical | 4.7.9 | 4.7.10 |
+| 354   | GHSA-xw65-4hp5-5hc7 | moderate | 4.7.9 | 4.7.10 |
+
+The lockfile diff is five lines in and five out. handlebars 4.7.10 declares
+`minimist ^1.2.8` where 4.7.9 declared `^1.2.5`, so minimist's descriptor list
+swaps `^1.2.5` for `^1.2.8`. It still resolves 1.2.8.
+
+The entry carries a `TODO` comment in `.yarnrc.yml`. From 2026-10-12T22:37Z,
+seven days after the release, 4.7.10 passes the gate alone: delete the line and
+its comment then.
+
+`yarn npm audit --severity moderate` reports no suggestions. With `--recursive`
+it reports braces, smol-toml 1.6.1 and sprintf-js, the same three as 2026-10-09,
+and no handlebars.
