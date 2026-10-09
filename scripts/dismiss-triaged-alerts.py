@@ -49,9 +49,9 @@ DOC = "docs/fork/security-sync.md"
 COMMENT_LIMIT = 280
 
 ABSENT = (
-    "Not in the shipped image. docker/hyperdx/Dockerfile:101 focuses "
-    "@hyperdx/api --production, so the image carries 331 of 2691 packages and "
-    "this one is not among them."
+    "Not in the shipped image. The root Dockerfile:87 installs the api's "
+    "production tree with yarn workspaces focus @hyperdx/api --production, and "
+    "this one is not in it."
 )
 
 NO_DRIVER = (

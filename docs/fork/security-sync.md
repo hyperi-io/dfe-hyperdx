@@ -19,16 +19,21 @@ Three questions, in order. Most alerts die on the first one.
 
 ### 1. Is the package even in the image?
 
-`docker/hyperdx/Dockerfile:101`:
+The published image is the root `Dockerfile` (`.hyperi-ci.yaml`
+`release.container`), and `Dockerfile:87` installs its `node_modules`:
 
 ```
-RUN rm -rf node_modules && yarn workspaces focus @hyperdx/api --production
+&& rm -rf node_modules && yarn workspaces focus @hyperdx/api --production
 ```
 
-The image carries the api's PRODUCTION tree and nothing else. Every
-devDependency, the cli and hdx-eval workspaces, and the app's server-side
-dependencies get deleted before the final stage. The frontend goes in as a built
-Next bundle.
+The image carries the api's PRODUCTION tree. Every devDependency and the cli and
+hdx-eval workspaces are gone. Three things ship beside it: Next's standalone
+trace (`Dockerfile:100`), which carries the server-side dependencies Next
+traces, sharp among them, `packages/common-utils/node_modules` from the full
+install (`Dockerfile:99`), and the base image's own npm with a global
+concurrently (`Dockerfile:127`). The 2026-10-01 section has the detail.
+`docker/hyperdx/Dockerfile:103` runs the same focus for upstream's image, which
+we do not publish.
 
 So `yarn.lock` proves nothing. Neither does GitHub's `scope` field - it reads
 the lockfile, not the image, and it will happily tell you a build tool is
@@ -41,6 +46,9 @@ yarn workspaces focus @hyperdx/api --production
 fd --max-depth 1 -t d . node_modules --format '{/}'
 yarn install          # put the dev tree back when you are done
 ```
+
+That reads the focus only. The Next trace needs a Next build or the published
+image.
 
 ### 2. If it IS in the image, does our code reach the vulnerable function?
 
@@ -1163,11 +1171,12 @@ Two advisories against nx 23.1.1 turned the audit gate red on every PR. Both are
 | 1241219 | GHSA-hrvq-x7jp-36xv | moderate | `>=23.0.0 <23.2.1` | Path traversal in `nx migrate` package-migrations extraction |
 
 nx is a root devDependency (`package.json:30`) and nothing else declares it. The
-`nx` key in `packages/api/package.json` is project config, not a dependency.
-`docker/hyperdx/Dockerfile:103` runs
-`yarn workspaces focus @hyperdx/api --production`, which drops root
-devDependencies, so nx is not in the image. Read from the Dockerfile and
-manifests, not from a built image.
+`nx` key in `packages/api/package.json` is project config, not a dependency. The
+root `Dockerfile:87` runs `yarn workspaces focus @hyperdx/api --production`,
+which drops root devDependencies, so nx is not in the image. Read from the
+Dockerfile and manifests, not from a built image. Corrected 2026-10-09 - this
+first cited `docker/hyperdx/Dockerfile:103`, upstream's image, which
+docker-build.yml builds with `push: false`.
 
 Neither sink exists in a deployment. The daemon socket lives only on a machine
 running nx -- a developer box or a CI runner -- and `nx migrate` runs only when
@@ -1177,13 +1186,14 @@ someone invokes it.
 no suggestions. Delete both ids once upstream's root `package.json` moves nx to
 23.2.1 or later.
 
-## 2026-10-09 - nineteen alerts, seven moved by lockfile
+## 2026-10-09 - twenty alerts, eight moved by lockfile
 
-19 open alerts: 1 critical, 5 high, 13 moderate. Six clear outright by lockfile
-re-resolve inside their declared ranges. Twelve are dismissed. compression is
-both: its image copy is re-resolved and the dev copy left behind is dismissed.
-Nothing clears THE BAR without a lockfile fix, so `security/overrides.yaml` is
-unchanged and no `package.json` is touched.
+19 open alerts: 1 critical, 5 high, 13 moderate. A twentieth, #338 proxy-addr
+(critical), is reopened from its 2026-10-06 dismissal. Seven clear outright by
+lockfile re-resolve inside their declared ranges. Twelve are dismissed.
+compression is both: its image copy is re-resolved and the dev copy left behind
+is dismissed. Nothing clears THE BAR without a lockfile fix, so
+`security/overrides.yaml` is unchanged and no `package.json` is touched.
 
 The production closure was read with
 `yarn workspaces focus @hyperdx/api --production` on the re-resolved tree: 591
@@ -1194,11 +1204,13 @@ package directories.
 ```sh
 yarn up -R @modelcontextprotocol/sdk sharp shell-quote pbkdf2 source-map-js \
   compression postcss-selector-parser fast-copy smol-toml
+yarn up -R proxy-addr
 ```
 
 | Alert | Package                   | Severity | Was                 | Now    | In the image                           |
 | ----- | ------------------------- | -------- | ------------------- | ------ | -------------------------------------- |
 | 343   | shell-quote               | critical | 1.10.0              | 1.11.0 | yes, under concurrently                |
+| 338   | proxy-addr                | critical | 2.0.7               | 2.0.8  | yes, under express                     |
 | 345   | @modelcontextprotocol/sdk | high     | 1.29.0              | 1.31.0 | yes                                    |
 | 344   | sharp                     | high     | 0.35.4              | 0.35.5 | yes, in Next's standalone trace        |
 | 335   | compression               | high     | 1.7.4               | 1.8.2  | yes, `api-app.ts:66`                   |
@@ -1212,6 +1224,18 @@ postcss-selector-parser 6.1.0 -> 6.1.4 and 7.1.1 -> 7.1.6. Both are dev only.
 `npmMinimalAgeGate: 7d` decided two of the versions. shell-quote 1.12.0
 (2026-10-02) and the MCP SDK's 1.32.x were inside the window, so the lockfile
 took 1.11.0 and 1.31.0, which are the fixed releases.
+
+**proxy-addr is re-resolved, though the old dismissal's reasoning holds.**
+GHSA-jqcg-44mw-7w3h needs a trust subnet written as an IPv4-mapped IPv6 address
+with a short prefix, such as `::ffff:10.0.0.0/8`, which then matches every IPv4
+client and lets it set `req.ip` through `X-Forwarded-For`. `api-app.ts:56` sets
+`trust proxy` to the hop count `1`, and express's `compileTrust`
+(`express/lib/utils.js:223-226`) turns a number into a position check without
+calling proxy-addr's subnet compiler, so the `not_used` dismissal was right
+about the sink. It had no verdict in `scripts/dismiss-triaged-alerts.py` and no
+entry here, and express's `~2.0.7` admits 2.0.8 (2026-09-15), so the alert is
+reopened and the lockfile moves. A later change to a subnet trust setting then
+no longer rests on that reading.
 
 **shell-quote is in the image, and Dependabot calls it development.** Every
 scope mistake so far ran the other way, dev labelled runtime. concurrently is an
