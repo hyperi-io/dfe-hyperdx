@@ -54,9 +54,9 @@ COPY ./packages/app/types ./packages/app/types
 # Next only finds the proxy file beside pages/, and it is what sends the embed
 # frame-ancestors CSP; without it the image answers with no CSP at all.
 COPY ./packages/app/proxy.ts ./packages/app/proxy.ts
-# next.config.mjs copies this into public/ for the in-app "What's new" viewer
-# and THROWS when it is absent, so the app build needs it in the context.
+# next.config.mjs fails the build unless scripts/parse-whats-new.js can turn the root changelog into public/whats-new.json.
 COPY ./CHANGELOG.md ./CHANGELOG.md
+COPY ./packages/app/scripts ./packages/app/scripts
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_OUTPUT_STANDALONE=true
