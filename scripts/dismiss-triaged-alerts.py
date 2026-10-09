@@ -54,13 +54,19 @@ ABSENT = (
     "this one is not among them."
 )
 
+NO_DRIVER = (
+    "In the image via auto-instrumentations-node, but it only patches its own "
+    "database driver, which the production image does not carry. No fixed "
+    "release fits @hyperdx/node-opentelemetry's range."
+)
+
 # package -> (dismissed_reason, why)
 #
 # 'not_used' is GitHub's reason for "the vulnerable code is not reachable
 # here", which covers both "the package is absent" and "the sink is never
 # called". 'tolerable_risk' says we reach the sink and accept it anyway, so it
-# is reserved for the entries that say so in their own reason - qs is the only
-# one today. Never reach for it to make an unread alert go away.
+# is reserved for the entries that say so in their own reason. Never reach for
+# it to make an unread alert go away.
 VERDICTS: dict[str, tuple[str, str]] = {
     # Absent from the production image.
     "tar": ("not_used", f"{ABSENT} Reaches only via cacache and node-gyp."),
@@ -91,7 +97,6 @@ VERDICTS: dict[str, tuple[str, str]] = {
     "validator": ("not_used", ABSENT),
     "esbuild": ("not_used", ABSENT),
     "rollup": ("not_used", ABSENT),
-    "sharp": ("not_used", ABSENT),
     "ws": ("not_used", ABSENT),
     "elliptic": ("not_used", ABSENT),
     "yaml": ("not_used", ABSENT),
@@ -102,6 +107,12 @@ VERDICTS: dict[str, tuple[str, str]] = {
         "concerns.",
     ),
     "smol-toml": ("not_used", f"{ABSENT} Reaches only via knip and nx."),
+    "sprintf-js": (
+        "not_used",
+        "Dev only - argparse 1.0.10 under js-yaml 3.15.0, and only js-yaml's own "
+        "CLI loads argparse. Absent from the production image. No fixed release "
+        "exists.",
+    ),
     "csv-parse": (
         "not_used",
         "Dev only - @changesets/cli via tty-table. Absent from the production image.",
@@ -162,14 +173,20 @@ VERDICTS: dict[str, tuple[str, str]] = {
     ),
     "@hono/node-server": (
         "not_used",
-        "Resolves 1.19.17, below the >= 2.0.0 range. The traversal is also "
-        "Windows-only and the image is Linux.",
+        "Resolves 2.1.3, above the >= 2.0.0, < 2.0.5 range. The traversal is "
+        "also Windows-only and the image is Linux.",
     ),
     "axios": (
         "not_used",
         "The image's copy, via @slack/webhook, resolves 1.20.0, the fix. The "
         "1.18.1 these match is nx's exact pin, a root devDependency absent from "
         "the image, and nx 23.2.1 still pins it.",
+    ),
+    "compression": (
+        "not_used",
+        "The image's copy, the api's own, resolves 1.8.2, the fix. The 1.8.1 "
+        "this matches is serve's exact pin, an app devDependency absent from the "
+        "image, and serve 14.2.6, the latest, still pins it.",
     ),
     # In the image and in range, but nothing an attacker can drive.
     "fast-uri": (
@@ -248,6 +265,19 @@ VERDICTS: dict[str, tuple[str, str]] = {
         "Same Prometheus exporter crash. bin/hyperdx's preload does start "
         "this SDK, but the exporter binds only when OTEL_METRICS_EXPORTER "
         "includes prometheus, and nothing sets that.",
+    ),
+    "@opentelemetry/instrumentation-cassandra-driver": ("not_used", NO_DRIVER),
+    "@opentelemetry/instrumentation-knex": ("not_used", NO_DRIVER),
+    "@opentelemetry/instrumentation-mysql": ("not_used", NO_DRIVER),
+    "@opentelemetry/instrumentation-mysql2": ("not_used", NO_DRIVER),
+    "@opentelemetry/instrumentation-pg": ("not_used", NO_DRIVER),
+    "@opentelemetry/instrumentation-tedious": ("not_used", NO_DRIVER),
+    "@opentelemetry/instrumentation-mongoose": (
+        "tolerable_risk",
+        "Reached: once the preloaded NodeSDK starts, mongoose spans carry "
+        "db.user, the Mongo username, to the operator's own OTLP endpoint. A "
+        "name, not a credential. No fixed release fits "
+        "@hyperdx/node-opentelemetry's range.",
     ),
     # Already above the range on the copy that matters.
     "ip-address": (

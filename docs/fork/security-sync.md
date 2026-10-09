@@ -1176,3 +1176,138 @@ someone invokes it.
 `yarn npm audit --severity moderate` on the tree with both ids ignored reports
 no suggestions. Delete both ids once upstream's root `package.json` moves nx to
 23.2.1 or later.
+
+## 2026-10-09 - nineteen alerts, seven moved by lockfile
+
+19 open alerts: 1 critical, 5 high, 13 moderate. Six clear outright by lockfile
+re-resolve inside their declared ranges. Twelve are dismissed. compression is
+both: its image copy is re-resolved and the dev copy left behind is dismissed.
+Nothing clears THE BAR without a lockfile fix, so `security/overrides.yaml` is
+unchanged and no `package.json` is touched.
+
+The production closure was read with
+`yarn workspaces focus @hyperdx/api --production` on the re-resolved tree: 591
+package directories.
+
+### Re-resolved
+
+```
+yarn up -R @modelcontextprotocol/sdk sharp shell-quote pbkdf2 source-map-js \
+  compression postcss-selector-parser fast-copy smol-toml
+```
+
+| Alert | Package                   | Severity | Was                 | Now    | In the image                           |
+| ----- | ------------------------- | -------- | ------------------- | ------ | -------------------------------------- |
+| 343   | shell-quote               | critical | 1.10.0              | 1.11.0 | yes, under concurrently                |
+| 345   | @modelcontextprotocol/sdk | high     | 1.29.0              | 1.31.0 | yes                                    |
+| 344   | sharp                     | high     | 0.35.4              | 0.35.5 | yes, in Next's standalone trace        |
+| 335   | compression               | high     | 1.7.4               | 1.8.2  | yes, `api-app.ts:66`                   |
+| 339   | source-map-js             | high     | 1.0.2, 1.2.0, 1.2.1 | 1.2.2  | no                                     |
+| 342   | pbkdf2                    | moderate | 3.1.3               | 3.1.7  | no                                     |
+| 326   | fast-copy                 | moderate | 3.0.2               | 3.1.0  | no - pino-pretty, an api devDependency |
+
+The same command moved knip's smol-toml 1.7.0 -> 1.9.0, and
+postcss-selector-parser 6.1.0 -> 6.1.4 and 7.1.1 -> 7.1.6. Both are dev only.
+
+`npmMinimalAgeGate: 7d` decided two of the versions. shell-quote 1.12.0
+(2026-10-02) and the MCP SDK's 1.32.x were inside the window, so the lockfile
+took 1.11.0 and 1.31.0, which are the fixed releases.
+
+**shell-quote is in the image, and Dependabot calls it development.** Every
+scope mistake so far ran the other way, dev labelled runtime. concurrently is an
+api dependency (`packages/api/package.json:37`), `entry.prod.sh:45` runs it, and
+its shell-quote is in the production focus. It still never reached the sink.
+concurrently calls `quote()` only in `expand-arguments.js`, to fill `{1}`, `{@}`
+and `{*}` placeholders from passthrough arguments, and it passes strings. The
+advisory needs a `{ comment }` token object ahead of the attacker's string, and
+the entrypoint uses no placeholders.
+
+**The MCP SDK fix moves `@hono/node-server` a major.** 1.31.0 declares
+`^1.19.9 || ^2.0.5`, and the lockfile takes 2.1.3. That copy is on a request
+path: `StreamableHTTPServerTransport` converts every `/mcp` request through its
+`getRequestListener` (`server/streamableHttp.js:12`, `:60`). The advisory itself
+does not bite here. It is in the SDK's OAuth client, and the api is an MCP
+server, which the advisory lists as not affected. The 2026-08-26
+`@hono/node-server` row is superseded: 2.1.3 is above `>= 2.0.0, < 2.0.5`, not
+below it.
+
+**compression was live.** `app.use(compression())` at `api-app.ts:66` sits ahead
+of every route, so each compressed response a client aborted leaked its zlib
+stream. The alert outlives the re-resolve, because `serve@14.2.6` pins
+`compression: 1.8.1` exactly. serve is an app devDependency
+(`packages/app/package.json:149`) that only the `run:clickhouse` script runs,
+and 14.2.6, the latest (2026-03-03), still pins 1.8.1. The verdict is in
+`scripts/dismiss-triaged-alerts.py`. It is true only once this lockfile is on
+main, because main's api copy is the vulnerable 1.7.4.
+
+**sharp is in the image.** The old `sharp` verdict said otherwise, read from the
+api focus alone. Next's standalone trace leaves sharp out only when
+`hasNextSupport` is set (`next/dist/build/collect-build-traces.js:223-226`),
+which is Vercel's build environment. `image-optimizer.js:201-215` loads it and
+unblocks `VipsForeignLoadSvg`, the librsvg loader the advisory concerns. Read
+from Next 16.3.6's code, not from a built image. Whether a request can steer an
+SVG into sharp was not traced, and 0.35.5 ships librsvg 2.63.2, the advisory's
+fix, either way. The verdict is deleted, so the next sharp alert stays open for
+a human.
+
+### Dismissed
+
+| Alerts            | Package                                                                 | Reason         | The copy that matches                             |
+| ----------------- | ----------------------------------------------------------------------- | -------------- | ------------------------------------------------- |
+| 336, 337          | nx                                                                      | not_used       | 23.1.1, root devDependency - see 2026-10-07       |
+| 340               | smol-toml                                                               | not_used       | 1.6.1, nx's exact pin. knip's copy is now 1.9.0   |
+| 341               | sprintf-js                                                              | not_used       | 1.0.3, under argparse 1.0.10 and js-yaml 3.15.0   |
+| 334               | postcss-selector-parser                                                 | not_used       | 6.1.4, under two CSS-modules build plugins        |
+| 327, 328, 330-333 | instrumentation-cassandra-driver, -tedious, -mysql, -knex, -mysql2, -pg | not_used       | in the image, with no driver to patch             |
+| 329               | instrumentation-mongoose                                                | tolerable_risk | 0.46.1, in the image, patching the api's mongoose |
+
+**sprintf-js** has no fixed release: 1.1.3 (2023-09-11) is the latest and is in
+range. Only `js-yaml/bin/js-yaml.js` requires argparse, and only argparse
+requires sprintf-js, so the library js-yaml's callers load never reaches it.
+
+**postcss-selector-parser** keeps its verdict. The 6.x line ends at 6.1.4
+without the fix, and both 6.x parents, postcss-modules-local-by-default and
+postcss-modules-scope, are build plugins.
+
+### The OpenTelemetry seven
+
+GHSA-qqmp-wf37-98f9: the instrumentations put the database username on every
+span as `db.user`, unconditionally. All seven are in the production focus under
+`@opentelemetry/auto-instrumentations-node` 0.56.1, from
+`@hyperdx/node-opentelemetry` 0.9.0. Its preload enables every instrumentation
+but fs (`otel.js:170-184`) whenever the SDK starts, as the 2026-10-01 section
+traces.
+
+An instrumentation patches only the driver it names, when the process requires
+it. The production focus has no pg, mysql, mysql2, knex, tedious or
+cassandra-driver, so six of the seven never patch anything.
+
+mongoose is the one that bites. The api depends on mongoose 6.13.10, inside the
+instrumentation's `>=5.9.7 <9` (`mongoose.js:81`), and 0.46.1 sets `db.user`
+from `collection.conn.user` (`utils.js:26`). With the SDK running, every Mongo
+span carries the connection's username to the OTLP endpoint the operator
+configured. A username, not a password, sent to the operator's own backend.
+Moderate, so below THE BAR, and `tolerable_risk`. Whether `conn.user` is
+populated for a credentialed URI was read, not run.
+
+No fix reaches us. The patched releases shipped 2026-07-23 with
+auto-instrumentations-node 0.79.0. 0.56.1 holds each instrumentation with a 0.x
+caret, and `@hyperdx/node-opentelemetry` 0.11.0, the latest (2026-05-26),
+declares `^0.76.0`, whose only release is 0.76.0 (2026-05-13). An upstream bump
+of the HyperDX SDK would not clear these either.
+
+### The audit, before and after
+
+| Run                                               | main                                       | Re-resolved                         |
+| ------------------------------------------------- | ------------------------------------------ | ----------------------------------- |
+| `yarn npm audit --severity moderate`, the CI gate | no suggestions                             | no suggestions                      |
+| `yarn npm audit --severity moderate --recursive`  | braces, shell-quote, smol-toml, sprintf-js | braces, smol-toml 1.6.1, sprintf-js |
+
+braces is the 2026-10-06 verdict. smol-toml's 1241205 and sprintf-js's 1241202
+are not in `.yarnrc.yml`'s list. The CI gate audits the root workspace's direct
+dependencies, so it reports neither.
+
+### Re-checks
+
+- ip-address: every declaration resolves 10.7.2, above the 2026-08-26 range.
+- systeminformation `^5.31.7` stays, resolving 5.33.14.
