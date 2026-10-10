@@ -13,7 +13,7 @@ import {
   ChartConfigWithOptDateRange,
   SavedChartConfigSchema,
 } from '@hyperdx/common-utils/dist/types';
-import express from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import { z } from 'zod';
 import { validateRequest } from 'zod-express-middleware';
 
@@ -51,6 +51,21 @@ const createRuleBodySchema = z.object({
 // request instead of hanging the client. Matches org-connection's ceiling.
 const ENGINE_TIMEOUT_MS = 5000;
 
+// renderChartConfig's expression regexes run in time quadratic in their input
+// and the API accepts 32 MB bodies, so the export body is capped at a size whose
+// worst case holds the event loop, and every team with it, under half a second.
+export const MAX_EXPORT_SQL_BODY_CHARS = 16 * 1024;
+
+/** 413 an export body too large to render without stalling the process. */
+function limitExportBody(req: Request, res: Response, next: NextFunction) {
+  if (JSON.stringify(req.body ?? null).length > MAX_EXPORT_SQL_BODY_CHARS) {
+    return res.status(413).json({
+      error: `The chart config is too large to export as a rule (over ${MAX_EXPORT_SQL_BODY_CHARS} characters).`,
+    });
+  }
+  return next();
+}
+
 /**
  * POST /dfe/export-sql
  *
@@ -69,6 +84,7 @@ const ENGINE_TIMEOUT_MS = 5000;
  */
 router.post(
   '/export-sql',
+  limitExportBody,
   validateRequest({ body: exportSqlBodySchema }),
   async (req, res, next) => {
     try {

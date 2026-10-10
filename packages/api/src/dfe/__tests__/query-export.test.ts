@@ -54,7 +54,7 @@ import { getConnectionById } from '@/controllers/connection';
 import { getSource } from '@/controllers/sources';
 import { makeDocument } from '@/dfe/__tests__/doubles';
 import { extractToken } from '@/dfe/middleware/jwt-verify';
-import router from '@/dfe/routers/query-export';
+import router, { MAX_EXPORT_SQL_BODY_CHARS } from '@/dfe/routers/query-export';
 import { getNonNullUserWithTeam } from '@/middleware/auth';
 
 const mockExtractToken = jest.mocked(extractToken);
@@ -239,5 +239,39 @@ describe('POST /dfe/export-sql renders the view as it runs', () => {
       .send({ chartConfig: CHART_CONFIG });
 
     expect(res.body.rawSql).toBe('SELECT 1');
+  });
+
+  /**
+   * The renderer's expression regexes are quadratic in their input, so a body
+   * over the cap is refused before anything parses it.
+   */
+  describe('size cap', () => {
+    it('refuses an oversized config before it reaches the renderer', async () => {
+      // The shape that is slowest to parse: a long run of spaces in ORDER BY.
+      const orderBy = `a${' '.repeat(MAX_EXPORT_SQL_BODY_CHARS)}x`;
+
+      const res = await request(app)
+        .post('/dfe/export-sql')
+        .send({ chartConfig: { ...CHART_CONFIG, orderBy } });
+
+      expect(res.status).toBe(413);
+      expect(res.body.error).toMatch(/too large/);
+      expect(mockGetSource).not.toHaveBeenCalled();
+      expect(mockRender).not.toHaveBeenCalled();
+    });
+
+    it('renders a config exactly at the cap', async () => {
+      const empty = JSON.stringify({
+        chartConfig: { ...CHART_CONFIG, where: '' },
+      });
+      const where = 'x'.repeat(MAX_EXPORT_SQL_BODY_CHARS - empty.length);
+
+      const res = await request(app)
+        .post('/dfe/export-sql')
+        .send({ chartConfig: { ...CHART_CONFIG, where } });
+
+      expect(res.status).toBe(200);
+      expect(renderedConfig().where).toBe(where);
+    });
   });
 });
