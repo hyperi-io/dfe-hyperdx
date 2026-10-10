@@ -11,6 +11,8 @@
 language: typescript
 # A fork of upstream HyperDX: version bumps come from our own first-parent history, so upstream feat: commits arriving in a sync merge do not move the minor.
 classification: fork
+# The image label and the GHCR package page; the upstream package.json carries none we own.
+description: "HyperDX search and dashboards for DFE: the API and the web app in one image"
 quality:
   enabled: true
   exclude_paths:
