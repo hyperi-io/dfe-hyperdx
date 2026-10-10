@@ -146,7 +146,8 @@ one identifier on the `/team` mount.
 embeds the caller's team record, so a member got the API key there as well. The
 strip runs on the record that serialises, because the routers send a mongoose
 document whose fields are getters, not own properties. The delta in
-**`api-app.ts`** is one identifier on the `/me` mount.
+**`api-app.ts`** is one added mount ahead of upstream's `/me` line, which stays
+untouched.
 
 **`requireDfeMode`** takes a DFE-only router out of the app when `DFE_AUTH_MODE`
 is unset - `next('router')`, so the request 404s as it would upstream.

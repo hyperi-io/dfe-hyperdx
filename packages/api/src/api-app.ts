@@ -156,7 +156,8 @@ app.use(
   routers.dashboardRouter,
 );
 // /me embeds the caller's team record, stripped the same way as /team below.
-app.use('/me', isUserAuthenticated, stripMeTeamAdminFields, routers.meRouter);
+app.use('/me', stripMeTeamAdminFields);
+app.use('/me', isUserAuthenticated, routers.meRouter);
 // /team is READ-open to a member for the team record alone, with the API key and
 // the auth-method policy stripped; everything else on the surface stays
 // engine-only.
