@@ -1,0 +1,24 @@
+# advisory: CodeQL js/polynomial-redos (code-scanning alert 4)
+# severity: high
+# vector:   any member stores a multi-series tile's orderBy through
+#           /dashboards, and every member who opens that dashboard renders it
+#           in their browser; /dfe/export-sql renders it on the API under its
+#           16 KiB body cap. One sort item of 64 KiB of spaces takes 5.5 s in
+#           this regex, and the time grows with the square of the length. The
+#           rewrite splits at the same whitespace run for every piece it sees:
+#           splitAndTrimWithBracket trims each one, so none starts with
+#           whitespace.
+# upstream: none
+# added:    2026-10-10
+diff --git a/packages/common-utils/src/core/renderChartConfig.ts b/packages/common-utils/src/core/renderChartConfig.ts
+--- a/packages/common-utils/src/core/renderChartConfig.ts
++++ b/packages/common-utils/src/core/renderChartConfig.ts
+@@ -2668,7 +2668,7 @@ function parseSortSpecificationItems(
+ ): ParsedSortItem[] {
+   const parsePieces = (text: string): ParsedSortItem[] =>
+     splitAndTrimWithBracket(text).map(piece => {
+-      const match = piece.match(/^([\s\S]*?)\s+(ASC|DESC)$/i);
++      const match = piece.match(/^([\s\S]*\S)\s+(ASC|DESC)$/i);
+       if (match) {
+         return {
+           raw: piece,
