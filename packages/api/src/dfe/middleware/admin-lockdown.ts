@@ -82,8 +82,14 @@ function stripTeamAdminFields(body: unknown): unknown {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {
     return body;
   }
+  // The routers send a mongoose document, whose fields are getters rather than
+  // own properties, so filter the record it serialises to.
+  const record: unknown = JSON.parse(JSON.stringify(body));
+  if (record === null || typeof record !== 'object') {
+    return record;
+  }
   return Object.fromEntries(
-    Object.entries(body).filter(([key]) => !TEAM_ADMIN_FIELDS.has(key)),
+    Object.entries(record).filter(([key]) => !TEAM_ADMIN_FIELDS.has(key)),
   );
 }
 
@@ -110,6 +116,29 @@ export function allowTeamReadElseServicePrincipal(
   }
   const sendJson = res.json.bind(res);
   res.json = body => sendJson(stripTeamAdminFields(body));
+  return next();
+}
+
+/**
+ * Strip the admin-only fields from the team record `GET /me` embeds, for any
+ * principal but the engine service identity (DFE mode only). The console reads
+ * the team's query settings there, so the rest of the record stays.
+ */
+export function stripMeTeamAdminFields(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  if (!isDfeEnabled || req.dfeIsServicePrincipal) {
+    return next();
+  }
+  const sendJson = res.json.bind(res);
+  res.json = body =>
+    sendJson(
+      body !== null && typeof body === 'object' && 'team' in body
+        ? { ...body, team: stripTeamAdminFields(body.team) }
+        : body,
+    );
   return next();
 }
 

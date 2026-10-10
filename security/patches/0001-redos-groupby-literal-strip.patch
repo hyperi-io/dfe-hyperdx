@@ -1,0 +1,23 @@
+# advisory: CodeQL js/polynomial-redos (code-scanning alert 3)
+# severity: high
+# vector:   any member stores a tile's groupBy through /dashboards, and
+#           check-alerts renders it for every tile alert on a metric source
+#           (tasks/checkAlerts/index.ts passes the tile's groupBy). An
+#           unclosed literal of 64 KiB of \' takes 2.2 s in this regex, and the
+#           time grows with the square of the length. The rewrite consumes an
+#           unclosed literal once and hands it back unchanged, which is what
+#           the old pattern ended up doing after retrying every escaped quote.
+# upstream: none
+# added:    2026-10-10
+diff --git a/packages/common-utils/src/core/renderChartConfig.ts b/packages/common-utils/src/core/renderChartConfig.ts
+--- a/packages/common-utils/src/core/renderChartConfig.ts
++++ b/packages/common-utils/src/core/renderChartConfig.ts
+@@ -1960,7 +1960,7 @@ async function getComputedMetricColumns(
+   const referenced = new Set(
+     (
+       groupByText
+-        .replace(/'(?:[^'\\]|\\.)*'/g, "''")
++        .replace(/'(?:[^'\\]|\\.)*('?)/g, (m, close) => (close ? "''" : m))
+         .match(
+           /`(?:[^`\\]|``|\\.)+`|"(?:[^"\\]|""|\\.)+"|[\p{L}\p{N}_$.]+/gu,
+         ) ?? []

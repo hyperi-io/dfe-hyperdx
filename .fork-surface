@@ -57,6 +57,10 @@ package.json
 packages/api/CHANGELOG.md
 packages/api/package.json
 packages/api/src/api-app.ts
+# One expression: getTeam looks the team up by the id it is given. Upstream
+# runs one team per deployment and reads the first; DFE runs one per org - see
+# docs/fork/what-we-changed.md.
+packages/api/src/controllers/team.ts
 packages/api/src/tasks/provisionDashboards/index.ts
 packages/app/.env.development
 packages/app/.storybook/public/mockServiceWorker.js
