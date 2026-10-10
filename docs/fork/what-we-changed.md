@@ -106,8 +106,15 @@ Detail:
 ## Authorization
 
 **Casbin RBAC was REMOVED.** It was redundant: every HyperDX route handler
-already self-scopes its queries by `team`, so tenant isolation holds without it
-and cross-team access was never possible.
+already self-scopes its queries by `team`, so tenant isolation holds without it.
+
+**`getTeam` reads the team it is asked for (`controllers/team.ts`).** Upstream
+assumes one team per deployment, so `getTeam(id)` ignored `id` and returned the
+first team in the store. DFE runs one team per org plus the platform team, so
+`GET /me` and `GET /team` handed every member the first team's record: its name,
+its API key, and the query limits the console applies. The delta is one
+expression, `findOne({})` to `findOne({ _id: id })`.
+`dfe/__tests__/team-scope.int.test.ts` seeds two teams and fails without it.
 
 Authorization is owned by the DFE engine as the policy decision point, and
 enforced at the data layer by ClickHouse GRANTs. HyperDX trusts the identity
@@ -134,6 +141,12 @@ record with `apiKey` (a credential) and `allowedAuthMethods` (the engine's
 policy to set) stripped. Every mutation keeps its 403, as does every sub-path:
 `/members`, `/invitations`, `/apiKey`, `/tags`. The delta in **`api-app.ts`** is
 one identifier on the `/team` mount.
+
+**`/me` strips the same two fields (`stripMeTeamAdminFields`).** `GET /me`
+embeds the caller's team record, so a member got the API key there as well. The
+strip runs on the record that serialises, because the routers send a mongoose
+document whose fields are getters, not own properties. The delta in
+**`api-app.ts`** is one identifier on the `/me` mount.
 
 **`requireDfeMode`** takes a DFE-only router out of the app when `DFE_AUTH_MODE`
 is unset - `next('router')`, so the request 404s as it would upstream.

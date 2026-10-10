@@ -21,7 +21,9 @@ import {
   blockClickhouseProxyTest,
   requireDfeMode,
   requireServicePrincipal,
+  stripMeTeamAdminFields,
 } from '@/dfe/middleware/admin-lockdown';
+import Team from '@/models/team';
 
 beforeEach(() => {
   mockDfeEnabled = true;
@@ -158,6 +160,24 @@ describe('allowTeamReadElseServicePrincipal (DFE mode on)', () => {
     });
   });
 
+  test('strips the admin-only fields from the mongoose document the router sends', () => {
+    const r = res();
+    const sent = jest.mocked(r.json);
+    allowTeamReadElseServicePrincipal(
+      makeRequest({ method: 'GET', path: '/', dfeIsServicePrincipal: false }),
+      r,
+      jest.fn(),
+    );
+    const team = new Team({ name: 'acme', allowedAuthMethods: ['password'] });
+
+    r.json(team);
+
+    const wire = JSON.stringify(sent.mock.calls[0]?.[0]);
+    expect(JSON.parse(wire)).toMatchObject({ name: 'acme', id: team.id });
+    expect(wire).not.toContain(team.apiKey);
+    expect(wire).not.toContain('allowedAuthMethods');
+  });
+
   test('403s a member WRITE', () => {
     const r = res();
     const next = jest.fn();
@@ -216,6 +236,76 @@ describe('allowTeamReadElseServicePrincipal (DFE mode on)', () => {
 
     expect(next).toHaveBeenCalled();
     expect(sent).toHaveBeenCalledWith(TEAM_RECORD);
+  });
+});
+
+describe('stripMeTeamAdminFields (DFE mode on)', () => {
+  const me = (team: unknown) => ({ id: 'u1', email: 'a@acme.test', team });
+
+  test('a member gets /me with the embedded team stripped', () => {
+    const r = res();
+    const sent = jest.mocked(r.json);
+    const next = jest.fn();
+    stripMeTeamAdminFields(
+      makeRequest({ method: 'GET', path: '/', dfeIsServicePrincipal: false }),
+      r,
+      next,
+    );
+    const team = new Team({ name: 'acme', allowedAuthMethods: ['password'] });
+
+    r.json(me(team));
+
+    expect(next).toHaveBeenCalled();
+    const wire = JSON.stringify(sent.mock.calls[0]?.[0]);
+    expect(JSON.parse(wire)).toMatchObject({
+      id: 'u1',
+      team: { name: 'acme', id: team.id, isMetricsSeriesTableEnabled: false },
+    });
+    expect(wire).not.toContain(team.apiKey);
+    expect(wire).not.toContain('allowedAuthMethods');
+  });
+
+  test('a body without a team passes through untouched', () => {
+    const r = res();
+    const sent = jest.mocked(r.json);
+    stripMeTeamAdminFields(
+      makeRequest({ dfeIsServicePrincipal: false }),
+      r,
+      jest.fn(),
+    );
+
+    r.json({ newAccessKey: 'k' });
+
+    expect(sent).toHaveBeenCalledWith({ newAccessKey: 'k' });
+  });
+
+  test('the service principal reads /me whole', () => {
+    const r = res();
+    const sent = jest.mocked(r.json);
+    stripMeTeamAdminFields(
+      makeRequest({ dfeIsServicePrincipal: true }),
+      r,
+      jest.fn(),
+    );
+
+    r.json(me(TEAM_RECORD));
+
+    expect(sent).toHaveBeenCalledWith(me(TEAM_RECORD));
+  });
+
+  test('outside DFE mode /me is untouched', () => {
+    mockDfeEnabled = false;
+    const r = res();
+    const sent = jest.mocked(r.json);
+    stripMeTeamAdminFields(
+      makeRequest({ dfeIsServicePrincipal: false }),
+      r,
+      jest.fn(),
+    );
+
+    r.json(me(TEAM_RECORD));
+
+    expect(sent).toHaveBeenCalledWith(me(TEAM_RECORD));
   });
 });
 

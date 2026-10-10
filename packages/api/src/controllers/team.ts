@@ -82,7 +82,7 @@ export function getTeam(id: string | ObjectId, fields?: readonly string[]) {
     return LOCAL_APP_TEAM as any;
   }
 
-  return Team.findOne({}, fields);
+  return Team.findOne({ _id: id }, fields);
 }
 
 export function getTeamByApiKey(apiKey: string) {
