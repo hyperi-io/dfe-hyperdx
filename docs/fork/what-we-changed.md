@@ -497,7 +497,7 @@ header check is what holds when a deployment authenticates some other way.
 - `.hyperi-ci.yaml`, `.github/workflows/ci.yml` - migrated to hyperi-ci
 - `.github/workflows/{upstream-sync,upstream-drift,fork-surface,fork-security}.yml`
   - the fork machinery
-- `.releaserc.json`, `.gitleaks.toml`, `scripts/audit.sh`
+- `.gitleaks.toml`, `scripts/audit.sh`
 - `packages/api/jest.dfe.config.js` - upstream's unit config plus one transform:
   `jose` is ESM-only and Jest's CJS loader cannot load it, so the tests exercise
   real ES384 verification rather than a crypto double. It deliberately does NOT
