@@ -36,6 +36,14 @@ name: CI
           'Version resolution for from-head: auto | patch | minor (forced) |
           X.Y.Z (exact version).'
 
+# The most ts-ci.yml's release tail asks for (tag, GHCR push, release notes); the
+# reusable workflow narrows each of its own jobs from here.
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  packages: write
+
 jobs:
   ci:
     uses: hyperi-io/hyperi-ci/.github/workflows/ts-ci.yml@main
