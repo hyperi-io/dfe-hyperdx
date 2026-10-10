@@ -9,6 +9,8 @@
 # Reference: config/defaults.yaml in hyperi-ci.
 
 language: typescript
+# A fork of upstream HyperDX: version bumps come from our own first-parent history, so upstream feat: commits arriving in a sync merge do not move the minor.
+classification: fork
 quality:
   enabled: true
   exclude_paths:
