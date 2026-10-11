@@ -95,6 +95,6 @@ yarn test
 | Repo | Direction and mechanism |
 | --- | --- |
 | `hyperdxio/hyperdx` | We merge it, forever. `.upstream-version` records which release, checked against `git merge-base` on every PR |
-| `dfe-infra` | Pins the image this repo builds, by tag and digest (`versions.yaml`, `helm/charts/hyperdx/values.yaml`). A release here is a pin bump there |
+| `dfe-infra` | Pins the image this repo builds by tag and digest, and the `dfe-hyperdx` chart hyperi-ci publishes from `dfe/deploy/contract.json` by digest (`versions.yaml`). A release here is a pin bump there |
 | `dfe-engine` | Writes the dashboard content this repo's provisioner reads on a cron, serves each team's ClickHouse connection, and is the service principal the admin lockdown trusts |
 | `dfe-ui` | Embeds this app chromeless (`embed=1`), drives its theme, and deep-links searches by source name |
