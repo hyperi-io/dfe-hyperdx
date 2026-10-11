@@ -88,9 +88,10 @@ SHA-pin rule).
 `ghcr.io/hyperi-io/dfe-hyperdx` is the one registry path the fork publishes to.
 hyperi-ci builds it from the root `Dockerfile` (`.hyperi-ci.yaml`,
 `publish.container`), and the `dfe-hyperdx` chart hyperi-ci publishes from
-`dfe/deploy/contract.json` deploys that same name. The `docker.hyperdx.io/hyperdx/hyperdx` targets in the Makefile
-are upstream's own release targets: we never run them, and rewriting them would
-buy a merge conflict on every sync for nothing.
+`dfe/deploy/contract.json` deploys that same name. The
+`docker.hyperdx.io/hyperdx/hyperdx` targets in the Makefile are upstream's own
+release targets: we never run them, and rewriting them would buy a merge
+conflict on every sync for nothing.
 
 ## Notes
 
