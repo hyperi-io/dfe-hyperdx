@@ -571,6 +571,13 @@ header check is what holds when a deployment authenticates some other way.
   data-root rather than `/`, since those are not always the same mount. Gated
   exactly like the steps around it, so a skipped run pays nothing.
 
+  NOT a delta, deliberately: the seven `uses:` lines stay on upstream's
+  `docker/setup-buildx-action@v3` and `docker/build-push-action@v6`. Every run
+  warns that both target Node.js 20 and are forced onto Node.js 24, and the
+  builds pass under 24. Bumping them here would add seven conflicts on the day
+  upstream makes its own bump, for a warning, so it is accepted until a sync
+  brings upstream's bump in.
+
 - `.fork-deleted` + the deletion check in `.githooks/fork-surface-check.py` -
   the 16 upstream workflows we do not carry. `.fork-surface` cannot cover a
   deletion: it reads `--diff-filter=ACMR` against the merge base, where a file
