@@ -12,6 +12,7 @@ import {
   requireServicePrincipal,
   stripMeTeamAdminFields,
 } from './dfe/middleware/admin-lockdown';
+import { dropClientCredentials } from './dfe/middleware/clickhouse-proxy-credentials';
 import { blockProvisionedWrites } from './dfe/middleware/provisioned-lockdown';
 import { mountObservability } from './dfe/observability';
 import dfeSourcesRouter from './dfe/routers/dfe-sources';
@@ -199,6 +200,7 @@ app.use(
   '/clickhouse-proxy',
   isUserAuthenticated,
   blockClickhouseProxyTest,
+  dropClientCredentials,
   clickhouseProxyRouter,
 );
 app.use('/iac', isUserAuthenticated, iacRouter);
