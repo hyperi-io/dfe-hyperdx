@@ -48,6 +48,10 @@ LOCAL.md
 knip.json
 README.md
 agent_docs/tech_stack.md
+# Digest pins on the ClickHouse and MongoDB images the integration tests run
+# against; a ClickHouse version bump upstream conflicts on that line - see
+# docs/fork/what-we-changed.md.
+docker-compose.ci.yml
 docker/hyperdx/entry.prod.sh
 docker/nginx/README.md
 docker/otel-collector/custom.config.yaml

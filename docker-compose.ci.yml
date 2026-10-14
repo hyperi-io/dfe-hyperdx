@@ -22,7 +22,7 @@ services:
     depends_on:
       - ch-server
   ch-server:
-    image: clickhouse/clickhouse-server:26.8-alpine
+    image: clickhouse/clickhouse-server:26.8-alpine@sha256:241a7f5a9d580c34c3d48bcc7b8cff17b795398384e8cdc3b57d1e2b7eb126c4
     environment:
       # default settings
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
@@ -35,7 +35,7 @@ services:
     networks:
       - internal
   db:
-    image: mongo:5.0.32-focal
+    image: mongo:5.0.32-focal@sha256:3b6c281e1c0825d34b28e503b0bc97174132a283eeb79d402bd3893944cf9fd7
     command: --port 29999
     ports:
       - '${HDX_CI_MONGO_PORT:-39999}:29999'

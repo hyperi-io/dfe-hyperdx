@@ -518,6 +518,16 @@ header check is what holds when a deployment authenticates some other way.
   narrow `testMatch` - it used to, back when upstream's api package had no unit
   target, and 2.33.0 added one. A scoped config would run our handful of tests
   while silently skipping upstream's several hundred.
+- `packages/api/jest.dfe.int.config.js` - upstream's integration config with
+  `jose` added to its transform list, derived from upstream's list so packages
+  they add keep loading. `api-app.ts` reaches `jose` through the DFE routers, so
+  without it no integration test that boots the app could load, upstream's
+  included. The delta in **`packages/api/package.json`** is the config name on
+  the `ci:int` and `dev:int` scripts, beside the `ci:unit` and `dev:unit` lines
+  we already change.
+- `docker-compose.ci.yml` - the integration harness's ClickHouse and MongoDB
+  images pinned by digest, tags kept. When upstream bumps either version the
+  line conflicts: take their tag and pin its digest again.
 - `.upstream-version` + `scripts/upstream-pin.py` - the upstream pin, verified
   against `git merge-base` rather than trusted
 - `security/overrides.yaml`, `security/patches/`,
