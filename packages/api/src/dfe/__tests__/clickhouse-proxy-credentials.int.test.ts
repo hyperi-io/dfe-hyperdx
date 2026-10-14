@@ -1,8 +1,8 @@
 /**
  * Through the real app and the real proxy, ClickHouse sees the connection's
- * credentials and none of the caller's. A caller's Authorization beside the
- * proxy's X-ClickHouse-* headers is refused by ClickHouse with code 516
- * (`make dev-int FILE=clickhouse-proxy-credentials`).
+ * credentials and none of the caller's. A caller's Authorization or ?user=
+ * beside the proxy's X-ClickHouse-* headers is refused by ClickHouse with code
+ * 516 (`make dev-int FILE=clickhouse-proxy-credentials`).
  */
 import http from 'http';
 
@@ -30,12 +30,15 @@ describe('the ClickHouse proxy and the caller credentials', () => {
 
   let upstream: http.Server;
   let upstreamUrl: string;
-  let seen: http.IncomingHttpHeaders[] = [];
+  let seen: { url: URL; headers: http.IncomingHttpHeaders }[] = [];
 
   beforeAll(async () => {
     await server.start();
     upstream = http.createServer((req, res) => {
-      seen.push(req.headers);
+      seen.push({
+        url: new URL(req.url ?? '', 'http://upstream'),
+        headers: req.headers,
+      });
       req.resume();
       req.on('end', () => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -67,7 +70,8 @@ describe('the ClickHouse proxy and the caller credentials', () => {
     await server.stop();
   });
 
-  // A signed-in member searching with a bearer and a spoofed ClickHouse user.
+  // A signed-in member searching with a bearer, a spoofed ClickHouse user, and
+  // ClickHouse credentials in the query string.
   const searchAsCaller = async (dfe: boolean) => {
     const { agent, team } = await getLoggedInAgent(server);
     const connection = await Connection.create({
@@ -79,7 +83,9 @@ describe('the ClickHouse proxy and the caller credentials', () => {
     });
     mockDfeEnabled = dfe;
     const response = await agent
-      .post('/clickhouse-proxy/?default_format=JSONCompact')
+      .post(
+        '/clickhouse-proxy/?default_format=JSONCompact&user=x&password=y&quota_key=q',
+      )
       .set('x-hyperdx-connection-id', connection._id.toString())
       .set('Authorization', 'Bearer engine-token')
       .set('X-ClickHouse-User', 'someone-else')
@@ -91,7 +97,7 @@ describe('the ClickHouse proxy and the caller credentials', () => {
   };
 
   it('in DFE mode ClickHouse sees the connection alone', async () => {
-    const headers = await searchAsCaller(true);
+    const { url, headers } = await searchAsCaller(true);
 
     expect(headers).toMatchObject({
       'x-clickhouse-user': 'team_user',
@@ -99,12 +105,15 @@ describe('the ClickHouse proxy and the caller credentials', () => {
     });
     expect(headers).not.toHaveProperty('authorization');
     expect(headers).not.toHaveProperty('cookie');
+    expect([...url.searchParams.keys()]).toEqual(['default_format']);
   });
 
   it('outside DFE mode the proxy is upstream and forwards them', async () => {
-    const headers = await searchAsCaller(false);
+    const { url, headers } = await searchAsCaller(false);
 
     expect(headers.authorization).toBe('Bearer engine-token');
     expect(headers.cookie).toBeDefined();
+    expect(url.searchParams.get('user')).toBe('x');
+    expect(url.searchParams.get('password')).toBe('y');
   });
 });

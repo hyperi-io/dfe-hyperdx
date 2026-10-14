@@ -135,17 +135,18 @@ upstream behaviour and tests are unchanged. The service flag is set by
 
 **The query proxy drops the caller's credentials
 (`dfe/middleware/clickhouse-proxy-credentials.ts`).** Upstream's
-`/clickhouse-proxy` forwards every incoming header and sets the connection's
-`X-ClickHouse-User` and `X-ClickHouse-Key` itself. A caller on
+`/clickhouse-proxy` forwards every incoming header and query param and sets the
+connection's `X-ClickHouse-User` and `X-ClickHouse-Key` itself. A caller on
 `Authorization: Bearer`, the token source `jwt-verify.ts` reads first, reached
 ClickHouse with both schemes and was refused with code 516, and the `dfe_token`
 cookie carried the engine token to the datastore. In DFE mode
-`dropClientCredentials` removes `Authorization`, `Proxy-Authorization`, `Cookie`
-and the caller's own `X-ClickHouse-User`, `-Key` and `-SSL-Certificate-Auth`
-before the proxy runs, which
-`dfe/__tests__/clickhouse-proxy-credentials.int.test.ts` proves through the real
-proxy. The delta in **`api-app.ts`** is one import and one identifier on the
-`/clickhouse-proxy` mount.
+`dropClientCredentials` removes `Authorization`, `Proxy-Authorization`,
+`Cookie`, the caller's own `X-ClickHouse-User`, `-Key`, `-Quota` and
+`-SSL-Certificate-Auth`, and the `user`, `password` and `quota_key` query params
+ClickHouse authenticates with, before the proxy runs.
+`dfe/__tests__/clickhouse-proxy-credentials.int.test.ts` proves it through the
+real proxy. The delta in **`api-app.ts`** is one import and one identifier on
+the `/clickhouse-proxy` mount.
 
 **`/team` opens one read to a member (`allowTeamReadElseServicePrincipal`).**
 The console calls `GET /api/team` on every page load for one flag, so a blanket
