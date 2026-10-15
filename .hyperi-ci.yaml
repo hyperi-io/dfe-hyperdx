@@ -19,6 +19,18 @@ quality:
   exclude_paths:
     # Spike records name the files they proposed at the time, not files the repo holds.
     - .hyperi/spikes
+    # Upstream's Dockerfiles, identical to the merge base. hadolint flags COPY --from a named build context (DL3022), unpinned apk add (DL3018) and shell-form CMD (DL3025).
+    - docker/hyperdx/Dockerfile
+    - docker/otel-collector/Dockerfile
+    - packages/api/Dockerfile
+    - packages/app/Dockerfile
+    # Upstream's compose files, identical to the merge base. Their image tags come from the env file, and the dev prometheus image is `latest`.
+    - docker-compose.yml
+    - docker-compose.dev.yml
+    # Upstream's agent docs, identical to the merge base. They name paths gone from upstream or not carried here, and editing them is conflict surface on every sync.
+    - AGENTS.md
+    - agent_docs/code_style.md
+    - agent_docs/data_viz_colors.md
   # Every flagged line here is upstream's, byte-identical to the merge base, so editing it is conflict surface on every sync.
   charset_exclude:
     - .github/actions/e2e-setup/action.yml
