@@ -9,10 +9,16 @@
 #   deploy.resources.limits.memory  ->  k8s containers[].resources.limits.memory
 #   deploy.resources.reservations   ->  k8s containers[].resources.requests
 #
+# Compose rejects a service that has a `deploy` block but no image or build, so a
+# caps file may name only services its base files define. This file holds the
+# services both stacks define. docker-compose.caps.dev.yml holds the two that only
+# the dev stack defines.
+#
 # Usage (dev - app runs locally via yarn):
 #   docker compose --env-file .env.dfe \
-#     -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml -f docker-compose.caps.yml up -d
-# Usage (prod image - app in a container): swap dfe.dev.yml for dfe.yml (app cap included below).
+#     -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml \
+#     -f docker-compose.caps.yml -f docker-compose.caps.dev.yml up -d
+# Usage (prod image - app in a container): swap dfe.dev.yml for dfe.yml and drop caps.dev.yml.
 #
 # Total dev ceiling ~= 3.4 GB (CH 2g dominates). Tune CH down to 1536m if tight.
 
@@ -46,19 +52,5 @@ services:
       resources:
         limits:
           memory: 300m
-
-  otel-collector-json:
-    deploy:
-      resources:
-        limits:
-          memory: 300m
-
-  prometheus:
-    deploy:
-      resources:
-        limits:
-          memory: 300m
-# NB: the `app` container exists only in the prod-image stack
-# (docker-compose.dfe.yml), not in dev (app runs locally). Its memory cap lives
-# in docker-compose.dfe.yml directly - a service with only `deploy` and no
-# image/build is an invalid compose project, so it cannot be capped from here.
+# NB: `app` is not capped here. It exists only in the prod-image stack, so in dev
+# it would be a service with `deploy` and no image.

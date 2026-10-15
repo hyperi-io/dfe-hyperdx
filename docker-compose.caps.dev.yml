@@ -1,0 +1,19 @@
+# DFE memory caps for the two services only the dev stack defines.
+#
+# Layer after docker-compose.caps.yml on docker-compose.dev.yml. The prod-image
+# stack (docker-compose.yml) defines neither service, and Compose rejects a service
+# that has a `deploy` block but no image or build, so these cannot sit in
+# docker-compose.caps.yml.
+
+services:
+  otel-collector-json:
+    deploy:
+      resources:
+        limits:
+          memory: 300m
+
+  prometheus:
+    deploy:
+      resources:
+        limits:
+          memory: 300m
