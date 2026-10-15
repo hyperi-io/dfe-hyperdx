@@ -39,6 +39,7 @@ import {
   displayTypeRequiresSource,
   isBuilderChartConfig,
   isBuilderSavedChartConfig,
+  isPromqlChartConfig,
   isPromqlSavedChartConfig,
   isRawSqlChartConfig,
   isRawSqlSavedChartConfig,
@@ -50,7 +51,6 @@ import {
 import { isMissingFiltersMacro } from '@hyperdx/common-utils/dist/macros';
 import {
   AlertState,
-  BuilderChartConfigWithDateRange,
   ChartConfigWithDateRange,
   ChartVariable,
   DashboardContainer as DashboardContainerSchema,
@@ -144,6 +144,7 @@ import { DBTimeChart } from '@/components/DBTimeChart';
 import { FavoriteButton } from '@/components/FavoriteButton';
 import FullscreenPanelModal from '@/components/FullscreenPanelModal';
 import ResourceTerraformPopover from '@/components/Iac/ResourceTerraformPopover';
+import { InlineNameInput } from '@/components/InlineNameInput/InlineNameInput';
 import { PageHeader } from '@/components/PageHeader';
 import { PageLayout } from '@/components/PageLayout';
 import { SqlVariablesProvider } from '@/components/SQLEditor/variableCompletions';
@@ -165,11 +166,13 @@ import {
   useDuplicateShippedDashboard,
 } from '@/dfe/shippedDashboard';
 import { useAlertAnnotations } from '@/hooks/useAlertAnnotations';
+import { getMinGranularitySeconds } from '@/hooks/useChartConfig';
 import useDashboardContainers, {
   TabDeleteAction,
 } from '@/hooks/useDashboardContainers';
 import { useDashboardKioskMode } from '@/hooks/useDashboardKioskMode';
 import { useReleaseAnnotations } from '@/hooks/useReleaseAnnotations';
+import { QueryAttributionProvider } from '@/queryAttribution';
 import { calculateNextTilePosition, makeId } from '@/utils/tilePositioning';
 
 import ChartContainer, {
@@ -180,7 +183,8 @@ import ChartContainer, {
 import DashboardFiltersModal from './components/DashboardFiltersModal';
 import { DBBarChart } from './components/DBBarChart';
 import DBHeatmapChart, {
-  toHeatmapChartConfig,
+  HeatmapSeriesChartConfig,
+  toHeatmapQuery,
 } from './components/DBHeatmapChart';
 import { DBPieChart } from './components/DBPieChart';
 import DBSqlRowTableWithSideBar from './components/DBSqlRowTableWithSidebar';
@@ -193,7 +197,7 @@ import { Tags } from './components/Tags';
 import useDashboardFilters from './hooks/useDashboardFilters';
 import { useDashboardRefresh } from './hooks/useDashboardRefresh';
 import useTileSelection from './hooks/useTileSelection';
-import { useBrandDisplayName } from './theme/ThemeProvider';
+import { usePageTitle } from './theme/ThemeProvider';
 import { parseAsJsonEncoded, parseAsStringEncoded } from './utils/queryParsers';
 import {
   buildDashboardReplaySearchUrl,
@@ -203,13 +207,12 @@ import {
 } from './ChartUtils';
 import { useConnections } from './connection';
 import DashboardFilters from './DashboardFilters';
-import { EditablePageName } from './EditablePageName';
 import {
   GranularityPicker,
   GranularityPickerControlled,
 } from './GranularityPicker';
 import HDXMarkdownChart from './HDXMarkdownChart';
-import { withAppNav } from './layout';
+import { withAppNavForSurface } from './layout';
 import {
   getEventBody,
   getFirstTimestampValueExpression,
@@ -248,12 +251,16 @@ function HeatmapTile({
   title: React.ReactNode;
   toolbarPrefix: React.ReactNode[];
   toolbarSuffix: React.ReactNode[];
-  queriedConfig: BuilderChartConfigWithDateRange;
+  queriedConfig: HeatmapSeriesChartConfig;
   source: TSource | undefined;
   dateRange: [Date, Date];
   enabled?: boolean;
 }) {
-  const { heatmapConfig, scaleType } = toHeatmapChartConfig(queriedConfig);
+  const heatmapQuery = toHeatmapQuery({
+    ...queriedConfig,
+    minGranularitySeconds: getMinGranularitySeconds(source),
+  });
+  const { mode } = heatmapQuery;
 
   const [clickPos, setClickPos] = useState<{ x: number; y: number } | null>(
     null,
@@ -261,7 +268,14 @@ function HeatmapTile({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const eventDeltasUrl = useMemo(() => {
-    if (!source) return null;
+    // Search page event deltas only supports trace sources and distribution mode
+    if (
+      !source ||
+      !isTraceSource(source) ||
+      mode !== 'distribution' ||
+      !isBuilderChartConfig(queriedConfig)
+    )
+      return null;
     const url = buildEventsSearchUrl({
       source,
       config: queriedConfig,
@@ -270,7 +284,7 @@ function HeatmapTile({
     if (!url) return null;
     const separator = url.includes('?') ? '&' : '?';
     return `${url}${separator}mode=delta`;
-  }, [source, queriedConfig, dateRange]);
+  }, [source, mode, queriedConfig, dateRange]);
 
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -295,8 +309,7 @@ function HeatmapTile({
         title={title}
         toolbarPrefix={toolbarPrefix}
         toolbarSuffix={toolbarSuffix}
-        config={heatmapConfig}
-        scaleType={scaleType}
+        query={heatmapQuery}
         enabled={enabled}
         showLegend
       />
@@ -426,7 +439,7 @@ const Tile = ({
   onUpdateChart,
   onMoveToGroup,
   moveTargets,
-  granularity,
+  granularity: dashboardGranularity,
   onTimeRangeSelect,
   filters,
   variables,
@@ -485,6 +498,13 @@ const Tile = ({
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+
+  // A live dashboard's granularity is the coarse refresh interval; heatmaps
+  // ignore it and stay on their own finer auto granularity.
+  const granularity =
+    isLive && chart.config.displayType === DisplayType.Heatmap
+      ? undefined
+      : dashboardGranularity;
 
   // Lazy loading: only fetch a tile's data once it has scrolled into the
   // browser viewport. React Grid Layout mounts every tile up front, so
@@ -1284,41 +1304,40 @@ const Tile = ({
             </TilePlaceholder>
           ) : (
             <>
-              {(effectiveQueriedConfig?.displayType === DisplayType.Line ||
-                effectiveQueriedConfig?.displayType ===
-                  DisplayType.StackedBar) && (
-                <DBTimeChart
-                  key={`${keyPrefix}-${chart.id}`}
-                  title={title}
-                  toolbarPrefix={toolbarPrefixItems}
-                  toolbarSuffix={toolbarSuffixItems}
-                  sourceId={chart.config.source}
-                  showDisplaySwitcher={!readOnly}
-                  enabled={chartEnabled}
-                  config={effectiveQueriedConfig}
-                  annotations={annotations}
-                  onTimeRangeSelect={
-                    readOnly
-                      ? undefined
-                      : isFullscreenView
-                        ? (start, end) => setFullscreenDateRange([start, end])
-                        : onTimeRangeSelect
-                  }
-                  setDisplayType={
-                    readOnly
-                      ? undefined
-                      : displayType => {
-                          onUpdateChart?.({
-                            ...chart,
-                            config: {
-                              ...chart.config,
-                              displayType,
-                            },
-                          });
-                        }
-                  }
-                />
-              )}
+              {effectiveQueriedConfig &&
+                isTimeSeriesDisplayType(effectiveQueriedConfig.displayType) && (
+                  <DBTimeChart
+                    key={`${keyPrefix}-${chart.id}`}
+                    title={title}
+                    toolbarPrefix={toolbarPrefixItems}
+                    toolbarSuffix={toolbarSuffixItems}
+                    sourceId={chart.config.source}
+                    showDisplaySwitcher={!readOnly}
+                    enabled={chartEnabled}
+                    config={effectiveQueriedConfig}
+                    annotations={annotations}
+                    onTimeRangeSelect={
+                      readOnly
+                        ? undefined
+                        : isFullscreenView
+                          ? (start, end) => setFullscreenDateRange([start, end])
+                          : onTimeRangeSelect
+                    }
+                    setDisplayType={
+                      readOnly
+                        ? undefined
+                        : displayType => {
+                            onUpdateChart?.({
+                              ...chart,
+                              config: {
+                                ...chart.config,
+                                displayType,
+                              },
+                            });
+                          }
+                    }
+                  />
+                )}
               {effectiveQueriedConfig?.displayType === DisplayType.Table && (
                 <Box h="100%">
                   <DBTableChart
@@ -1374,7 +1393,8 @@ const Tile = ({
                 />
               )}
               {effectiveQueriedConfig?.displayType === DisplayType.Heatmap &&
-                isBuilderChartConfig(effectiveQueriedConfig) && (
+                (isBuilderChartConfig(effectiveQueriedConfig) ||
+                  isPromqlChartConfig(effectiveQueriedConfig)) && (
                   <HeatmapTile
                     keyPrefix={keyPrefix}
                     chartId={chart.id}
@@ -1520,7 +1540,7 @@ const Tile = ({
   );
 
   return (
-    <>
+    <QueryAttributionProvider attribution={{ tile: chart.id }}>
       <div
         data-testid={`dashboard-tile-${chart.id}`}
         // `dashboard-chart-highlighted` triggers a one-shot flash animation
@@ -1616,7 +1636,7 @@ const Tile = ({
           </Flex>
         )}
       </FullscreenPanelModal>
-    </>
+    </QueryAttributionProvider>
   );
 };
 
@@ -1687,36 +1707,43 @@ const EditTileModal = ({
       zIndex={modalZIndex}
     >
       {chart != null && (
-        <ZIndexContext value={modalZIndex + 10}>
-          {/* Isolate chart cross-syncing to this edit modal: the preview chart
+        <QueryAttributionProvider
+          attribution={{
+            surface: 'chart-preview',
+            tile: chart.id,
+          }}
+        >
+          <ZIndexContext value={modalZIndex + 10}>
+            {/* Isolate chart cross-syncing to this edit modal: the preview chart
               must not drive shadow tooltips on the dashboard tiles behind it. */}
-          <IsolatedChartSyncProvider>
-            {/* Offers the dashboard's variables as completions in every
+            <IsolatedChartSyncProvider>
+              {/* Offers the dashboard's variables as completions in every
                 expression input the editor renders. */}
-            <SqlVariablesProvider variables={variables}>
-              <EditTimeChartForm
-                data-testid="tile-editor-form"
-                dashboardId={dashboardId}
-                chartConfig={chart.config}
-                variables={variables}
-                getDashboardFilters={getDashboardFilters}
-                unsatisfiedRequiredFilters={unsatisfiedRequiredFilters}
-                dateRange={dateRange}
-                isSaving={isSaving}
-                onSave={config => {
-                  onSave({
-                    ...chart,
-                    config: config,
-                  });
-                }}
-                onClose={handleClose}
-                onDirtyChange={setHasUnsavedChanges}
-                isDashboardForm
-                autoRun
-              />
-            </SqlVariablesProvider>
-          </IsolatedChartSyncProvider>
-        </ZIndexContext>
+              <SqlVariablesProvider variables={variables}>
+                <EditTimeChartForm
+                  data-testid="tile-editor-form"
+                  dashboardId={dashboardId}
+                  chartConfig={chart.config}
+                  variables={variables}
+                  getDashboardFilters={getDashboardFilters}
+                  unsatisfiedRequiredFilters={unsatisfiedRequiredFilters}
+                  dateRange={dateRange}
+                  isSaving={isSaving}
+                  onSave={config => {
+                    onSave({
+                      ...chart,
+                      config: config,
+                    });
+                  }}
+                  onClose={handleClose}
+                  onDirtyChange={setHasUnsavedChanges}
+                  isDashboardForm
+                  autoRun
+                />
+              </SqlVariablesProvider>
+            </IsolatedChartSyncProvider>
+          </ZIndexContext>
+        </QueryAttributionProvider>
       )}
     </Modal>
   );
@@ -1887,7 +1914,7 @@ function DBDashboardPage({
   } = dashboardProps;
   const { duplicate: duplicateDashboard, isPending: isDuplicatingDashboard } =
     useDuplicateShippedDashboard();
-  const brandName = useBrandDisplayName();
+  const title = usePageTitle(dashboard?.name ? dashboard.name : 'Dashboard');
   const confirm = useConfirm();
   const {
     userPreferences: { isUTC },
@@ -2907,16 +2934,21 @@ function DBDashboardPage({
   );
 
   const dashboardName = (
-    <EditablePageName
+    <InlineNameInput
       key={`${dashboardHash}`}
-      name={dashboard?.name ?? ''}
-      onSave={editedName => {
-        if (dashboard != null) {
-          setDashboard({
-            ...dashboard,
-            name: editedName,
-          });
-        }
+      value={dashboard?.name ?? ''}
+      placeholder="Untitled dashboard"
+      aria-label="Dashboard name"
+      size="md"
+      headingLevel={3}
+      data-testid="dashboard-name-input"
+      onCommit={editedName => {
+        if (dashboard == null) return;
+        return new Promise<void>((resolve, reject) => {
+          setDashboard({ ...dashboard, name: editedName }, resolve, () =>
+            reject(new Error('Unable to save dashboard')),
+          );
+        });
       }}
     />
   );
@@ -3239,9 +3271,7 @@ function DBDashboardPage({
   const dashboardBody = (
     <>
       <Head>
-        <title>
-          {dashboard?.name ? `${dashboard.name}` : 'Dashboard'} – {brandName}
-        </title>
+        <title>{title}</title>
       </Head>
       {!isKioskMode && <OnboardingModal />}
       {!isKioskMode && (
@@ -3583,10 +3613,14 @@ function DBDashboardPageGuarded({
   if (!dashboardProps || !router.isReady) return <Loader size="lg" />;
 
   return (
-    <DBDashboardPage
-      dashboardProps={dashboardProps}
-      defaultTimeInput={defaultTimeInput}
-    />
+    <QueryAttributionProvider
+      attribution={{ surface: 'dashboard', dashboard: dashboardId }}
+    >
+      <DBDashboardPage
+        dashboardProps={dashboardProps}
+        defaultTimeInput={defaultTimeInput}
+      />
+    </QueryAttributionProvider>
   );
 }
 
@@ -3595,6 +3629,6 @@ const DBDashboardPageDynamic = dynamic(async () => DBDashboardPageGuarded, {
 });
 
 // @ts-expect-error for getLayout
-DBDashboardPageDynamic.getLayout = withAppNav;
+DBDashboardPageDynamic.getLayout = withAppNavForSurface('dashboard');
 
 export default DBDashboardPageDynamic;

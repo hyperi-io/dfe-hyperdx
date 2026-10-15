@@ -56,7 +56,7 @@ import RestoreShippedDashboards from '@/dfe/components/RestoreShippedDashboards'
 import DfeThroughputHeadline from '@/dfe/components/ThroughputHeadline';
 import { useFavorites } from '@/favorites';
 import { withAppNav } from '@/layout';
-import { useBrandDisplayName } from '@/theme/ThemeProvider';
+import { usePageTitle } from '@/theme/ThemeProvider';
 import { useConfirm } from '@/useConfirm';
 
 function getDashboardAlerts(tiles: Dashboard['tiles']) {
@@ -71,7 +71,7 @@ function emptyStateTitle(tab: DashboardTab, hasFilters: boolean): string {
 }
 
 export default function DashboardsListPage() {
-  const brandName = useBrandDisplayName();
+  const title = usePageTitle('Dashboards');
   const { data: dashboards, isLoading, isError } = useDashboards();
   const { data: me, isPending: isMePending } = api.useMe();
   const confirm = useConfirm();
@@ -192,7 +192,7 @@ export default function DashboardsListPage() {
       style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}
     >
       <Head>
-        <title>Dashboards - {brandName}</title>
+        <title>{title}</title>
       </Head>
       <PageHeader
         title="Dashboards"

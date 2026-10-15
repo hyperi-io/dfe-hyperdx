@@ -38,9 +38,9 @@ import { DFE_CHART_AI_ASSISTANT_ENABLED } from '@/dfe/embedFeatures';
 import { useChartAssistant } from '@/hooks/ai';
 import { useAlertSeededChartConfig } from '@/hooks/useAlertSeededChartConfig';
 import { useResolvedSourceParam } from '@/hooks/useResolvedSourceParam';
-import { withAppNav } from '@/layout';
+import { withAppNavForSurface } from '@/layout';
 import { useSources } from '@/source';
-import { useBrandDisplayName } from '@/theme/ThemeProvider';
+import { useBrandDisplayName, usePageTitle } from '@/theme/ThemeProvider';
 import { useDefaultTimeRange, useNewTimeQuery } from '@/timeQuery';
 import { useLocalStorage } from '@/utils';
 import { buildInlineAlertPayload } from '@/utils/alerts';
@@ -212,7 +212,7 @@ const DEFAULT_INTERVAL = 'Past 1h';
 
 function DBChartExplorerPage() {
   const defaultTimeRange = useDefaultTimeRange(DEFAULT_INTERVAL);
-  const brandName = useBrandDisplayName();
+  const title = usePageTitle('Chart Explorer');
   const {
     searchedTimeRange,
     displayedTimeInputValue,
@@ -317,7 +317,7 @@ function DBChartExplorerPage() {
   return (
     <Box data-testid="chart-explorer-page" p="sm">
       <Head>
-        <title>Chart Explorer - {brandName}</title>
+        <title>{title}</title>
       </Head>
       <OnboardingModal />
       {/* DFE: the experimental CHART AI Assistant is hidden unless explicitly enabled
@@ -367,6 +367,6 @@ const DBChartExplorerPageDynamic = dynamic(async () => DBChartExplorerPage, {
 });
 
 // @ts-expect-error next/dynamic component type does not include the getLayout static
-DBChartExplorerPageDynamic.getLayout = withAppNav;
+DBChartExplorerPageDynamic.getLayout = withAppNavForSurface('chart-explorer');
 
 export default DBChartExplorerPageDynamic;
