@@ -30,6 +30,10 @@
     "That is the security-vs-functionality split this fork is built around; see",
     "security/overrides.yaml for the bar an entry has to clear.",
     "",
+    "DASHBOARD TITLE. No dependencyDashboardTitle is set, so the issue keeps",
+    "Renovate's default, Dependency Dashboard. dfe-sweep finds the dashboard by",
+    "that text, and a custom title makes it count the issue as active work.",
+    "",
     "NOT A SUBSTITUTE FOR LOOKING. Muting per-PR noise does not make an",
     "inherited CVE unreal - the fork ships as a container image. The image scan",
     "at publish and the hyperi-ci quality audit are what catch those."
@@ -62,6 +66,5 @@
     "enabled": true
   },
   "osvVulnerabilityAlerts": true,
-  "dependencyDashboard": true,
-  "dependencyDashboardTitle": "Renovate: fork-owned files only (see renovate.json)"
+  "dependencyDashboard": true
 }

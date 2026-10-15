@@ -8,6 +8,8 @@ SSoT that dfe-docker reuses and k8s mirrors.
 
 Both source the base compose + the DFE override + the caps layer. The only
 difference is whether the app runs locally (dev, hot reload) or in a container.
+Dev also layers `docker-compose.caps.dev.yml`, for the two services only the dev
+compose defines.
 
 ### Dev (fast iteration - app local, infra in docker)
 
@@ -16,7 +18,8 @@ difference is whether the app runs locally (dev, hot reload) or in a container.
 #    services so compose does NOT build otel-collector/prometheus (heavy build,
 #    not needed to iterate on look/feel; the app's self-telemetry is non-fatal):
 docker compose --env-file .env.dfe \
-  -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml -f docker-compose.caps.yml \
+  -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml \
+  -f docker-compose.caps.yml -f docker-compose.caps.dev.yml \
   up -d ch-server postgres ferretdb
 
 # 2. app + api locally (hot reload):
@@ -36,9 +39,10 @@ docker compose --env-file .env --env-file .env.dfe \
 ```
 
 Builds the fork app image (`docker/hyperdx/Dockerfile`) and runs everything in
-containers. The `app` container's memory cap lives in `docker-compose.dfe.yml`
-(a compose service needs an image/build to be capped, so it cannot sit in the
-caps layer).
+containers. No compose layer caps the `app` container: the dev compose does not
+define it, and Compose rejects a capped service that has no image. Its
+Kubernetes limit is `resources` in `dfe/deploy/contract.json` (2Gi limit, 512Mi
+request).
 
 ## Memory caps (docker-compose.caps.yml) - the resource SSoT
 
@@ -52,7 +56,9 @@ Layer this file LAST. `docker compose up` (v2) honours
 | ferretdb                    | 256m  | 64m         | Mongo-wire shim                  |
 | otel-collector / -json      | 300m  | -           | one each                         |
 | prometheus                  | 300m  | -           | dev metrics                      |
-| app (prod image only)       | 1g    | 256m        | in dfe.dfe.yml                   |
+
+`otel-collector-json` and `prometheus` are capped in
+`docker-compose.caps.dev.yml`, because the prod image stack defines neither.
 
 Dev ceiling ~= 3.4 GB. **Never run this stack uncapped on a laptop.**
 
