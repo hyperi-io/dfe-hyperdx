@@ -22,7 +22,7 @@ Three questions, in order. Most alerts die on the first one.
 The published image is the root `Dockerfile` (`.hyperi-ci.yaml`
 `release.container`), and `Dockerfile:87` installs its `node_modules`:
 
-```
+```sh
 && rm -rf node_modules && yarn workspaces focus @hyperdx/api --production
 ```
 
@@ -41,7 +41,7 @@ runtime.
 
 To check it properly:
 
-```
+```sh
 yarn workspaces focus @hyperdx/api --production
 fd --max-depth 1 -t d . node_modules --format '{/}'
 yarn install          # put the dev tree back when you are done
@@ -213,10 +213,12 @@ Six more turned out to be in the image: `@hono/node-server` and five
 Five of the six are inside their vulnerable ranges, so version alone does not
 clear them. `packages/api/src/index.ts` starts metrics only:
 
-```
-const meterProvider = new MeterProvider({ readers: [getHyperDXMetricReader()] })
-const hostMetrics = new HostMetrics({ meterProvider })
-hostMetrics.start()
+```ts
+const meterProvider = new MeterProvider({
+  readers: [getHyperDXMetricReader()],
+});
+const hostMetrics = new HostMetrics({ meterProvider });
+hostMetrics.start();
 ```
 
 That is not the whole process though. `packages/api/bin/hyperdx` starts the api
@@ -308,7 +310,7 @@ in 4.13.0 via `yarn config --json`:
 The IDs are the numeric npm ones from the audit output (`1104000`), not GHSA
 strings. Get them with:
 
-```
+```sh
 yarn npm audit --severity moderate --json --recursive
 ```
 
@@ -329,8 +331,8 @@ than a config-level mute:
 | semgrep (`fork-security.yml`) | `// nosemgrep: <rule-id> -- <reason>`, or a rule-scoped entry in `.hyperi-ci.yaml` `quality.ignore` |
 | CodeQL, once enabled          | `// codeql[<rule-id>] -- <reason>`                                                                  |
 
-The `.hyperi-ci.yaml` `quality.ignore` block already does this for two semgrep
-rules, with a written reason each. Follow that shape.
+The `.hyperi-ci.yaml` `quality.ignore` block does this for semgrep, with a
+written reason per entry. Follow that shape.
 
 ### Tooling warts found on the way
 
@@ -372,7 +374,7 @@ rules, with a written reason each. Follow that shape.
   `security/detect-object-injection` on every read; `sql.charAt(i)` does not,
   and is the same operation. `as jest.Mock` trips `no-unsafe-type-assertion`;
   `jest.mocked()` is the typed helper and needs no cast. Eleven
-  `(dfeConfig as any).X = ` assignments collapse to one
+  `(dfeConfig as any).X =` assignments collapse to one
   `dfeConfig as Record<string, unknown>` alias. Twenty-one casts removed that
   way this pass, none of them muted.
 
@@ -527,7 +529,9 @@ loudly instead of quietly reinstating.
 
 Cheap check, worth running every sync:
 
-    git diff --stat origin/main..<branch> -- .github/workflows/
+```sh
+git diff --stat origin/main..<branch> -- .github/workflows/
+```
 
 ### The image source label pointed at the old repo name
 
@@ -550,8 +554,10 @@ in the reusable workflow purely to dodge anonymous pull limits. Upstream's
 Five open PRs went red on `ci / Quality` overnight with the same two lines,
 while `ci / Test` stayed green:
 
-    audit: failed
-    YN0001: RequestError: Timeout awaiting 'socket' for 60000ms
+```text
+audit: failed
+YN0001: RequestError: Timeout awaiting 'socket' for 60000ms
+```
 
 dfe-ui hit it first and put it down to the self-hosted runners (dfe-ui#210
 guesses path MTU on arc-native). It is neither the runners nor us. The same
@@ -604,12 +610,14 @@ does and does not cost:
 
 Revert to `blocking` once this comes back clean rather than one in two:
 
-    for i in $(seq 1 12); do
-      curl -sS -o /dev/null -w '%{http_code} %{time_total}s\n' --max-time 25 \
-        -X POST -H 'Content-Type: application/json' --data '{"lodash":["4.17.20"]}' \
-        https://registry.npmjs.org/-/npm/v1/security/advisories/bulk
-      sleep 2
-    done
+```sh
+for i in $(seq 1 12); do
+  curl -sS -o /dev/null -w '%{http_code} %{time_total}s\n' --max-time 25 \
+    -X POST -H 'Content-Type: application/json' --data '{"lodash":["4.17.20"]}' \
+    https://registry.npmjs.org/-/npm/v1/security/advisories/bulk
+  sleep 2
+done
+```
 
 ## 2026-09-21 - a fresh 26, and two verdicts that had gone stale under us
 
@@ -638,7 +646,9 @@ advisory, not the lockfile, decides when it expires.
 
 Still not reachable, for a different reason than before:
 
-    @hyperdx/api -> @modelcontextprotocol/sdk@1.29.0 -> ajv@8.20.0 -> fast-uri@3.1.4
+```text
+@hyperdx/api -> @modelcontextprotocol/sdk@1.29.0 -> ajv@8.20.0 -> fast-uri@3.1.4
+```
 
 ajv is the only parent. It uses fast-uri to resolve `$id` and `$ref` and to
 validate `format: uri`, against schemas that are our own source, and it issues
@@ -652,8 +662,10 @@ transport that drags ajv in is not reachable by a human user at all.
 The old entry read "No call site passes request-derived input to the sink."
 Express's own query parser is a call site, and `req.query` is request-derived:
 
-    @hyperdx/api -> express@4.22.1 -> qs@6.14.2
-    @hyperdx/api -> express@4.22.1 -> body-parser@1.20.6 -> qs@6.15.3
+```text
+@hyperdx/api -> express@4.22.1 -> qs@6.14.2
+@hyperdx/api -> express@4.22.1 -> body-parser@1.20.6 -> qs@6.15.3
+```
 
 Every request that carries a query string or an urlencoded body reaches qs
 before any of our code does. GHSA-4mjr-xmp4-gh2g (DoS via attacker-controlled
@@ -783,7 +795,9 @@ a sync.
 
 `yarn why image-size --recursive` gives one path:
 
-    @hyperdx/app -> @storybook/nextjs@10.1.4 -> image-size@2.0.2
+```text
+@hyperdx/app -> @storybook/nextjs@10.1.4 -> image-size@2.0.2
+```
 
 `@storybook/nextjs` is an app devDependency. Dependabot calls it `runtime`
 because it reads the lockfile, not the image - the same mistake as every earlier
@@ -815,7 +829,9 @@ So production never parses request-derived bytes with the vulnerable code, and
 `/_next/image` sits behind the OIDC gateway anyway. The vendored copy moves when
 a Next release vendors 2.0.3 or later. Check it on the next sync with:
 
-    rg -o 'No codestream found in JXL container' node_modules/next/dist/compiled/image-size/index.js
+```sh
+rg -o 'No codestream found in JXL container' node_modules/next/dist/compiled/image-size/index.js
+```
 
 ### Recorded
 
@@ -1021,7 +1037,7 @@ describe main, and the image catches up at the next release.
 
 ### webpack-dev-middleware - Storybook's dev server
 
-#298, GHSA-g84c-rxfj-3j2c, high. Path traversal in `getFilenameFromUrl` when
+\#298, GHSA-g84c-rxfj-3j2c, high. Path traversal in `getFilenameFromUrl` when
 `publicPath` has no trailing slash. The range is `< 7.4.5`, and the advisory's
 own text puts the fix at 8.3.0 with no backport to 6.x or 7.x.
 
@@ -1039,7 +1055,7 @@ declares `webpack-dev-middleware: ^6.1.2`.
 
 ### brace-expansion - verdict kept
 
-#299, #302 and #305 match only 5.0.8, nx's exact pin, as the section above
+\#299, #302 and #305 match only 5.0.8, nx's exact pin, as the section above
 found. The production focus has no brace-expansion. 0.2.8 carries 1.1.17 in the
 Next trace, below these `>= 4.0.0` ranges, and 5.0.7 in the base image's npm,
 inside them but run only at build.
@@ -1150,15 +1166,15 @@ direct dependencies, does not report it.
 Three are security fixes. `@grpc/grpc-js` 1.14.5 (#3263) and hono 4.13.9 (#3264)
 are lockfile bumps the synced tree already carries.
 
-#3129 stops signing the session cookie with the default `EXPRESS_SESSION_SECRET`
-committed to upstream's source. The fork still falls back to that literal
-(`packages/api/src/config.ts:16`), and none of `docker-compose.dfe.yml`, the
-root `Dockerfile` or `entry.prod.sh` sets the variable. In OIDC mode it buys an
-attacker little: `oidc-identity.ts` logs in with `session: false` and
-`legacy-auth-lockdown.ts` 404s the routes that mint a session, so there is no
-live session id to sign for. Read from the code, not run. A deployment closes it
-outright by setting `EXPRESS_SESSION_SECRET`, and the next sync brings
-upstream's random fallback.
+\#3129 stops signing the session cookie with the default
+`EXPRESS_SESSION_SECRET` committed to upstream's source. The fork still falls
+back to that literal (`packages/api/src/config.ts:16`), and none of
+`docker-compose.dfe.yml`, the root `Dockerfile` or `entry.prod.sh` sets the
+variable. In OIDC mode it buys an attacker little: `oidc-identity.ts` logs in
+with `session: false` and `legacy-auth-lockdown.ts` 404s the routes that mint a
+session, so there is no live session id to sign for. Read from the code, not
+run. A deployment closes it outright by setting `EXPRESS_SESSION_SECRET`, and
+the next sync brings upstream's random fallback.
 
 ## 2026-10-07 - nx 23.1.1, two new advisories
 

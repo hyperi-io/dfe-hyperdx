@@ -1,0 +1,33 @@
+# markdownlint covers our docs only. Upstream's markdown stays exactly as
+# upstream ships it, so linting it reports faults this fork must not fix.
+
+# A repo config replaces hyperi-ci's config/markdownlint.yaml outright, so its
+# rules are restated here.
+config:
+  default: true
+  MD013: false
+  MD024:
+    siblings_only: true
+  MD033: false
+  MD041: false
+  MD060: false
+
+# Negated globs, because hyperi-ci passes each file as a literal path and cli2
+# filters literal paths by these, not by `ignores`.
+globs:
+  - '!.changeset/**'
+  - '!.claude/**'
+  - '!.cursor/**'
+  - '!.opencode/**'
+  - '!agent_docs/**'
+  - '!docker/**'
+  - '!packages/**'
+  - '!proxy/**'
+  - '!smoke-tests/**'
+  - '!AGENTS.md'
+  - '!CHANGELOG.md'
+  - '!CONTRIBUTING.md'
+  - '!DEPLOY.md'
+  - '!LOCAL.md'
+  - '!MCP.md'
+  - '!docs/alert-webhook-template-variables.md'

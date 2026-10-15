@@ -161,7 +161,7 @@ upstream. The 2.40.0 sync lost seven PRs of them, Next's RCE fix among them.
 
 Checked here and again on every PR by `fork-surface.yml`:
 
-```
+```text
 package.json resolutions == upstream's block at our base
                             + the register, applied only where it raises the floor
 

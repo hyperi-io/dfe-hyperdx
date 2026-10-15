@@ -57,7 +57,7 @@ identity layer entirely, `oidc-proxy` verifies engine-signed JWTs, and
 ES384 signing key over JWKS and the `/dfe/*` routes forward the caller's
 `dfe_token` to the engine -- both settings also live in `.env.dfe`:
 
-```
+```sh
 DFE_ENGINE_JWKS_URL=http://localhost:8003/.well-known/jwks.json
 DFE_ENGINE_ISSUER=https://dfe.local/api
 ```

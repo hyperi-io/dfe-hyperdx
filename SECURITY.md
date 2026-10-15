@@ -22,7 +22,7 @@ If the doc already covers the advisory you found, there is nothing to file.
 The shipped image is not the repo. The root `Dockerfile` builds the runtime
 with:
 
-```
+```sh
 yarn workspaces focus @hyperdx/api --production
 ```
 

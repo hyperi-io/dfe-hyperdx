@@ -70,6 +70,11 @@ jobs:
       - name: Install semgrep
         run: pip install --disable-pip-version-check semgrep
 
+      # .semgrepignore scopes hyperi-ci's quality scan to our code. This job
+      # sorts ours from inherited itself, so it scans without that file.
+      - name: Set aside the quality-scan scope
+        run: rm -f .semgrepignore
+
       # Whole tree, deliberately. The sorting happens after, so the inherited
       # bucket stays visible instead of being excluded at scan time.
       - name: Scan

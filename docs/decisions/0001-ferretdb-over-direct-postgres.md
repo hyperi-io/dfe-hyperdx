@@ -4,7 +4,7 @@ An assessment of the two approaches to removing the MongoDB dependency: using
 FerretDB as a transparent proxy vs. migrating the application code to use
 PostgreSQL directly.
 
-### Option 1: FerretDB (Recommended)
+## Option 1: FerretDB (Recommended)
 
 FerretDB sits between HyperDX and PostgreSQL, translating the MongoDB wire
 protocol to SQL. HyperDX application code is completely unchanged.
@@ -15,7 +15,7 @@ flowchart LR
     FERRET -->|SQL| PG[(PostgreSQL<br/>+ DocumentDB ext)]
 ```
 
-**Cost: Zero application changes**
+**Cost: Zero application changes.**
 
 | Factor                 | Assessment                                                            |
 | ---------------------- | --------------------------------------------------------------------- |
@@ -31,7 +31,7 @@ flowchart LR
 cleanly because the application layer is identical. The only difference is the
 Docker Compose infrastructure, which lives outside the application code.
 
-### Option 2: Direct PostgreSQL Migration (Native)
+## Option 2: Direct PostgreSQL Migration (Native)
 
 Replace Mongoose with a PostgreSQL ORM (Prisma, Drizzle, or raw `pg`). Rewrite
 all models, queries, and middleware to use SQL/PostgreSQL natively.
@@ -41,7 +41,7 @@ flowchart LR
     HDX["HyperDX API<br/>(Prisma / Drizzle)"] -->|SQL| PG[(PostgreSQL)]
 ```
 
-**Cost: Major fork with ongoing maintenance burden**
+**Cost: Major fork with ongoing maintenance burden.**
 
 | Factor                 | Assessment                                                                      |
 | ---------------------- | ------------------------------------------------------------------------------- |
@@ -53,7 +53,7 @@ flowchart LR
 | Performance            | Slightly better (no translation layer), but metadata workload is trivial        |
 | Data portability       | Standard PostgreSQL tooling (pg_dump, logical replication)                      |
 
-#### Scope of a Direct Migration
+### Scope of a Direct Migration
 
 To quantify the fork cost, here is what would need to change:
 
@@ -99,7 +99,7 @@ To quantify the fork cost, here is what would need to change:
 `@hyperdx/passport-local-mongoose`, `migrate-mongo`; add PostgreSQL ORM +
 driver + session store
 
-#### The Fork Problem
+### The Fork Problem
 
 This is the critical consideration. HyperDX is actively developed - the
 changelog shows frequent releases. A direct PostgreSQL migration creates a
@@ -132,7 +132,7 @@ layer changes. With direct PostgreSQL, **every upstream release that touches a
 model, controller, or test will require manual conflict resolution** - and the
 data layer is the most frequently changed part of any application.
 
-#### When Direct PostgreSQL Makes Sense
+### When Direct PostgreSQL Makes Sense
 
 A direct migration would be justified if:
 
@@ -145,7 +145,7 @@ A direct migration would be justified if:
 - You needed PostgreSQL-specific features in the metadata layer like full-text
   search, PostGIS, or advanced constraints (you don't)
 
-### Recommendation
+## Recommendation
 
 **Use FerretDB.** The engineering cost is zero, upstream compatibility is
 preserved, and the metadata workload (users, teams, dashboards, alerts, saved
