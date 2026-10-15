@@ -10,9 +10,6 @@ jest.mock('@/dfe/config', () => ({
     return mockDfeEnabled;
   },
 }));
-// The app imports it for the SQL export route; its ESM-only jose dependency does
-// not load under jest.int.config.js, and nothing here verifies a token.
-jest.mock('@/dfe/middleware/jwt-verify', () => ({ extractToken: jest.fn() }));
 
 // Off while the app loads and the member signs in: DFE mode refuses the password login.
 let mockDfeEnabled = false;
