@@ -8,3 +8,7 @@
 // DFE branding is covered by `src/dfe/__tests__/dfeTheme.test.ts`, which imports
 // the theme directly and is unaffected.
 process.env.NEXT_PUBLIC_THEME = 'hyperdx';
+
+// Same reason: OnboardingModal renders upstream's manual source setup only
+// behind this flag, and upstream's OnboardingModal.test.tsx asserts that step.
+process.env.NEXT_PUBLIC_DFE_SHOW_SOURCE_ADD = 'true';

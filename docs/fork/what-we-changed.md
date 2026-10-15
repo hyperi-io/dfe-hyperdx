@@ -320,15 +320,16 @@ header check is what holds when a deployment authenticates some other way.
   now call `mergePath` with the JSON roots derived from the field list they
   already hold, so neither adds a query.
 - `packages/app/jest.dfe.config.js` + `jest.dfe.setup.js` - pins
-  `NEXT_PUBLIC_THEME=hyperdx` for app unit tests, so upstream's suite passes
-  unchanged instead of us editing their test files to accommodate the rebrand.
-  Mirrors `packages/api/jest.dfe.config.js`. The setup file is loaded by the
-  jest config rather than compiled, so no tsconfig project covers it and typed
-  linting cannot parse it; **`packages/app/eslint.config.mjs`** carries one
-  added `ignores` entry for it, beside upstream's own `global-setup.js` line.
-  The env pin does not reach the CHART palette or `getTheme`'s fallback, both of
-  which resolve the brand without reading `NEXT_PUBLIC_THEME`, so three upstream
-  test files still carry a corrected expectation and stay catalogued:
+  `NEXT_PUBLIC_THEME=hyperdx` and `NEXT_PUBLIC_DFE_SHOW_SOURCE_ADD=true` for app
+  unit tests, so upstream's suite passes unchanged instead of us editing their
+  test files to accommodate the rebrand. Mirrors
+  `packages/api/jest.dfe.config.js`. The setup file is loaded by the jest config
+  rather than compiled, so no tsconfig project covers it and typed linting
+  cannot parse it; **`packages/app/eslint.config.mjs`** carries one added
+  `ignores` entry for it, beside upstream's own `global-setup.js` line. The env
+  pin does not reach the CHART palette or `getTheme`'s fallback, both of which
+  resolve the brand without reading `NEXT_PUBLIC_THEME`, so three upstream test
+  files still carry a corrected expectation and stay catalogued:
   **`src/__tests__/ChartUtils.test.ts`** and **`src/__tests__/utils.test.ts`**
   (`detectActiveTheme` in `utils.ts` returns `dfe` for a jsdom document with no
   theme class, never upstream's `hyperdx`) and

@@ -12,12 +12,26 @@
 
 const base = require('./jest.config');
 
+// jose v6 ships ESM only (no CJS build). Node >= 22.12 handles require(ESM)
+// so the compiled service is fine, but Jest's CJS loader is not - transform
+// it instead of ignoring it, so the tests exercise REAL ES384 verification
+// rather than a hand-rolled crypto double. Derived from upstream's list, as in
+// jest.dfe.int.config.js, so packages upstream adds to it keep working here.
+const UNIGNORE = '/node_modules/(?!(';
+
+const transformIgnorePatterns = base.transformIgnorePatterns.map(pattern =>
+  pattern.replace(UNIGNORE, `${UNIGNORE}jose|`),
+);
+if (
+  transformIgnorePatterns.every((p, i) => p === base.transformIgnorePatterns[i])
+) {
+  throw new Error(
+    `jest.config.js no longer has a ${UNIGNORE} pattern to add jose to; update jest.dfe.config.js`,
+  );
+}
+
 /** @type {import("jest").Config} **/
 module.exports = {
   ...base,
-  // jose v6 ships ESM only (no CJS build). Node >= 22.12 handles require(ESM)
-  // so the compiled service is fine, but Jest's CJS loader is not - transform
-  // it instead of ignoring it, so the tests exercise REAL ES384 verification
-  // rather than a hand-rolled crypto double.
-  transformIgnorePatterns: ['/node_modules/(?!jose/)'],
+  transformIgnorePatterns,
 };
