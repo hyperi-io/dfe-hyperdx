@@ -572,10 +572,10 @@ header check is what holds when a deployment authenticates some other way.
   so the lockfile can take the fix for three alerts. Delete the line and its
   comment once the version is older than the gate, from 2026-10-12T22:37Z.
 
-- `.github/workflows/docker-build.yml` - two deltas, both for the same failure
-  (#51). A `Free disk space` step calling `scripts/ci/free-disk-space.sh 40` in
-  each of the two jobs that run OCB, and all three jobs moved from
-  `ubuntu-24.04` to `arc-native-16cpu`.
+- `.github/workflows/docker-build.yml` - three deltas. The first two are for the
+  same failure (#51). A `Free disk space` step calling
+  `scripts/ci/free-disk-space.sh 40` in each of the two jobs that run OCB, and
+  all three jobs moved from `ubuntu-24.04` to `arc-native-16cpu`.
 
   The bundled collector compiles the full OTel contrib set and does not fit in
   the 14 GB a hosted runner guarantees, so the build died 941 seconds in with
@@ -596,12 +596,14 @@ header check is what holds when a deployment authenticates some other way.
   data-root rather than `/`, since those are not always the same mount. Gated
   exactly like the steps around it, so a skipped run pays nothing.
 
-  NOT a delta, deliberately: the seven `uses:` lines stay on upstream's
-  `docker/setup-buildx-action@v3` and `docker/build-push-action@v6`. Every run
-  warns that both target Node.js 20 and are forced onto Node.js 24, and the
-  builds pass under 24. Bumping them here would add seven conflicts on the day
-  upstream makes its own bump, for a warning, so it is accepted until a sync
-  brings upstream's bump in.
+  The third delta pins the seven `uses:` lines by commit SHA: three of
+  `docker/setup-buildx-action` at v4.4.1 (2026-09-16) and four of
+  `docker/build-push-action` at v7.4.0 (2026-09-15). Upstream's `@v3` and `@v6`
+  target Node.js 20, so every job warned that they were forced onto Node.js 24.
+  Both new majors run on Node 24 and need Actions Runner 2.327.1 or later (ours
+  report 2.338.0). Every input the workflow passes still exists in both. When
+  upstream bumps these lines the seven conflict, so take either side and keep
+  whichever version is higher.
 
 - `.fork-deleted` + the deletion check in `.githooks/fork-surface-check.py` -
   the 16 upstream workflows we do not carry. `.fork-surface` cannot cover a
