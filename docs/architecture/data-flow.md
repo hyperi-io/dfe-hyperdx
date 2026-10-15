@@ -5,7 +5,7 @@
 > upstream's [`agent_docs/`](../../agent_docs/) is the authority, and anything
 > specific to DFE is called out as such.
 
-### Write Path (Telemetry Ingestion)
+## Write Path (Telemetry Ingestion)
 
 ```mermaid
 flowchart LR
@@ -53,7 +53,7 @@ Key details:
 - **ClickHouse exporter** writes to `otel_logs`, `otel_traces`, and five metric
   tables via the native TCP protocol (port 9000)
 
-### Read Path (Query Execution)
+## Read Path (Query Execution)
 
 ```mermaid
 sequenceDiagram
@@ -77,7 +77,7 @@ and injects ClickHouse credentials.
 In **local mode** (single-user deployment), the browser queries ClickHouse
 directly, bypassing the proxy entirely.
 
-### Alert Evaluation (Disabled in DFE - See DFE Rules and Hunts)
+## Alert Evaluation (Disabled in DFE - See DFE Rules and Hunts)
 
 > **DFE note:** The HyperDX alert checker is **not started** in DFE deployments.
 > Detection and alerting are handled by the DFE platform's rules engine and hunt

@@ -50,7 +50,7 @@ Authentication:
 - **External API** (`/api/v2/*`) uses Bearer token auth matching the user's
   `accessKey` field. Rate limited to 100 req/min.
 
-### OTel Collector & OpAMP
+## OTel Collector & OpAMP
 
 ```mermaid
 sequenceDiagram
@@ -89,29 +89,29 @@ pipelines) based on team settings. This enables:
 In **standalone mode** (no OpAMP), the collector uses static config files from
 `docker/otel-collector/config.yaml`.
 
-### Key Integrations
+## Key Integrations
 
-### Session Replay
+## Session Replay
 
 Browser SDKs capture DOM mutations as **rrweb** events, shipped as OTLP logs
 with a `rr-web.event` attribute. The collector routes these to
 `hyperdx_sessions`. The frontend reconstructs playback using rrweb's `Replayer`
 class, correlated to logs and traces via `rum.sessionId`.
 
-### Dashboards
+## Dashboards
 
 Stored as documents (via FerretDB -> PostgreSQL) as a set of **tiles**, each
 containing a `SavedChartConfig` (source, display type, select/where/groupBy).
 Dashboard-level filters apply across all tiles. Import/export is supported via
 versioned JSON templates.
 
-### Saved Searches
+## Saved Searches
 
 Persisted queries referencing a Source, with Lucene or SQL `where` clauses.
 Stored as documents via FerretDB -> PostgreSQL. Displayed in the sidebar
 navigation grouped by tags. Can have associated alerts.
 
-### AI Assistant
+## AI Assistant
 
 Uses the Vercel AI SDK with Anthropic as the provider. The backend introspects
 ClickHouse table metadata to provide schema context, then returns structured

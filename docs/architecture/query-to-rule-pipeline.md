@@ -42,7 +42,7 @@ upstream's `isUserAuthenticated`.
 **Request** - `chartConfig` (the same `SavedChartConfig` shape a dashboard tile
 uses), plus optional `startTime` / `endTime` in milliseconds.
 
-**Response**
+**Response** fields:
 
 | Field    | What it is                                            |
 | -------- | ----------------------------------------------------- |

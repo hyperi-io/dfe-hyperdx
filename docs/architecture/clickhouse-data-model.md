@@ -56,7 +56,7 @@ navigation between telemetry types.
 This means HyperDX can work on top of **any** ClickHouse table - you point it at
 your existing schema and map the columns.
 
-### ClickHouse Data Model
+## ClickHouse Data Model
 
 ```mermaid
 erDiagram

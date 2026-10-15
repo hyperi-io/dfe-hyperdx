@@ -51,7 +51,7 @@ carry a small catalogued delta of ours, and both are listed in `.fork-surface`.
 
 ## The documentation set
 
-```
+```text
 docs/
   architecture/    what the system is, and what DFE changes about it
   fork/            how the fork is held together and kept in sync

@@ -4,7 +4,7 @@ HyperDX includes a built-in alerting system (the `checkAlerts` background task,
 Alert/AlertHistory models, webhook notifications). **We disable this entirely**
 and use the DFE platform's own rules engine and hunt workflows instead.
 
-### What Gets Disabled
+## What Gets Disabled
 
 | HyperDX Component                                    | Status                                                       | Reason                                                  |
 | ---------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------- |
@@ -15,7 +15,7 @@ and use the DFE platform's own rules engine and hunt workflows instead.
 | Alert UI in frontend                                 | **Left in place** - just inaccessible via RBAC               | No frontend code changes                                |
 | Silence alert endpoint (`/ext/silence-alert/:token`) | **Dead** - no alerts fire, so no tokens are generated        | No change needed                                        |
 
-### How to Disable
+## How to Disable
 
 The `checkAlerts` task runs as a separate Node.js process
 (`nx run @hyperdx/api:dev-task check-alerts`). In production it's started
@@ -33,7 +33,7 @@ alongside the main API. To disable:
 # p, deny, *, webhooks, *
 ```
 
-### Why Not Remove the Code?
+## Why Not Remove the Code?
 
 Additive-only principle. The alert models, controllers, routes, and frontend
 components are all upstream code. If we delete or modify them, every upstream
@@ -42,7 +42,7 @@ creates conflicts. By leaving the code in place but not running the task and
 blocking API access via Casbin, we get the same result with zero fork
 divergence.
 
-### DFE Rules and Hunts Replace Alerting
+## DFE Rules and Hunts Replace Alerting
 
 The DFE platform provides:
 

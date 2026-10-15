@@ -116,13 +116,13 @@ need migrating.
 Run this ONCE per clone (rerere and the hook are per-clone git config, so a
 fresh clone, a container and an agent sandbox all start unprotected):
 
-```
+```sh
 ./scripts/fork-setup.sh
 ```
 
 Then:
 
-```
+```sh
 .githooks/fork-surface-check.py            # staged changes (runs as pre-commit)
 .githooks/fork-surface-check.py --base origin/main   # a range, as CI does
 .githooks/fork-surface-check.py --drift    # what has upstream moved under us?
@@ -139,7 +139,7 @@ hook is a convenience rather than the control. `FORK_SURFACE_WARN=1` downgrades
 it to a warning when you genuinely need to land an exception - add the path to
 `.fork-surface` and FORK.md in the same commit.
 
-## Our files get our standards. Upstream's stay untouched.
+## Our files get our standards, upstream's stay untouched
 
 This applies to DOCS as much as code, and it is the rule that decides where a
 new file goes:

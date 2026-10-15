@@ -1,0 +1,44 @@
+# Upstream HyperDX code is never edited in this fork, so semgrep scans only our
+# code. A security fix to upstream code goes through security/patches instead.
+
+# semgrep's built-in defaults, which any .semgrepignore replaces.
+node_modules/
+build/
+dist/
+vendor/
+.env/
+.venv/
+.tox/
+*.min.js
+.npm/
+.yarn/
+test/
+tests/
+*_test.go
+.semgrep
+.semgrep_logs/
+
+# Upstream trees. Packages are matched by file, so the re-includes below can
+# reach our files inside them.
+/docker/
+/proxy/
+/smoke-tests/
+/scripts/dev-portal/
+/packages/*/bin/
+/packages/**/*.*
+/packages/**/Dockerfile
+
+# Our code inside the upstream packages, by the fork's dfe naming.
+!/packages/**/dfe/**
+!/packages/**/*.dfe.*
+
+# Our files in upstream directories that carry no dfe name.
+!/packages/api/src/tasks/__tests__/provisionDashboards.test.ts
+!/packages/app/pages/dashboards/default.tsx
+!/packages/app/pages/login.tsx
+!/packages/app/proxy.ts
+
+# Our findings accepted in security/accepted.yaml. fork-security.yml still scans
+# and reports them, so the acceptance stays visible there.
+/packages/app/src/dfe/__tests__/dfeTheme.test.ts
+/packages/app/src/dfe/__tests__/forkDeltas.test.ts
