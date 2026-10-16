@@ -1,5 +1,11 @@
 # dfe-hyperdx - a long-lived FORK of hyperdxio/hyperdx
 
+**Two kinds of change.** DFE features are permanent and live in merged history,
+which rerere replays. Security fixes, scanner advisories included, are temporary
+and made per release after the upstream sync, in the generated `security/` layer
+and never by hand in `package.json`, `yarn.lock` or an upstream file - see
+[docs/fork/sync-cycle.md](docs/fork/sync-cycle.md) "Adding a security fix".
+
 ## STOP - the governing rule
 
 **MINIMISE what we change in ANYTHING that comes from upstream.** Upstream

@@ -17,6 +17,9 @@ At the last pass: 99 open alerts, **1** of them real.
 
 If the doc already covers the advisory you found, there is nothing to file.
 
+osv-scanner's verdict on each advisory id is in
+[osv-scanner.toml](osv-scanner.toml).
+
 ## Why a scanner over-reports here
 
 The shipped image is not the repo. The root `Dockerfile` builds the runtime

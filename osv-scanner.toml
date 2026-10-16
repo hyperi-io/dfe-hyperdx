@@ -1,0 +1,354 @@
+# osv-scanner verdicts for yarn.lock, which is upstream HyperDX's tree. At the
+# root because osv-scanner reads its config only beside the lockfile.
+#
+# Advisories are fixed in the security layer during a release sync, never here
+# and never in yarn.lock by hand: docs/fork/sync-cycle.md "Adding a security fix".
+#
+# Every entry is graded against what the root Dockerfile ships - the api
+# production focus, Next's standalone trace and the app's browser bundle - for
+# @hyperdx/app@2.41.0. Re-grade them on each sync and delete any id the scanner
+# no longer reports.
+
+[[IgnoredVulns]]
+id = "GHSA-968p-4wvh-cqc8"
+reason = "@babel/runtime: the flaw is in the wrapRegExp helper, and no shipped package calls it."
+
+[[IgnoredVulns]]
+id = "GHSA-p498-v437-472g"
+reason = "@humanfs/node: eslint's file layer, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-q7rr-3cgh-j5r3"
+reason = "@opentelemetry/sdk-node: the Prometheus exporter starts only when OTEL_METRICS_EXPORTER names prometheus, and nothing here, in dfe-infra or in dfe-docker sets it."
+
+[[IgnoredVulns]]
+id = "GHSA-8988-4f7v-96qf"
+reason = "@opentelemetry/core: tolerable risk. Baggage parsing runs on each request once the tracing SDK starts, bounded by Node's 16 KB header cap; moderate, and 1.30.1 is pinned exactly by its parents."
+
+[[IgnoredVulns]]
+id = "GHSA-qqmp-wf37-98f9"
+reason = "@opentelemetry/instrumentation-*: tolerable risk. Only mongoose has a driver to patch, and it sends the Mongo username, not the password, to the operator's own OTLP endpoint; moderate."
+
+[[IgnoredVulns]]
+id = "GHSA-45rx-2jwx-cxfr"
+reason = "@opentelemetry/propagator-jaeger: runs only when OTEL_PROPAGATORS names jaeger, which nothing here, in dfe-infra or in dfe-docker sets; the default is tracecontext and baggage."
+
+[[IgnoredVulns]]
+id = "GHSA-82fw-gwwq-j7x9"
+reason = "@vitest/mocker: under @storybook/builder-webpack5, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-2g4f-4pwh-qvx6"
+reason = "ajv 6.12.6: schema-utils 3 under webpack build plugins, not in the image, which ships ajv 8.20.0."
+
+[[IgnoredVulns]]
+id = "GHSA-3pq3-5fj3-cg6v"
+reason = "axios 1.18.1: nx's exact pin, a root devDependency, not in the image, which ships 1.20.0."
+
+[[IgnoredVulns]]
+id = "GHSA-44g4-m2mj-wpvx"
+reason = "axios 1.18.1: nx's exact pin, a root devDependency, not in the image, which ships 1.20.0."
+
+[[IgnoredVulns]]
+id = "GHSA-4hqw-qxg8-jxx2"
+reason = "axios 1.18.1: nx's exact pin, a root devDependency, not in the image, which ships 1.20.0."
+
+[[IgnoredVulns]]
+id = "GHSA-542g-h47m-68v8"
+reason = "axios 1.18.1: nx's exact pin, a root devDependency, not in the image, which ships 1.20.0."
+
+[[IgnoredVulns]]
+id = "GHSA-9fr6-4gfg-395g"
+reason = "axios 1.18.1: nx's exact pin, a root devDependency, not in the image, which ships 1.20.0."
+
+[[IgnoredVulns]]
+id = "GHSA-c29m-xwm3-cm6r"
+reason = "axios 1.18.1: nx's exact pin, a root devDependency, not in the image, which ships 1.20.0."
+
+[[IgnoredVulns]]
+id = "GHSA-j8rh-479h-cp32"
+reason = "axios 1.18.1: nx's exact pin, a root devDependency, not in the image, which ships 1.20.0."
+
+[[IgnoredVulns]]
+id = "GHSA-m8m8-qj5v-23w3"
+reason = "axios 1.18.1: nx's exact pin, a root devDependency, not in the image, which ships 1.20.0."
+
+[[IgnoredVulns]]
+id = "GHSA-mghh-pgcx-3jjj"
+reason = "axios 1.18.1: nx's exact pin, a root devDependency, not in the image, which ships 1.20.0."
+
+[[IgnoredVulns]]
+id = "GHSA-r4gj-5m52-g5wh"
+reason = "axios 1.18.1: nx's exact pin, a root devDependency, not in the image, which ships 1.20.0."
+
+[[IgnoredVulns]]
+id = "GHSA-vh66-26gq-q6x8"
+reason = "axios 1.18.1: nx's exact pin, a root devDependency, not in the image, which ships 1.20.0."
+
+[[IgnoredVulns]]
+id = "GHSA-x97p-jq2g-jp4f"
+reason = "axios 1.18.1: nx's exact pin, a root devDependency, not in the image, which ships 1.20.0."
+
+[[IgnoredVulns]]
+id = "GHSA-w5vr-8v7q-w6rv"
+reason = "baseline-browser-mapping: browserslist data in Next's server trace, loaded only by next/dist/build, never by next/dist/server."
+
+[[IgnoredVulns]]
+id = "GHSA-378v-28hj-76wf"
+reason = "bn.js 5.2.1: browserify-rsa and browserify-sign under Storybook, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-6j4f-fj2g-mc7p"
+reason = "brace-expansion 5.0.8: nx's exact pin, a root devDependency, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-q2hr-2g5m-vwhr"
+reason = "brace-expansion 5.0.8: nx's exact pin, a root devDependency, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-qhr7-859c-m2p7"
+reason = "brace-expansion 5.0.8: nx's exact pin, a root devDependency, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-rgw5-rvv9-x895"
+reason = "brace-expansion 5.0.8: nx's exact pin, a root devDependency, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+reason = "braces: no fixed release. http-proxy-middleware reaches micromatch only for a glob pathFilter, both proxies use a function or the default, and braces expands the pattern, never the URL."
+
+[[IgnoredVulns]]
+id = "GHSA-73wf-gq98-2v4g"
+reason = "browserslist: in Next's server trace, loaded only by next/dist/build over our own config, never by next/dist/server."
+
+[[IgnoredVulns]]
+id = "GHSA-c83g-rgw3-j3cx"
+reason = "browserslist: in Next's server trace, loaded only by next/dist/build over our own config, never by next/dist/server."
+
+[[IgnoredVulns]]
+id = "GHSA-2wm5-q62r-hmrv"
+reason = "colord: stylelint, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-vc2v-76pw-4v95"
+reason = "compression 1.8.1: serve's exact pin, an app devDependency, not in the image, which ships 1.8.2."
+
+[[IgnoredVulns]]
+id = "GHSA-3xgq-45jj-v275"
+reason = "cross-spawn 5.1.0: spawndamnit under @changesets/cli, not in the image, which ships 7.0.6."
+
+[[IgnoredVulns]]
+id = "GHSA-8cw4-87c7-c6xx"
+reason = "csv-parse: csv under @changesets/cli, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-848j-6mx2-7j84"
+reason = "elliptic: no fixed release. browserify-sign and create-ecdh under Storybook, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-g7r4-m6w7-qqqr"
+reason = "esbuild 0.27.4: tsx's dev server on Windows, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-gh4j-gqv2-49f6"
+reason = "fast-xml-parser: the flaw is in XMLBuilder, and the only shipped parent, @aws-sdk/client-sts, uses the parser."
+
+[[IgnoredVulns]]
+id = "GHSA-px8p-9vwx-vf98"
+reason = "fflate: only the session recorder pulls it, inlined into @hyperdx/browser's prebuilt bundle, which compresses and never calls unzipSync."
+
+[[IgnoredVulns]]
+id = "GHSA-2883-xcg3-v3hh"
+reason = "js-yaml: 4.1.1 ships only under swagger-jsdoc, which api-app.ts mounts outside NODE_ENV=production, and the image runs production; 3.15.0 is @changesets and jest tooling."
+
+[[IgnoredVulns]]
+id = "GHSA-52cp-r559-cp3m"
+reason = "js-yaml: 4.1.1 ships only under swagger-jsdoc, which api-app.ts mounts outside NODE_ENV=production, and the image runs production."
+
+[[IgnoredVulns]]
+id = "GHSA-5p4m-2wfm-xmqj"
+reason = "js-yaml: 4.1.1 ships only under swagger-jsdoc, which api-app.ts mounts outside NODE_ENV=production, and the image runs production; 3.15.0 is @changesets and jest tooling."
+
+[[IgnoredVulns]]
+id = "GHSA-h67p-54hq-rp68"
+reason = "js-yaml: 4.1.1 ships only under swagger-jsdoc, which api-app.ts mounts outside NODE_ENV=production, and the image runs production."
+
+[[IgnoredVulns]]
+id = "GHSA-f23m-r3pf-42rh"
+reason = "lodash 4.17.x: concurrently's copy calls castArray, defaults, concat, flatMap, reduce, escapeRegExp and get, never unset or omit; 4.17.23 is @hyperdx/otel-web's, inlined in the browser SDK."
+
+[[IgnoredVulns]]
+id = "GHSA-r5fr-rjxr-66jc"
+reason = "lodash 4.17.x: concurrently's copy never calls template; 4.17.23 is @hyperdx/otel-web's, inlined in the browser SDK."
+
+[[IgnoredVulns]]
+id = "GHSA-23c5-xmqv-rm74"
+reason = "minimatch: 3.1.2 ships only under swagger-jsdoc's glob, mounted outside production, over our own patterns; 8.0.4 and 9.0.4 are build tooling."
+
+[[IgnoredVulns]]
+id = "GHSA-3ppc-4f35-3m26"
+reason = "minimatch: 3.1.2 ships only under swagger-jsdoc's glob, mounted outside production, over our own patterns; 8.0.4 and 9.0.4 are build tooling."
+
+[[IgnoredVulns]]
+id = "GHSA-7r86-cg39-jmmj"
+reason = "minimatch: 3.1.2 ships only under swagger-jsdoc's glob, mounted outside production, over our own patterns; 8.0.4 and 9.0.4 are build tooling."
+
+[[IgnoredVulns]]
+id = "GHSA-2v37-7h3g-55p8"
+reason = "nanoid: postcss calls nanoid(6) with a fixed size, and the loop needs a custom generator of size zero."
+
+[[IgnoredVulns]]
+id = "GHSA-hrvq-x7jp-36xv"
+reason = "nx: root devDependency, not in the image; nx migrate runs only when someone invokes it."
+
+[[IgnoredVulns]]
+id = "GHSA-w3vv-58gj-gw77"
+reason = "nx: root devDependency, not in the image; the daemon socket exists only where nx runs."
+
+[[IgnoredVulns]]
+id = "GHSA-37ch-88jc-xwx2"
+reason = "path-to-regexp: 0.1.12 is express's router, but the ReDoS needs three or more parameters in one path segment and no api route has more than one; 6.2.2 is msw, test tooling."
+
+[[IgnoredVulns]]
+id = "GHSA-3v7f-55p6-f55p"
+reason = "picomatch 4.0.3: jest, tinyglobby and dotenvx tooling, not in the image, which ships 2.3.2."
+
+[[IgnoredVulns]]
+id = "GHSA-c2c7-rcm5-vvqj"
+reason = "picomatch 4.0.3: jest, tinyglobby and dotenvx tooling, not in the image, which ships 2.3.2."
+
+[[IgnoredVulns]]
+id = "GHSA-rj75-hqrm-r3gf"
+reason = "postcss-selector-parser 6.1.4: CSS-modules build plugins, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-6g55-p6wh-862q"
+reason = "postcss: 8.4.38 is inlined in rrweb-snapshot for session replay in the browser, which has no fs to read a source map from; 8.5.6 is stylelint's."
+
+[[IgnoredVulns]]
+id = "GHSA-fxqj-rqcc-2cmp"
+reason = "postcss: 8.4.38 is inlined in rrweb-snapshot for session replay in the browser, which has no fs to read a source map from; 8.5.6 is stylelint's."
+
+[[IgnoredVulns]]
+id = "GHSA-qx2v-qp2m-jg93"
+reason = "postcss: rrweb-snapshot writes the output through createTextNode into a sandboxed iframe with no script permission, so an unescaped </style> parses as nothing; 8.5.6 is stylelint's."
+
+[[IgnoredVulns]]
+id = "GHSA-r28c-9q8g-f849"
+reason = "postcss: 8.4.38 is inlined in rrweb-snapshot for session replay in the browser, which has no fs to read a source map from; 8.5.6 is stylelint's."
+
+[[IgnoredVulns]]
+id = "GHSA-2pr8-phx7-x9h3"
+reason = "protobufjs 6.11.6: the session recorder's copy; @hyperdx/browser ships a prebuilt bundle, so it is never bundled, and the shipped 7.x copy is 7.6.6."
+
+[[IgnoredVulns]]
+id = "GHSA-66ff-xgx4-vchm"
+reason = "protobufjs 6.11.6: the session recorder's copy; @hyperdx/browser ships a prebuilt bundle, so it is never bundled, and the shipped 7.x copy is 7.6.6."
+
+[[IgnoredVulns]]
+id = "GHSA-685m-2w69-288q"
+reason = "protobufjs 6.11.6: the session recorder's copy; @hyperdx/browser ships a prebuilt bundle, so it is never bundled, and the shipped 7.x copy is 7.6.6."
+
+[[IgnoredVulns]]
+id = "GHSA-75px-5xx7-5xc7"
+reason = "protobufjs 6.11.6: the session recorder's copy; @hyperdx/browser ships a prebuilt bundle, so it is never bundled, and the shipped 7.x copy is 7.6.6."
+
+[[IgnoredVulns]]
+id = "GHSA-f38q-mgvj-vph7"
+reason = "protobufjs 6.11.6: the session recorder's copy; @hyperdx/browser ships a prebuilt bundle, so it is never bundled, and the shipped 7.x copy is 7.6.6."
+
+[[IgnoredVulns]]
+id = "GHSA-fx83-v9x8-x52w"
+reason = "protobufjs 6.11.6: the session recorder's copy; @hyperdx/browser ships a prebuilt bundle, so it is never bundled, and the shipped 7.x copy is 7.6.6."
+
+[[IgnoredVulns]]
+id = "GHSA-jggg-4jg4-v7c6"
+reason = "protobufjs 6.11.6: the session recorder's copy; @hyperdx/browser ships a prebuilt bundle, so it is never bundled, and the shipped 7.x copy is 7.6.6."
+
+[[IgnoredVulns]]
+id = "GHSA-jvwf-75h9-cwgg"
+reason = "protobufjs 6.11.6: the session recorder's copy; @hyperdx/browser ships a prebuilt bundle, so it is never bundled, and the shipped 7.x copy is 7.6.6."
+
+[[IgnoredVulns]]
+id = "GHSA-q6x5-8v7m-xcrf"
+reason = "protobufjs 6.11.6: the session recorder's copy; @hyperdx/browser ships a prebuilt bundle, so it is never bundled, and the shipped 7.x copy is 7.6.6."
+
+[[IgnoredVulns]]
+id = "GHSA-wcpc-wj8m-hjx6"
+reason = "protobufjs 6.11.6: the session recorder's copy; @hyperdx/browser ships a prebuilt bundle, so it is never bundled, and the shipped 7.x copy is 7.6.6."
+
+[[IgnoredVulns]]
+id = "GHSA-xq3m-2v4x-88gg"
+reason = "protobufjs 6.11.6: the session recorder's copy; @hyperdx/browser ships a prebuilt bundle, so it is never bundled, and the shipped 7.x copy is 7.6.6."
+
+[[IgnoredVulns]]
+id = "GHSA-4mjr-xmp4-gh2g"
+reason = "qs: tolerable risk. express parses every query string and urlencoded body with it, behind the OIDC gateway; moderate, and express's ~6.14.0 admits no fix."
+
+[[IgnoredVulns]]
+id = "GHSA-q8mj-m7cp-5q26"
+reason = "qs: the crash is in qs.stringify, and express and body-parser only call qs.parse on request input; 6.15.1 is typed-rest-client tooling."
+
+[[IgnoredVulns]]
+id = "GHSA-x5fp-wj9c-mxmx"
+reason = "qs: tolerable risk. express parses every query string and urlencoded body with it, behind the OIDC gateway; moderate, and express's ~6.14.0 admits no fix."
+
+[[IgnoredVulns]]
+id = "GHSA-mw96-cpmx-2vgc"
+reason = "rollup 2.79.2: @stoplight/spectral-ruleset-bundler, lint tooling, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-c2qf-rxjj-qqgw"
+reason = "semver: 5.7.1 and 7.0.0 come from nodemon and its update notifier, not in the image, which ships 7.5.2 and later."
+
+[[IgnoredVulns]]
+id = "GHSA-5c6j-r48x-rmvq"
+reason = "serialize-javascript: terser-webpack-plugin in Next's server trace, loaded only by next/dist/build, never by next/dist/server."
+
+[[IgnoredVulns]]
+id = "GHSA-qj8w-gfj5-8c6v"
+reason = "serialize-javascript: terser-webpack-plugin in Next's server trace, loaded only by next/dist/build, never by next/dist/server."
+
+[[IgnoredVulns]]
+id = "GHSA-7w5x-hrqm-74c2"
+reason = "smol-toml 1.6.1: nx's exact pin, a root devDependency, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-r4xh-jqrq-34v2"
+reason = "smol-toml 1.6.1: nx's exact pin, a root devDependency, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-hp3w-g68c-fv3c"
+reason = "sprintf-js: no fixed release. argparse under js-yaml 3's CLI, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-52f5-9888-hmc6"
+reason = "tmp 0.0.33: external-editor under CLI prompts, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-ph9p-34f9-6g65"
+reason = "tmp 0.0.33: external-editor under CLI prompts, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-w5hq-g745-h8pq"
+reason = "uuid 8.3.2: every shipped caller uses v4(), which checks bounds; the flaw is in v3, v5 and v6 with a caller buffer."
+
+[[IgnoredVulns]]
+id = "GHSA-9965-vmph-33xx"
+reason = "validator: ships only under swagger-jsdoc's z-schema, mounted outside production, checking our own OpenAPI document."
+
+[[IgnoredVulns]]
+id = "GHSA-vghf-hv5q-vc2g"
+reason = "validator: ships only under swagger-jsdoc's z-schema, mounted outside production, checking our own OpenAPI document."
+
+[[IgnoredVulns]]
+id = "GHSA-g84c-rxfj-3j2c"
+reason = "webpack-dev-middleware: Storybook's dev server, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-96hv-2xvq-fx4p"
+reason = "ws 8.20.1: ink, jsdom and storybook, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-48c2-rrv3-qjmp"
+reason = "yaml 2.8.1: lint-staged, not in the image."

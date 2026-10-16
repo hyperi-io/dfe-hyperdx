@@ -29,9 +29,9 @@
 # ADDING ONE
 #   1. Add the entry below with every field filled in. `vector` is prose, not a
 #      CVSS string - describe the path.
-#   2. Add the matching entry to `resolutions` in the root package.json, and
-#      note it in docs/fork/what-we-changed.md's change catalogue (package.json is catalogued
-#      surface, so the edit is an exception that must be documented).
+#   2. Run `scripts/security-override.py --apply && yarn install`, which writes
+#      the `resolutions` entry - never edit that block by hand - and note the
+#      pin in docs/fork/what-we-changed.md's change catalogue.
 #   3. Set `upstream` to the upstream issue or release that tracks the fix, or
 #      `none`. We fix it here and do not raise it upstream: `--check` reads
 #      upstream's lockfile, so the unwind never waits on a link.

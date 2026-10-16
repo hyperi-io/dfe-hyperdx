@@ -46,6 +46,7 @@ permissions:
 
 jobs:
   ci:
+    # Quality's osv-scanner advisories are graded in osv-scanner.toml and fixed in the security layer during a sync: docs/fork/sync-cycle.md "Adding a security fix".
     uses: hyperi-io/hyperi-ci/.github/workflows/ts-ci.yml@main
     with:
       tag: ${{ inputs.tag || '' }}
