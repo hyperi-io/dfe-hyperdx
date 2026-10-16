@@ -89,9 +89,9 @@ router.put(
 /**
  * DELETE /dfe/sources/:name
  *
- * Drop the source from the manifest and from every team holding it. A name the
- * manifest never carried removes nothing, so a delete can never take a seeded
- * source with it.
+ * Drop the source from the manifest and from every team holding it. A seeded
+ * name the manifest never carried answers 409 and removes nothing, so a delete
+ * can never take a seeded source with it.
  *
  * Response: { name, removed: [team names] }
  */
@@ -101,6 +101,14 @@ router.delete(
   async (req, res, next) => {
     try {
       const { name } = req.params;
+      if (!(await isOwnedName(name))) {
+        // Removing a seeded source would take the landing or hunts view off
+        // every team at once.
+        return res.status(409).json({
+          error: `'${name}' is a seeded HyperDX source and is not the engine's to remove`,
+        });
+      }
+
       const { removed } = await removeEverywhere(name);
       logger.info(
         { source: name, removed: removed.length },

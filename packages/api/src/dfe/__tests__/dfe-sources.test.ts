@@ -360,12 +360,24 @@ describe('the /dfe/sources routes', () => {
   });
 
   test('DELETE reports the teams it removed the source from', async () => {
+    mockManifestExists.mockResolvedValue({ _id: 'manifest-1' });
     mockSources.mockResolvedValue([{ _id: 'src-1', name: 'filebeat' }]);
 
     const res = await request(app).delete('/dfe/sources/filebeat');
 
     expect(res.status).toBe(200);
     expect(res.body.removed).toEqual(['dfe-admins', 'customer-acme', 'dfe']);
+    expect(mockManifestDelete).toHaveBeenCalledWith({ name: 'filebeat' });
+  });
+
+  test('DELETE refuses a seeded name and removes nothing', async () => {
+    mockSources.mockResolvedValue([{ _id: 'src-1', name: 'main' }]);
+
+    const res = await request(app).delete('/dfe/sources/main');
+
+    expect(res.status).toBe(409);
+    expect(mockManifestDelete).not.toHaveBeenCalled();
+    expect(mockDeleteSource).not.toHaveBeenCalled();
   });
 
   test('GET lists the registered sources per team', async () => {
