@@ -47,14 +47,19 @@ export async function blockProvisionedWrites(
 
   // The router mounts these as `/:id`, so the id is the first path segment.
   const id = req.path.split('/').filter(Boolean)[0];
-  if (!id) {
+  // BSON drops an undefined team from the filter, which would then match every
+  // team's dashboard.
+  const callerTeam = req.user?.team;
+  if (!id || !callerTeam) {
     return next();
   }
 
   let provisioned: { name: string; team: unknown } | null = null;
   try {
+    // Scoped to the caller's team, so another team's dashboard is answered as a
+    // missing one.
     provisioned = await Dashboard.findOne(
-      { _id: id, provisioned: true },
+      { _id: id, provisioned: true, team: callerTeam },
       'name team',
     ).lean();
   } catch (err) {
