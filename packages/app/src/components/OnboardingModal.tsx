@@ -13,11 +13,13 @@ import { Button, Modal, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconArrowLeft } from '@tabler/icons-react';
 
-import { DFE_UI_BASE_URL } from '@/config';
+import { DFE_UI_BASE_URL, IS_PROMQL_ENABLED } from '@/config';
 import { useConnections } from '@/connection';
 import { useMetadataWithSettings } from '@/hooks/useMetadata';
 import {
   inferTableSourceConfig,
+  pickTimeSeriesTable,
+  PROMQL_TIMESTAMP_EXPRESSION,
   useCreateSource,
   useSources,
   useUpdateSource,
@@ -268,10 +270,25 @@ function OnboardingModalComponent({
         setIsAutoDetecting(true);
         setHasAutodetected(true);
 
-        // Try to detect OTEL tables
-        const otelTables = await metadata.getOtelTables({ connectionId });
+        const getTimeSeriesTables = IS_PROMQL_ENABLED
+          ? metadata.getTimeSeriesTables({ connectionId }).catch(err => {
+              console.error('Error detecting TimeSeries tables:', err);
+              return [];
+            })
+          : [];
 
-        if (!otelTables) {
+        // Try to detect OTEL tables, and a TimeSeries table for PromQL
+        const [otelTables, timeSeriesTables] = await Promise.all([
+          metadata.getOtelTables({ connectionId }),
+          getTimeSeriesTables,
+        ]);
+
+        const timeSeriesTable = pickTimeSeriesTable(
+          timeSeriesTables,
+          otelTables?.database,
+        );
+
+        if (!otelTables && !timeSeriesTable) {
           // No tables detected, go to manual source setup
           setStep('source');
           return;
@@ -280,7 +297,7 @@ function OnboardingModalComponent({
         const createdSources: TSource[] = [];
 
         // Create Log Source if available
-        if (otelTables.tables.logs) {
+        if (otelTables?.tables.logs) {
           const inferredConfig = await inferTableSourceConfig({
             kind: SourceKind.Log,
             databaseName: otelTables.database,
@@ -318,7 +335,7 @@ function OnboardingModalComponent({
         }
 
         // Create Trace Source if available
-        if (otelTables.tables.traces) {
+        if (otelTables?.tables.traces) {
           const inferredConfig = await inferTableSourceConfig({
             kind: SourceKind.Trace,
             databaseName: otelTables.database,
@@ -365,9 +382,9 @@ function OnboardingModalComponent({
         }
 
         // Create Metrics Source if any metrics tables are available
-        const hasMetrics = Object.values(otelTables.tables.metrics).some(
-          t => t != null,
-        );
+        const hasMetrics =
+          otelTables != null &&
+          Object.values(otelTables.tables.metrics).some(t => t != null);
         if (hasMetrics) {
           const metricTables: MetricTable = {
             [MetricsDataType.Gauge]: '',
@@ -414,7 +431,7 @@ function OnboardingModalComponent({
         }
 
         // Create Session Source if available
-        if (otelTables.tables.sessions) {
+        if (otelTables?.tables.sessions) {
           const inferredConfig = await inferTableSourceConfig({
             kind: SourceKind.Session,
             databaseName: otelTables.database,
@@ -451,6 +468,24 @@ function OnboardingModalComponent({
               'Session source was found but missing required fields',
               inferredConfig,
             );
+          }
+        }
+
+        // Create PromQL Source if a TimeSeries table is available
+        if (timeSeriesTable) {
+          try {
+            const promqlSource = await createSourceMutation.mutateAsync({
+              source: {
+                kind: SourceKind.Promql,
+                name: 'PromQL',
+                connection: connectionId,
+                from: timeSeriesTable,
+                timestampValueExpression: PROMQL_TIMESTAMP_EXPRESSION,
+              },
+            });
+            createdSources.push(promqlSource);
+          } catch (err) {
+            console.error('Error creating PromQL source:', err);
           }
         }
 

@@ -45,6 +45,10 @@ quality:
     - scripts/dev-env.sh
     - scripts/ensure-dev-portal.sh
     - scripts/test-e2e.sh
+    # Ours, but the only flagged line is the licence header, and licence text is left as written.
+    - .github/workflows/ci.yml
+    - scripts/dfe-lint-ours.mjs
+  # osv-scanner verdicts live in osv-scanner.toml; a fix goes in the security layer during a sync, see docs/fork/sync-cycle.md "Adding a security fix".
   # Mirrors an entry in security/accepted.yaml, which hyperi-ci's semgrep does not read.
   ignore:
     - tool: semgrep

@@ -117,8 +117,7 @@ backwards, deliberately: **off by default, on only for what WE added.**
 - `renovate.json` disables every manager and re-enables exactly one thing: the
   SHA-pinned actions in the workflows we own. Upstream's workflows are excluded
   BY NAME so a sync that adds one does not silently opt it in.
-- CodeQL and GitHub code security are OFF, as are Dependabot's automatic fix
-  PRs.
+- CodeQL default setup is ON. Dependabot's automatic fix PRs are OFF.
 - Dependabot vulnerability ALERTS stay ON - they are the input to
   `scripts/security-triage.py`.
 - gitleaks stays ON and blocking. It scans OUR commits for OUR secrets and has

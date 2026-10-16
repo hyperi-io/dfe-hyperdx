@@ -320,15 +320,16 @@ header check is what holds when a deployment authenticates some other way.
   now call `mergePath` with the JSON roots derived from the field list they
   already hold, so neither adds a query.
 - `packages/app/jest.dfe.config.js` + `jest.dfe.setup.js` - pins
-  `NEXT_PUBLIC_THEME=hyperdx` for app unit tests, so upstream's suite passes
-  unchanged instead of us editing their test files to accommodate the rebrand.
-  Mirrors `packages/api/jest.dfe.config.js`. The setup file is loaded by the
-  jest config rather than compiled, so no tsconfig project covers it and typed
-  linting cannot parse it; **`packages/app/eslint.config.mjs`** carries one
-  added `ignores` entry for it, beside upstream's own `global-setup.js` line.
-  The env pin does not reach the CHART palette or `getTheme`'s fallback, both of
-  which resolve the brand without reading `NEXT_PUBLIC_THEME`, so three upstream
-  test files still carry a corrected expectation and stay catalogued:
+  `NEXT_PUBLIC_THEME=hyperdx` and `NEXT_PUBLIC_DFE_SHOW_SOURCE_ADD=true` for app
+  unit tests, so upstream's suite passes unchanged instead of us editing their
+  test files to accommodate the rebrand. Mirrors
+  `packages/api/jest.dfe.config.js`. The setup file is loaded by the jest config
+  rather than compiled, so no tsconfig project covers it and typed linting
+  cannot parse it; **`packages/app/eslint.config.mjs`** carries one added
+  `ignores` entry for it, beside upstream's own `global-setup.js` line. The env
+  pin does not reach the CHART palette or `getTheme`'s fallback, both of which
+  resolve the brand without reading `NEXT_PUBLIC_THEME`, so three upstream test
+  files still carry a corrected expectation and stay catalogued:
   **`src/__tests__/ChartUtils.test.ts`** and **`src/__tests__/utils.test.ts`**
   (`detectActiveTheme` in `utils.ts` returns `dfe` for a jsdom document with no
   theme class, never upstream's `hyperdx`) and
@@ -566,11 +567,6 @@ header check is what holds when a deployment authenticates some other way.
   the next advisory against the same package too. Each id carries its reason and
   the traces are in [security-sync.md](security-sync.md). Upstream churns this
   file rarely, so the conflict is small.
-
-  One temporary entry sits in upstream's `npmPreapprovedPackages`:
-  `handlebars@4.7.10`, which admits that single version past `npmMinimalAgeGate`
-  so the lockfile can take the fix for three alerts. Delete the line and its
-  comment once the version is older than the gate, from 2026-10-12T22:37Z.
 
 - `.github/workflows/docker-build.yml` - three deltas. The first two are for the
   same failure (#51). A `Free disk space` step calling
