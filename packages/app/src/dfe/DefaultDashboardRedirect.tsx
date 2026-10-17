@@ -13,8 +13,8 @@ import { Center, Loader, Stack, Text } from '@mantine/core';
 
 import { useDashboards } from '@/dashboard';
 
-// Must match the name built in the api package
-// (dfe/dashboards/definitions.ts buildThroughputDashboard).
+// Must match the name dfe-engine ships in
+// src/dfe_engine/hyperdx/dashboards/dfe-throughput.json.
 const DFE_DEFAULT_DASHBOARD_NAME = 'DFE Throughput';
 
 export default function DefaultDashboardRedirect() {
