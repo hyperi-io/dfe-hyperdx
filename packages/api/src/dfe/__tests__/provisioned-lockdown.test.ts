@@ -55,8 +55,27 @@ function findsProvisioned(doc: { name: string; team: string } | null) {
   mockFindOne.mockReturnValue({ lean: jest.fn().mockResolvedValue(doc) });
 }
 
-function call(method: string, path: string, dfeRole?: string) {
-  const req = { method, path, dfeRole } as Request;
+/** A findOne that answers as Mongo does: a filter naming a team matches only that team's dashboard. */
+function storeHolds(doc: { name: string; team: string }) {
+  mockFindOne.mockImplementation((filter: { team?: unknown }) => ({
+    lean: jest
+      .fn()
+      .mockResolvedValue(
+        filter.team === undefined || String(filter.team) === doc.team
+          ? doc
+          : null,
+      ),
+  }));
+}
+
+function call(
+  method: string,
+  path: string,
+  dfeRole?: string,
+  team: string | null = CALLER_TEAM,
+) {
+  const user = team === null ? {} : { team };
+  const req = { method, path, dfeRole, user } as unknown as Request;
   const json = jest.fn();
   const listeners = new Map<string, () => void>();
   const res = {
@@ -78,7 +97,10 @@ function call(method: string, path: string, dfeRole?: string) {
 }
 
 const PROVISIONED = '/507f1f77bcf86cd799439011';
-const SHIPPED = { name: 'DFE Overview', team: '507f1f77bcf86cd799439099' };
+const CALLER_TEAM = '507f1f77bcf86cd799439099';
+const OTHER_TEAM = '507f1f77bcf86cd799439088';
+const SHIPPED = { name: 'DFE Overview', team: CALLER_TEAM };
+const OTHER_TEAMS_SHIPPED = { name: 'DFE Overview', team: OTHER_TEAM };
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -105,14 +127,18 @@ describe('blockProvisionedWrites', () => {
     },
   );
 
-  test('the id is matched with provisioned: true, never on id alone', async () => {
+  test('the id is matched with provisioned: true in the caller team, never on id alone', async () => {
     findsProvisioned(null);
     const { req, res, next } = call('PATCH', PROVISIONED);
 
     await blockProvisionedWrites(req, res, next);
 
     expect(mockFindOne).toHaveBeenCalledWith(
-      { _id: '507f1f77bcf86cd799439011', provisioned: true },
+      {
+        _id: '507f1f77bcf86cd799439011',
+        provisioned: true,
+        team: CALLER_TEAM,
+      },
       'name team',
     );
     expect(next).toHaveBeenCalled();
@@ -207,6 +233,42 @@ describe('blockProvisionedWrites - delete and tombstone', () => {
     await blockProvisionedWrites(req, res, next);
     finish(500);
 
+    expect(mockRecordTombstone).not.toHaveBeenCalled();
+  });
+
+  test.each(['PATCH', 'PUT'])(
+    "%s against another team's provisioned dashboard is answered as a missing one",
+    async method => {
+      storeHolds(OTHER_TEAMS_SHIPPED);
+      const { req, res, next } = call(method, PROVISIONED);
+
+      await blockProvisionedWrites(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    },
+  );
+
+  test("deleting another team's provisioned dashboard tombstones nothing", async () => {
+    storeHolds(OTHER_TEAMS_SHIPPED);
+    const { req, res, next, finish } = call('DELETE', PROVISIONED);
+
+    await blockProvisionedWrites(req, res, next);
+    finish(204);
+
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+    expect(mockRecordTombstone).not.toHaveBeenCalled();
+  });
+
+  test('a session with no team is passed through without a lookup', async () => {
+    storeHolds(SHIPPED);
+    const { req, res, next } = call('DELETE', PROVISIONED, undefined, null);
+
+    await blockProvisionedWrites(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(mockFindOne).not.toHaveBeenCalled();
     expect(mockRecordTombstone).not.toHaveBeenCalled();
   });
 
