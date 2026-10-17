@@ -80,4 +80,4 @@ release:
   helm:
     enabled: true
     contract: dfe/deploy/contract.json
-    library: '2.14.5'
+    library: '2.14.15'
