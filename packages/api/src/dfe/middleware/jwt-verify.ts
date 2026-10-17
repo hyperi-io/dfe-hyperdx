@@ -21,7 +21,10 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 import * as dfeConfig from '@/dfe/config';
 import { resolveEngineSession } from '@/dfe/controllers/engine-session';
-import { ensureOrgConnection } from '@/dfe/controllers/org-connection';
+import {
+  ensureOrgConnection,
+  recheckOnAuthFailure,
+} from '@/dfe/controllers/org-connection';
 import { findOrCreateTeamByName } from '@/dfe/controllers/team-provisioning';
 import {
   findOrCreateUserFromOIDC,
@@ -246,6 +249,8 @@ export async function engineJwtMiddleware(
       );
       return res.sendStatus(403);
     }
+    // A query ClickHouse refuses on this response has the next request re-check the credential.
+    recheckOnAuthFailure(res, String(team._id));
 
     // req.login() populates req.user and makes req.isAuthenticated() true.
     req.login(user, { session: false }, err => {

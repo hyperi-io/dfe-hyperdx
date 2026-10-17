@@ -42,6 +42,7 @@ jest.mock('@/dfe/controllers/user-provisioning', () => ({
 
 jest.mock('@/dfe/controllers/org-connection', () => ({
   ensureOrgConnection: jest.fn(),
+  recheckOnAuthFailure: jest.fn(),
   engineOrigin: () => 'https://engine.example.test',
 }));
 
@@ -81,8 +82,9 @@ const { placeUserOnTeam } = jest.requireMock<{ placeUserOnTeam: jest.Mock }>(
   '@/dfe/controllers/user-provisioning',
 );
 
-const { ensureOrgConnection } = jest.requireMock<{
+const { ensureOrgConnection, recheckOnAuthFailure } = jest.requireMock<{
   ensureOrgConnection: jest.Mock;
+  recheckOnAuthFailure: jest.Mock;
 }>('@/dfe/controllers/org-connection');
 
 // The config module exports consts, so a test that varies them has to write
@@ -412,6 +414,12 @@ describe('engineJwtMiddleware', () => {
       expect(
         (req.login as jest.Mock).mock.invocationCallOrder[0],
       ).toBeGreaterThan(ensured);
+    });
+
+    it('is re-checked when ClickHouse refuses it on this response', async () => {
+      const { reply } = await run({ sub: USER.email, groups: ['sre'] });
+
+      expect(recheckOnAuthFailure).toHaveBeenCalledWith(reply, TEAM._id);
     });
 
     it.each(['refused', 'mismatch'])(

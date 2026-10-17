@@ -62,6 +62,11 @@ flowchart TB
 - `dfe/models/team-seed.ts` holds one claim per team, atomic across replicas. A
   login's parallel requests make one seeding attempt, and a failed attempt is
   retried once the 30-second claim lapses.
+- A query ClickHouse refuses with code 516 marks the team's connection for a
+  re-check. The team's next request asks the engine for its material and updates
+  the stored host and password in place when they differ. A replica asks at most
+  once every 30 seconds per team, and ClickHouse's own error reaches the caller
+  in the meantime.
 
 ## The startup repair
 
