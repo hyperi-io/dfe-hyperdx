@@ -14,11 +14,14 @@
  * controllers means asserting narrower types than their broad exports.
  */
 
+import type { Response } from 'express';
 import { z } from 'zod';
 
 import {
   createConnection,
+  getConnectionById,
   getConnectionsByTeam,
+  updateConnection,
 } from '@/controllers/connection';
 import { createSource, getSources } from '@/controllers/sources';
 import * as dfeConfig from '@/dfe/config';
@@ -332,6 +335,34 @@ const SEED_LEASE_MS = 30_000;
 // When this process next claims a team its last attempt could not seed.
 const nextSeedCheck = new Map<string, number>();
 
+// ClickHouse's HTTP interface names a refused credential with this code in this header.
+const CLICKHOUSE_EXCEPTION_CODE = 'x-clickhouse-exception-code';
+const AUTHENTICATION_FAILED = '516';
+
+// A team ClickHouse keeps refusing asks the engine at most this often.
+const RECHECK_INTERVAL_MS = 30_000;
+
+// Teams whose held connection ClickHouse refused since this process last re-checked it.
+const refusedTeams = new Set<string>();
+
+// When this process last asked the engine for each refused team's material.
+const lastRecheck = new Map<string, number>();
+
+/**
+ * Mark the team's held connection for a re-check against the engine when
+ * ClickHouse refuses its credential on this response. The query proxy copies
+ * ClickHouse's response headers onto `res`.
+ */
+export function recheckOnAuthFailure(res: Response, teamId: string): void {
+  res.once('finish', () => {
+    if (
+      String(res.getHeader(CLICKHOUSE_EXCEPTION_CODE)) === AUTHENTICATION_FAILED
+    ) {
+      refusedTeams.add(teamId);
+    }
+  });
+}
+
 /**
  * Ensure the team named `identity` holds ONLY its own connection, as the
  * ClickHouse user `identity`, plus its seed sources: `main` and `hunts` for every
@@ -339,7 +370,8 @@ const nextSeedCheck = new Map<string, number>();
  * builders above for the RBAC split).
  *
  * Reads the team's connections on every request. A team holding a connection as
- * anyone else answers `mismatch` and is never reused. A team holding none is
+ * anyone else answers `mismatch` and is never reused. A held connection ClickHouse
+ * has refused is re-checked against the engine. A team holding none is
  * seeded, whatever an earlier attempt did, so a first seed that failed or a
  * connection since deleted is restored. One claim per team (dfe/models/team-seed)
  * keeps that to a single attempt at a time across replicas, and a failed attempt
@@ -352,7 +384,7 @@ export async function ensureOrgConnection(
   teamId: string,
   identity: string,
 ): Promise<SeedOutcome> {
-  let held: { username?: string }[];
+  let held: { _id?: unknown; username?: string }[];
   try {
     held = await getConnectionsByTeam(teamId);
   } catch (err) {
@@ -364,6 +396,12 @@ export async function ensureOrgConnection(
       .map(connection => connection.username)
       .filter(username => username !== identity);
     if (foreign.length === 0) {
+      await recheckRefusedConnection(
+        token,
+        teamId,
+        identity,
+        String(held[0]._id),
+      );
       return 'present';
     }
     logger.error(
@@ -392,9 +430,80 @@ export async function ensureOrgConnection(
   return outcome;
 }
 
-/** Forget every team this process is waiting to seed again. */
+/** Forget every team this process is waiting to seed again or re-check. */
 export function clearTeamSeedCache(): void {
   nextSeedCheck.clear();
+  refusedTeams.clear();
+  lastRecheck.clear();
+}
+
+/**
+ * Bring a refused team's held connection up to the engine's current material.
+ * The engine replaces a reader's password when the deployment hands it a new
+ * one, and the stored copy does not follow on its own. Asks at most once per
+ * RECHECK_INTERVAL_MS per team, so a refusal the engine cannot fix reaches the
+ * caller as ClickHouse's own error rather than looping. Never fails the request.
+ */
+async function recheckRefusedConnection(
+  token: string,
+  teamId: string,
+  identity: string,
+  connectionId: string,
+): Promise<void> {
+  const now = Date.now();
+  const last = lastRecheck.get(teamId);
+  if (
+    !refusedTeams.has(teamId) ||
+    (last !== undefined && now - last < RECHECK_INTERVAL_MS)
+  ) {
+    return;
+  }
+  refusedTeams.delete(teamId);
+  lastRecheck.set(teamId, now);
+  try {
+    const material = await fetchOrgConnection(token);
+    if (material === 'refused' || material === 'unavailable') {
+      logger.warn(
+        { teamId, team: identity, outcome: material },
+        'DFE: could not re-check a team connection ClickHouse refused',
+      );
+      return;
+    }
+    if (material.username !== identity) {
+      logger.warn(
+        { teamId, team: identity, username: material.username },
+        'DFE: engine connection is not the team identity; not updated',
+      );
+      return;
+    }
+    const stored = await getConnectionById(teamId, connectionId, true);
+    if (stored == null) {
+      return;
+    }
+    if (
+      stored.host === material.host &&
+      stored.password === material.password
+    ) {
+      logger.warn(
+        { teamId, team: identity },
+        'DFE: ClickHouse refused a team connection that matches the engine',
+      );
+      return;
+    }
+    await updateConnection(teamId, connectionId, {
+      host: material.host,
+      password: material.password,
+    } as Parameters<typeof updateConnection>[2]);
+    logger.info(
+      { teamId, team: identity },
+      'DFE: team connection updated to the engine material',
+    );
+  } catch (err) {
+    logger.warn(
+      { err, teamId },
+      'DFE: re-checking a refused team connection failed',
+    );
+  }
 }
 
 async function seedTeam(

@@ -25,6 +25,8 @@ jest.mock('@/utils/logger', () => ({
 jest.mock('@/controllers/connection', () => ({
   getConnectionsByTeam: jest.fn(),
   createConnection: jest.fn(),
+  getConnectionById: jest.fn(),
+  updateConnection: jest.fn(),
 }));
 
 jest.mock('@/controllers/sources', () => ({
@@ -53,15 +55,22 @@ jest.mock('@/dfe/models/team-seed', () => ({
   claimTeamSeed: jest.fn(),
 }));
 
+import { EventEmitter } from 'node:events';
+
+import type { Response } from 'express';
+
 import {
   createConnection,
+  getConnectionById,
   getConnectionsByTeam,
+  updateConnection,
 } from '@/controllers/connection';
 import { createSource, getSources } from '@/controllers/sources';
 import { seedDfeSources } from '@/dfe/controllers/dfe-sources';
 import {
   clearTeamSeedCache,
   ensureOrgConnection,
+  recheckOnAuthFailure,
 } from '@/dfe/controllers/org-connection';
 import { claimTeamSeed } from '@/dfe/models/team-seed';
 import { syncDashboards } from '@/tasks/provisionDashboards';
@@ -74,6 +83,8 @@ const mockCreateSource = createSource as jest.Mock;
 const mockSyncDashboards = syncDashboards as jest.Mock;
 const mockSeedDfeSources = seedDfeSources as jest.Mock;
 const mockClaim = claimTeamSeed as jest.Mock;
+const mockConnById = getConnectionById as jest.Mock;
+const mockUpdateConn = updateConnection as jest.Mock;
 const mockWarn = logger.warn as jest.Mock;
 const mockError = logger.error as jest.Mock;
 
@@ -704,6 +715,163 @@ describe('ensureOrgConnection - the seed claim', () => {
     expect(mockWarn).toHaveBeenCalledWith(
       expect.objectContaining({ err: boom, teamId: 'team-1' }),
       'DFE: team seeding failed (non-fatal)',
+    );
+  });
+});
+
+/** A finished proxy response for `teamId`, carrying ClickHouse's exception code if any. */
+function finishResponse(teamId: string, exceptionCode?: string) {
+  const res = Object.assign(new EventEmitter(), {
+    getHeader: (name: string) =>
+      name === 'x-clickhouse-exception-code' ? exceptionCode : undefined,
+  });
+  recheckOnAuthFailure(res as unknown as Response, teamId);
+  res.emit('finish');
+}
+
+describe('ensureOrgConnection - a held connection ClickHouse refuses', () => {
+  // The engine replaces the platform reader's password from the deployment's
+  // value, and the team's stored copy has to follow it.
+  const INTERVAL_MS = 30_000;
+  const STORED = {
+    _id: 'c-1',
+    host: 'http://ch:8123',
+    username: ORG,
+    password: 'pw-old',
+  };
+  let now: number;
+
+  beforeEach(() => {
+    now = 1_000_000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    mockConns.mockResolvedValue([{ _id: 'c-1', username: ORG }]);
+    mockConnById.mockResolvedValue(STORED);
+    mockUpdateConn.mockResolvedValue(STORED);
+  });
+
+  test('is not re-checked while ClickHouse accepts it', async () => {
+    finishResponse('team-1');
+    finishResponse('team-1', '60');
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'present',
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockUpdateConn).not.toHaveBeenCalled();
+  });
+
+  test('an auth failure re-checks it on the next request, once', async () => {
+    okFetch({ ...ORG_CONN, password: 'pw-new' });
+
+    await ensureOrgConnection('tok', 'team-1', ORG);
+    expect(global.fetch).not.toHaveBeenCalled();
+
+    finishResponse('team-1', '516');
+    await ensureOrgConnection('tok', 'team-1', ORG);
+    await ensureOrgConnection('tok', 'team-1', ORG);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://engine.test:8000/api/v1/hyperdx/connection',
+      expect.objectContaining({ headers: { Authorization: 'Bearer tok' } }),
+    );
+    expect(mockUpdateConn).toHaveBeenCalledTimes(1);
+  });
+
+  test('a refusal on one team re-checks no other', async () => {
+    finishResponse('team-2', '516');
+
+    await ensureOrgConnection('tok', 'team-1', ORG);
+
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('present and unchanged: nothing is written', async () => {
+    okFetch({ ...ORG_CONN, password: 'pw-old' });
+    finishResponse('team-1', '516');
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'present',
+    );
+
+    expect(mockConnById).toHaveBeenCalledWith('team-1', 'c-1', true);
+    expect(mockUpdateConn).not.toHaveBeenCalled();
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ teamId: 'team-1', team: ORG }),
+      'DFE: ClickHouse refused a team connection that matches the engine',
+    );
+  });
+
+  test('present and the password changed: the stored connection is updated in place', async () => {
+    okFetch({ ...ORG_CONN, password: 'pw-new' });
+    finishResponse('team-1', '516');
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'present',
+    );
+
+    expect(mockUpdateConn).toHaveBeenCalledWith('team-1', 'c-1', {
+      host: 'http://ch:8123',
+      password: 'pw-new',
+    });
+    expect(mockCreateConn).not.toHaveBeenCalled();
+    const logged = JSON.stringify([
+      mockWarn.mock.calls,
+      mockError.mock.calls,
+      (logger.info as jest.Mock).mock.calls,
+    ]);
+    expect(logged).not.toContain('pw-new');
+    expect(logged).not.toContain('pw-old');
+  });
+
+  test('never updates it to a ClickHouse user other than the team name', async () => {
+    okFetch({ ...PLATFORM_CONN, password: 'pw-new' });
+    finishResponse('team-1', '516');
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'present',
+    );
+
+    expect(mockUpdateConn).not.toHaveBeenCalled();
+  });
+
+  test('a re-check the engine cannot answer is logged, and not retried in a loop', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 503 });
+    finishResponse('team-1', '516');
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'present',
+    );
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ teamId: 'team-1', outcome: 'unavailable' }),
+      'DFE: could not re-check a team connection ClickHouse refused',
+    );
+
+    // ClickHouse keeps refusing: the engine is asked again only once the interval passes.
+    for (let i = 0; i < 5; i += 1) {
+      finishResponse('team-1', '516');
+      await ensureOrgConnection('tok', 'team-1', ORG);
+    }
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    now += INTERVAL_MS;
+    await ensureOrgConnection('tok', 'team-1', ORG);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(mockUpdateConn).not.toHaveBeenCalled();
+  });
+
+  test('an update the store fails is logged and never blocks the login', async () => {
+    const boom = new Error('ferretdb down');
+    okFetch({ ...ORG_CONN, password: 'pw-new' });
+    mockUpdateConn.mockRejectedValue(boom);
+    finishResponse('team-1', '516');
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'present',
+    );
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ err: boom, teamId: 'team-1' }),
+      'DFE: re-checking a refused team connection failed',
     );
   });
 });
