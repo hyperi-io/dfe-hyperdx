@@ -182,6 +182,10 @@ id = "GHSA-r5fr-rjxr-66jc"
 reason = "lodash 4.17.x: concurrently's copy never calls template; 4.17.23 is @hyperdx/otel-web's, inlined in the browser SDK."
 
 [[IgnoredVulns]]
+id = "GHSA-xxjr-mmjv-4gpg"
+reason = "lodash 4.17.21: concurrently's copy, which never calls unset or omit and takes only entry.prod.sh's argv; the api and app ship 4.18.1."
+
+[[IgnoredVulns]]
 id = "GHSA-23c5-xmqv-rm74"
 reason = "minimatch: 3.1.2 ships only under swagger-jsdoc's glob, mounted outside production, over our own patterns; 8.0.4 and 9.0.4 are build tooling."
 
