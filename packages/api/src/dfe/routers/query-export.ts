@@ -106,10 +106,11 @@ router.post(
       // Resolve the connection for ClickHouse access. source.connection is a
       // connection-id string in 2.29+.
       const connectionId = String(source.connection);
+      // The metadata client authenticates as the connection's user, so it needs the password.
       const connection = await getConnectionById(
         teamId.toString(),
         connectionId,
-        false,
+        true,
       );
 
       if (connection == null) {
