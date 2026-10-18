@@ -193,6 +193,18 @@ describe('POST /dfe/export-sql renders the view as it runs', () => {
     );
   });
 
+  it('reads the connection with its password for the metadata client', async () => {
+    await request(app)
+      .post('/dfe/export-sql')
+      .send({ chartConfig: CHART_CONFIG });
+
+    expect(mockGetConnection).toHaveBeenCalledWith(
+      '507f1f77bcf86cd799439099',
+      '507f1f77bcf86cd799439022',
+      true,
+    );
+  });
+
   it("renders against the source's own table", async () => {
     const res = await request(app)
       .post('/dfe/export-sql')
