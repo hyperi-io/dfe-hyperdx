@@ -117,6 +117,12 @@ VERDICTS: dict[str, tuple[str, str]] = {
         "not_used",
         "Dev only - @changesets/cli via tty-table. Absent from the production image.",
     ),
+    "github.com/klauspost/compress": (
+        "not_used",
+        "packages/otel-collector/go.mod builds only cmd/migrate, which never "
+        "imports compress/s2. It ships only in upstream's collector image, which "
+        "this fork never publishes and no DFE deploy runs.",
+    ),
     "@humanfs/node": (
         "not_used",
         "Dev only - eslint is its one parent. Absent from the production image.",
