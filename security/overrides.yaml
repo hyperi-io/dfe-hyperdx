@@ -57,9 +57,25 @@ overrides:
       (GHSA-hvx9-hwr7-wjj9) into a shell command, so anyone who can write host
       network configuration gets code execution inside the API process rather
       than only on the host. The sink is provably live; the source is
-      host-local, not remote, which is why this is the only pin we carry.
+      host-local, not remote. It is the only pin we carry with a live sink.
     upstream: https://github.com/hyperdxio/hyperdx/issues/3306
     added: 2026-08-26
+  - package: follow-redirects
+    range: '^1.16.1'
+    advisory: GHSA-q3jh-wrc6-jgq8
+    severity: high
+    vector: >-
+      No live vector. It is pinned because the vulnerable copy ships and the fix
+      is one generated line. packages/api/package.json:32 declares
+      @slack/webhook, whose axios 1.20.0 resolves follow-redirects 1.16.0 into
+      the production focus. GHSA-q3jh-wrc6-jgq8 (array-form headers) and
+      GHSA-8r9p-f939-6h3c (sensitiveHeaders escaping) both need follow-redirects
+      to follow a cross-origin redirect. @slack/webhook's IncomingWebhook.js:26
+      sets maxRedirects to 0, so axios takes the native http transport
+      (lib/adapters/http.js:1051) and follow-redirects follows nothing. nx's
+      exact 1.16.0 pin, dev only, moves with it.
+    upstream: none
+    added: 2026-10-21
 # Example of the shape (keep commented - an empty register is the goal state):
 #
 #   - package: some-parser

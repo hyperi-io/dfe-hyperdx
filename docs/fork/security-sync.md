@@ -1469,3 +1469,63 @@ its comment then.
 `yarn npm audit --severity moderate` reports no suggestions. With `--recursive`
 it reports braces, smol-toml 1.6.1 and sprintf-js, the same three as 2026-10-09,
 and no handlebars.
+
+## 2026-10-21 - follow-redirects and klauspost/compress
+
+Three high alerts from advisories published 2026-10-20. follow-redirects is
+pinned in `security/overrides.yaml`. compress gets a `not_used` verdict.
+
+### follow-redirects - in the image, following no redirect
+
+| Alert | Advisory            | Needs                                                 |
+| ----- | ------------------- | ----------------------------------------------------- |
+| #358  | GHSA-8r9p-f939-6h3c | a declared `sensitiveHeaders` name with `^` or `\|`   |
+| #359  | GHSA-q3jh-wrc6-jgq8 | headers passed as Node's alternating name/value array |
+
+Dependabot calls both development. They ship: `packages/api/package.json:32`
+declares `@slack/webhook` 7.0.7, whose axios 1.20.0 resolves follow-redirects
+1.16.0 into the api's production tree (`yarn why follow-redirects`).
+
+Neither sink is reached. `IncomingWebhook.js:26` sets `maxRedirects: 0`, so
+axios takes the native `http`/`https` transport
+(`lib/adapters/http.js:1051-1053`) and follow-redirects never handles the
+request. Nothing in `packages/*/src` imports axios or follow-redirects.
+
+Exercised against a local server answering with a cross-origin 302. The real
+`IncomingWebhook` rejects with the 302 and the redirect target sees no request.
+The same axios with redirects on reaches the target, so the target was
+listening. An array-form `Authorization` sent straight through follow-redirects
+reaches the target on 1.16.0 and does not on 1.16.1.
+
+Pinned anyway, because 1.16.1 (2026-10-01) is the fix and the entry is one
+generated line. The pin also moves nx's exact 1.16.0, so no copy is left for the
+alerts to match. The lockfile diff is four lines out and four in.
+
+### klauspost/compress - in nothing DFE runs
+
+\#357 is GHSA-259r-337f-4rfw (GO-2026-5841), an overflow in `s2.NewDict`.
+
+- `packages/otel-collector/go.mod` builds only `cmd/migrate`
+  (`docker/otel-collector/Dockerfile:28-33`). The OCB collector reads
+  `builder-config.yaml`, not this module.
+- `go list -deps ./cmd/migrate` lists compress's `zstd`, `huff0` and `fse`,
+  never `s2`. govulncheck v1.8.0 puts GO-2026-5841 under module results only.
+- migrate dials ClickHouse outbound with LZ4 (`main.go:213-215`) and listens on
+  nothing.
+- It ships only in upstream's collector image. `docker-build.yml` builds that
+  with `push: false`, hyperi-ci publishes the root `Dockerfile` alone, and
+  dfe-infra runs `otel/opentelemetry-collector-contrib`.
+
+`security-override.py` pins npm only. A Go fix would be a `security/patches/`
+entry over `go.mod` and `go.sum`, which buys nothing for a binary no deploy
+runs. Upstream main (be5304ddc) still declares v1.18.3. The same govulncheck run
+lists GO-2026-5158 (otel 1.41.0) and GO-2026-5024 (x/sys, Windows only) in
+required modules, neither called and neither raised by Dependabot.
+
+### The audit, before and after
+
+| Run                                               | main                                               | Pinned                        |
+| ------------------------------------------------- | -------------------------------------------------- | ----------------------------- |
+| `yarn npm audit --severity moderate`, the CI gate | no suggestions                                     | no suggestions                |
+| `yarn npm audit --severity moderate --recursive`  | braces, follow-redirects x2, smol-toml, sprintf-js | braces, smol-toml, sprintf-js |
+| osv-scanner on `yarn.lock`                        | 2 high, both follow-redirects                      | no issues                     |
