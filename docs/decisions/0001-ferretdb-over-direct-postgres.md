@@ -1,5 +1,7 @@
 # FerretDB over a direct PostgreSQL migration
 
+**Status:** superseded by [0006](0006-documentdb-replaces-ferretdb.md).
+
 An assessment of the two approaches to removing the MongoDB dependency: using
 FerretDB as a transparent proxy vs. migrating the application code to use
 PostgreSQL directly.
