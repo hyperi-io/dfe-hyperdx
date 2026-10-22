@@ -36,6 +36,11 @@ jest.mock('@/models/team', () => ({
   default: { find: jest.fn() },
 }));
 
+// The one-name-per-team index, which store-operations.int.test.ts covers for real.
+jest.mock('@/models/source', () => ({
+  Source: { collection: { createIndex: jest.fn().mockResolvedValue('ok') } },
+}));
+
 jest.mock('@/dfe/models/dfe-source', () => ({
   __esModule: true,
   default: {

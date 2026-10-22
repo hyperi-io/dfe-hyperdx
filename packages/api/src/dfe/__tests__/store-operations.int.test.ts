@@ -30,6 +30,8 @@ import DfeDashboardTombstone, {
 } from '@/dfe/models/dashboard-tombstone';
 import DfeSource from '@/dfe/models/dfe-source';
 import dfeSourcesRouter from '@/dfe/routers/dfe-sources';
+import Connection from '@/models/connection';
+import { Source } from '@/models/source';
 import Team from '@/models/team';
 
 // These tests lose races on purpose, and a retry would pass a race that was lost.
@@ -143,25 +145,49 @@ describe('dfe store operations against a real store', () => {
     }
   });
 
+  const sourcesApp = express();
+  sourcesApp.use(express.json());
+  sourcesApp.use('/dfe/sources', dfeSourcesRouter);
+  const putSource = (name: string) =>
+    request(sourcesApp)
+      .put(`/dfe/sources/${name}`)
+      .send({
+        kind: 'log',
+        from: { databaseName: 'dfe', tableName: name },
+        timestampValueExpression: '_timestamp',
+      });
+
   test('racing PUTs of one source both answer 200 and leave one manifest entry', async () => {
     await DfeSource.init();
-    const app = express();
-    app.use(express.json());
-    app.use('/dfe/sources', dfeSourcesRouter);
-    const put = (name: string) =>
-      request(app)
-        .put(`/dfe/sources/${name}`)
-        .send({
-          kind: 'log',
-          from: { databaseName: 'dfe', tableName: name },
-          timestampValueExpression: '_timestamp',
-        });
 
     for (let round = 0; round < RACE_ROUNDS; round++) {
       const name = `syslog_${round}`;
-      const answers = await Promise.all([put(name), put(name)]);
+      const answers = await Promise.all([putSource(name), putSource(name)]);
       expect(answers.map(answer => answer.status)).toEqual([200, 200]);
       expect(await DfeSource.countDocuments({ name })).toBe(1);
+    }
+  });
+
+  test('racing PUTs of one source onto a connected team leave that team one source', async () => {
+    await DfeSource.init();
+    const team = await Team.create({ name: 'acme' });
+    await Connection.create({
+      team: team._id,
+      name: 'acme',
+      host: 'http://ch:8123',
+      username: 'dfe_org_acme',
+      password: 'pw',
+    });
+
+    for (let round = 0; round < RACE_ROUNDS; round++) {
+      const name = `firewall_${round}`;
+      const answers = await Promise.all([putSource(name), putSource(name)]);
+      expect(answers.map(answer => answer.status)).toEqual([200, 200]);
+      expect(answers.map(answer => answer.body.written)).toEqual([
+        ['acme'],
+        ['acme'],
+      ]);
+      expect(await Source.countDocuments({ team: team._id, name })).toBe(1);
     }
   });
 
