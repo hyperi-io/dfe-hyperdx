@@ -11,8 +11,8 @@
 
 services:
   db:
-    # pg17-1.0.0 is DocumentDB 1.0, the image the project's `latest` points at.
-    image: ghcr.io/documentdb/documentdb/documentdb-local:pg17-1.0.0@sha256:4a341daca29b02dabd0d64c357bc9231868b59ef08c8059058b1e5cedbe3899d
+    # DocumentDB 1.0 on Postgres 18, the pairing DFE deploys.
+    image: ghcr.io/documentdb/documentdb/documentdb-local:pg18-1.0.0@sha256:03aef53ed72cd3007236f8ce1b4ef7a0c958dbbce1519074b85d8a3e10be89a5
     # Upstream's `--port 29999` is a mongod flag the DocumentDB entrypoint refuses.
     command: !reset []
     environment:
