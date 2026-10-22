@@ -14,7 +14,7 @@
 #   3. Points the 'app' service MONGO_URI at the gateway, over TLS checked against
 #      that CA and with a SCRAM-SHA-256 login
 #
-# The HyperDX application code is completely unchanged — Mongoose, connect-mongo,
+# The HyperDX application code is completely unchanged -- Mongoose, connect-mongo,
 # and passport-local-mongoose all work through the DocumentDB gateway.
 
 services:
