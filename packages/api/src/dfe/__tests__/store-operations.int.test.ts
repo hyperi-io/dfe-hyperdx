@@ -11,7 +11,9 @@ jest.mock('@/dfe/config', () => ({
   DFE_AUTH_MODE: 'oidc-proxy',
 }));
 
+import express from 'express';
 import mongoose from 'mongoose';
+import request from 'supertest';
 
 import * as config from '@/config';
 import {
@@ -27,7 +29,14 @@ import DfeDashboardTombstone, {
   suppressedDashboardNames,
 } from '@/dfe/models/dashboard-tombstone';
 import DfeSource from '@/dfe/models/dfe-source';
+import dfeSourcesRouter from '@/dfe/routers/dfe-sources';
 import Team from '@/models/team';
+
+// These tests lose races on purpose, and a retry would pass a race that was lost.
+jest.retryTimes(0);
+
+// Rounds of two, because one round of a race can win by luck.
+const RACE_ROUNDS = 10;
 
 describe('dfe store operations against a real store', () => {
   beforeAll(async () => {
@@ -120,23 +129,40 @@ describe('dfe store operations against a real store', () => {
     ).rejects.toMatchObject({ code: 11000 });
   });
 
-  // MongoDB retries the losing upsert, but DocumentDB fails it with 11000 or 112.
-  test('two deletes of one shipped dashboard racing leave one tombstone', async () => {
+  // MongoDB retries the losing upsert itself, but DocumentDB fails it with 11000 or 112.
+  test('racing deletes of one shipped dashboard both succeed and leave one tombstone', async () => {
     await DfeDashboardTombstone.init();
-    const team = String(new mongoose.Types.ObjectId());
 
-    const writes = await Promise.allSettled([
-      recordDashboardTombstone('Overview', team),
-      recordDashboardTombstone('Overview', team),
-    ]);
-
-    expect(writes.some(write => write.status === 'fulfilled')).toBe(true);
-    for (const write of writes) {
-      if (write.status === 'rejected') {
-        expect([11000, 112]).toContain(write.reason?.code);
-      }
+    for (let round = 0; round < RACE_ROUNDS; round++) {
+      const team = String(new mongoose.Types.ObjectId());
+      await Promise.all([
+        recordDashboardTombstone('Overview', team),
+        recordDashboardTombstone('Overview', team),
+      ]);
+      expect(await DfeDashboardTombstone.countDocuments({ team })).toBe(1);
     }
-    expect(await DfeDashboardTombstone.countDocuments({ team })).toBe(1);
+  });
+
+  test('racing PUTs of one source both answer 200 and leave one manifest entry', async () => {
+    await DfeSource.init();
+    const app = express();
+    app.use(express.json());
+    app.use('/dfe/sources', dfeSourcesRouter);
+    const put = (name: string) =>
+      request(app)
+        .put(`/dfe/sources/${name}`)
+        .send({
+          kind: 'log',
+          from: { databaseName: 'dfe', tableName: name },
+          timestampValueExpression: '_timestamp',
+        });
+
+    for (let round = 0; round < RACE_ROUNDS; round++) {
+      const name = `syslog_${round}`;
+      const answers = await Promise.all([put(name), put(name)]);
+      expect(answers.map(answer => answer.status)).toEqual([200, 200]);
+      expect(await DfeSource.countDocuments({ name })).toBe(1);
+    }
   });
 
   test('the source manifest holds a nested spec and a push replaces it whole', async () => {

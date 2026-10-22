@@ -25,6 +25,7 @@ import {
   updateSource,
 } from '@/controllers/sources';
 import DfeSource from '@/dfe/models/dfe-source';
+import { retryUpsertRace } from '@/dfe/models/duplicate-key';
 import Team from '@/models/team';
 import logger from '@/utils/logger';
 
@@ -119,10 +120,12 @@ export async function upsertEverywhere(
   name: string,
   spec: DfeSourceSpec,
 ): Promise<{ written: string[]; skipped: string[] }> {
-  await DfeSource.findOneAndUpdate(
-    { name },
-    { name, spec },
-    { upsert: true, new: true },
+  await retryUpsertRace(async () =>
+    DfeSource.findOneAndUpdate(
+      { name },
+      { name, spec },
+      { upsert: true, new: true },
+    ),
   );
 
   const written: string[] = [];
