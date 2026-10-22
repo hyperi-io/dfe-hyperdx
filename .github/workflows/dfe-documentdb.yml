@@ -1,0 +1,100 @@
+# Project:   dfe-hyperdx
+# File:      .github/workflows/dfe-documentdb.yml
+# Purpose:   Run the api integration suite, dfe/ tests included, on DocumentDB.
+#
+# License:   MIT - HYPERI PTY LIMITED
+# Copyright: (c) 2026 HYPERI PTY LIMITED
+#
+# DFE keeps HyperDX's documents in DocumentDB, which speaks the MongoDB wire
+# protocol over Postgres and implements a tested subset of MongoDB. Upstream's
+# harness runs MongoDB, so this job layers dfe/test/docker-compose.documentdb.yml
+# over docker-compose.ci.yml and leaves upstream's files as they ship.
+
+name: dfe-documentdb
+
+'on':
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dfe-documentdb-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # TLS and SCRAM-SHA-256 as deployed. The harness certificate is self-signed,
+  # hence tlsAllowInvalidCertificates, which no deployment should carry.
+  DFE_INT_MONGO_URI: mongodb://hyperdx:hyperdx-int@localhost:39999/hyperdx-test?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256
+
+jobs:
+  integration:
+    name: Integration on DocumentDB (shard ${{ matrix.shard }})
+    runs-on: ubuntu-24.04
+    # The whole suite took 949s serially on DocumentDB, so it is split like upstream's.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: '.nvmrc'
+          cache-dependency-path: 'yarn.lock'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      # The bake step's GHA cache needs the runtime token in the shell.
+      - name: Expose GitHub runtime
+        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+
+      # The collector creates the ClickHouse schema the suite waits for. It is
+      # built from source, so the layer cache saves the OCB compile on every run
+      # after the first. The tag is the name compose gives it, so `up` reuses it.
+      - name: Build the collector
+        run: |
+          docker buildx create --use --driver=docker-container
+          docker buildx bake -f docker-compose.ci.yml \
+            --set 'otel-collector.tags=hdx-ci-otel-collector' \
+            --set '*.cache-to=type=gha,mode=max,scope=dfe-documentdb' \
+            --set '*.cache-from=type=gha,scope=dfe-documentdb' \
+            --load
+
+      - name: Build dependencies
+        run: yarn workspace @hyperdx/common-utils ci:build
+
+      - name: Start ClickHouse, the collector and DocumentDB
+        run: |
+          docker compose -f docker-compose.ci.yml -f dfe/test/docker-compose.documentdb.yml up -d --quiet-pull
+          docker compose -f docker-compose.ci.yml -f dfe/test/docker-compose.documentdb.yml up -d --wait --wait-timeout 300 db
+
+      # SHORTCUT: two upstream MCP assertions are skipped by name. They fail on
+      # MongoDB too: our lockfile carries @modelcontextprotocol/sdk 1.32.1 where
+      # upstream's has 1.29.0, and its validation message lacks the text they
+      # assert. Drop the pattern when either side moves.
+      - name: Run the api integration suite
+        env:
+          SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+          SKIP:
+            '^(?!.*(rejects a delta on a non-gauge metric|validate the
+            displayType allowlist)).*$'
+        run:
+          yarn workspace @hyperdx/api ci:int --shard="$SHARD"
+          --testNamePattern="$SKIP"
+
+      - name: DocumentDB log on failure
+        if: failure()
+        run:
+          docker compose -f docker-compose.ci.yml -f
+          dfe/test/docker-compose.documentdb.yml logs --tail 200 db

@@ -27,4 +27,9 @@ if (
 module.exports = {
   ...base,
   transformIgnorePatterns,
+  // After upstream's dotenv loader, so DFE_INT_MONGO_URI can name the store.
+  setupFiles: [
+    ...(base.setupFiles ?? []),
+    '<rootDir>/dfe/__tests__/int-store.setup.ts',
+  ],
 };
