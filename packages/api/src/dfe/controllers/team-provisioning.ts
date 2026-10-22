@@ -13,19 +13,17 @@ import logger from '@/utils/logger';
 // constraint is what makes find-or-create race-safe (a concurrent create
 // collides on it). Ensured from the dfe layer - idempotent createIndex - so the
 // upstream Team model stays pristine and off the fork conflict surface.
-let nameIndexEnsured = false;
+let nameIndex: Promise<void> | undefined;
 
-async function ensureUniqueNameIndex(): Promise<void> {
-  if (nameIndexEnsured) {
-    return;
-  }
-  nameIndexEnsured = true;
-  try {
-    await Team.collection.createIndex({ name: 1 }, { unique: true });
-  } catch (err) {
-    nameIndexEnsured = false;
-    logger.warn({ err }, 'DFE: failed to ensure unique team-name index');
-  }
+function ensureUniqueNameIndex(): Promise<void> {
+  nameIndex ??= Team.collection.createIndex({ name: 1 }, { unique: true }).then(
+    () => undefined,
+    err => {
+      nameIndex = undefined;
+      logger.warn({ err }, 'DFE: failed to ensure unique team-name index');
+    },
+  );
+  return nameIndex;
 }
 
 /**
