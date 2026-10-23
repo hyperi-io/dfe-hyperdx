@@ -76,6 +76,23 @@ overrides:
       exact 1.16.0 pin, dev only, moves with it.
     upstream: none
     added: 2026-10-21
+  - package: next
+    range: '^16.4.1'
+    advisory: GHSA-2464-fhr4-w9xw
+    severity: critical
+    vector: >-
+      The image runs Next's standalone server with the image optimiser on, since
+      images.unoptimized is set only in the static-export branch of
+      packages/app/next.config.mjs:180. GHSA-2464-fhr4-w9xw is librsvg under the
+      sharp the optimiser loads. The lockfile already resolves sharp 0.35.5, the
+      fix, and 16.4.1 raises next's own sharp floor to ^0.35.5 so the fix no
+      longer rests on a re-resolve. GHSA-673q-mjm6-r5xr needs an App Router `use
+      cache` function and GHSA-p3m5-59mp-jv5r an App Router Server Action, and
+      packages/app is Pages Router with neither. Pinned rather than re-resolved
+      because the sync merge driver takes upstream's lockfile, which is how the
+      2.40.0 sync took next 16.3.6 back to 16.3.4.
+    upstream: https://github.com/hyperdxio/hyperdx/pull/3460
+    added: 2026-10-24
 # Example of the shape (keep commented - an empty register is the goal state):
 #
 #   - package: some-parser

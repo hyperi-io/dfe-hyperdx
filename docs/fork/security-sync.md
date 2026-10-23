@@ -1529,3 +1529,80 @@ required modules, neither called and neither raised by Dependabot.
 | `yarn npm audit --severity moderate`, the CI gate | no suggestions                                     | no suggestions                |
 | `yarn npm audit --severity moderate --recursive`  | braces, follow-redirects x2, smol-toml, sprintf-js | braces, smol-toml, sprintf-js |
 | osv-scanner on `yarn.lock`                        | 2 high, both follow-redirects                      | no issues                     |
+
+## 2026-10-24 - next 16.4.2, storybook 10.6.2, ip-address 10.7.4
+
+Seven alerts. next is pinned in `security/overrides.yaml`. storybook and
+ip-address move by lockfile inside their declared ranges, and the storybook move
+takes @vitest/mocker out of the tree. Nothing is dismissed.
+
+### next - pinned at ^16.4.1, resolving 16.4.2
+
+| Alert | Advisory            | Severity | Needs                                                     | Here                              |
+| ----- | ------------------- | -------- | --------------------------------------------------------- | --------------------------------- |
+| 363   | GHSA-2464-fhr4-w9xw | critical | sharp below 0.35.5 under the image optimiser, on glibc    | optimiser on, glibc, sharp 0.35.5 |
+| 366   | GHSA-673q-mjm6-r5xr | critical | an App Router `use cache` function returning typed arrays | Pages Router, no `use cache`      |
+| 362   | GHSA-p3m5-59mp-jv5r | high     | an App Router Server Action                               | Pages Router, no Server Action    |
+
+363 has a sink in the image. The root image is trixie-slim, which is glibc, and
+`images.unoptimized` sits only in the static-export branch of `next.config.mjs`
+(`:180`), so `/_next/image` loads sharp. The lockfile has resolved sharp 0.35.5,
+the fix, since the 2026-10-09 re-resolve, and 16.4.1 raises next's own floor to
+`sharp ^0.35.5`. `packages/app` has no `app/` directory and no `use cache` or
+`use server`, so 366 and 362 reach nothing.
+
+Pinned rather than re-resolved because the merge driver takes upstream's
+lockfile, which is how 2.40.0 took next 16.3.6 back to 16.3.4. Upstream has the
+bump open as hyperdxio/hyperdx#3460. `npmMinimalAgeGate` holds 16.4.3
+(2026-10-23), so the range takes 16.4.2 (2026-10-15). 16.4.2 still vendors the
+pre-fix image-size, so the 2026-09-27 verdict stands.
+
+### storybook 10.2.13 -> 10.6.2, and @vitest/mocker gone
+
+| Alert | Advisory            | Severity | Needs                                                      |
+| ----- | ------------------- | -------- | ---------------------------------------------------------- |
+| 360   | GHSA-f2ph-cmg5-wxc8 | critical | a malicious website open while `storybook dev` runs        |
+| 365   | GHSA-px85-f4q5-jh77 | high     | a host on the developer's network reaching `storybook dev` |
+| 361   | GHSA-qxg6-89mg-rqv8 | moderate | a client on a Vite dev server running `interceptorPlugin`  |
+
+Dev only. storybook is an app devDependency (`packages/app/package.json:151`),
+@vitest/mocker 3.2.4 came only from `@storybook/builder-webpack5` 10.1.4's exact
+pin, and none of the family is in the standalone trace. Fixed anyway, since 360
+and 365 target the developer running `yarn storybook` and every range admits the
+fix.
+
+```sh
+yarn up -R storybook @storybook/nextjs @storybook/addon-docs @storybook/addon-links @storybook/addon-themes
+```
+
+The family moves together because `@storybook/nextjs` pins its builder exactly,
+and builder-webpack5 10.6.2 drops @vitest/mocker. A newer babel preset and
+probe-image-size make the lockfile diff about 2,900 lines, every added version
+reached only through the new storybook packages. `storybook build` completes on
+10.6.2. `osv-scanner.toml` loses GHSA-82fw-gwwq-j7x9, which the scanner no
+longer reports.
+
+### ip-address 10.7.3 -> 10.7.4
+
+| Alert | Advisory            | Severity | Needs                                                             |
+| ----- | ------------------- | -------- | ----------------------------------------------------------------- |
+| 364   | GHSA-rxp7-6hxx-x8q5 | moderate | many `%` then a line terminator, in a string handed to `Address6` |
+
+In the image via `@hyperdx/api`, express-rate-limit 8.7.1 and socks 2.8.10. Both
+of our callers hand `isPrivateIp` a `new URL()` hostname
+(`utils/validators.ts:161`, `routers/api/clickhouseProxy.ts:105`), and Node's
+URL parser refuses a host holding `%` or a line feed. Moderate, so below THE
+BAR, and every range admits 10.7.4: `yarn up -R ip-address`. The verdict in
+`scripts/dismiss-triaged-alerts.py` now names `^10.7.1` and 10.7.4, not
+`^10.3.1`.
+
+### The audit, before and after
+
+| Run                                               | main                         | This change     |
+| ------------------------------------------------- | ---------------------------- | --------------- |
+| `yarn npm audit --severity moderate`, the CI gate | not run                      | no suggestions  |
+| `yarn npm audit --severity moderate --recursive`  | not run                      | smol-toml 1.6.1 |
+| osv-scanner on `yarn.lock`                        | 3 critical, 6 high, 2 medium | 4 high, all zod |
+
+The four left are GHSA-mrhx-c7xc-m3w5 against zod, fixed only in 4.6.6. Not
+touched here, and Dependabot has raised no alert for it yet.
