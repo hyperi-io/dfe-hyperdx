@@ -97,10 +97,11 @@ function stripTeamAdminFields(body: unknown): unknown {
  * Let a signed-in member read their own team record without the admin-only
  * fields; the rest of the team surface stays engine-only (DFE mode only).
  *
- * The console loads `GET /team` on every page for one flag, so a blanket 403
- * there logged an error in the browser on a read the lockdown exists to protect
- * WRITES on. Only the record itself opens: members, invitations, tags and the
- * API key surface all keep the 403, as does every mutation.
+ * The console loads `GET /team` on every page for one flag, and
+ * `GET /team/tags` on the dashboards list, so a blanket 403 logged browser
+ * errors on reads the lockdown exists to protect WRITES on. Only those two
+ * open: members, invitations and the API key surface keep the 403, as does
+ * every mutation.
  */
 export function allowTeamReadElseServicePrincipal(
   req: Request,
@@ -111,8 +112,14 @@ export function allowTeamReadElseServicePrincipal(
     return next();
   }
   // req.path is relative to the /team mount, so '/' is the team record itself.
-  if ((req.method !== 'GET' && req.method !== 'HEAD') || req.path !== '/') {
+  if (
+    (req.method !== 'GET' && req.method !== 'HEAD') ||
+    (req.path !== '/' && req.path !== '/tags')
+  ) {
     return res.status(403).json(FORBIDDEN);
+  }
+  if (req.path === '/tags') {
+    return next();
   }
   const sendJson = res.json.bind(res);
   res.json = body => sendJson(stripTeamAdminFields(body));

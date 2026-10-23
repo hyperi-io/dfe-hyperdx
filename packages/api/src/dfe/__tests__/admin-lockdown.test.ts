@@ -190,7 +190,44 @@ describe('allowTeamReadElseServicePrincipal (DFE mode on)', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  test.each(['/members', '/invitations', '/apiKey', '/tags'])(
+  test('a member reads the team tags as the router sends them', () => {
+    const r = res();
+    const sent = jest.mocked(r.json);
+    const next = jest.fn();
+
+    allowTeamReadElseServicePrincipal(
+      makeRequest({
+        method: 'GET',
+        path: '/tags',
+        dfeIsServicePrincipal: false,
+      }),
+      r,
+      next,
+    );
+    r.json({ data: ['prod', 'edge'] });
+
+    expect(next).toHaveBeenCalled();
+    expect(r.status).not.toHaveBeenCalled();
+    expect(sent).toHaveBeenCalledWith({ data: ['prod', 'edge'] });
+  });
+
+  test('403s a member WRITE to the tags', () => {
+    const r = res();
+    const next = jest.fn();
+    allowTeamReadElseServicePrincipal(
+      makeRequest({
+        method: 'POST',
+        path: '/tags',
+        dfeIsServicePrincipal: false,
+      }),
+      r,
+      next,
+    );
+    expect(r.status).toHaveBeenCalledWith(403);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test.each(['/members', '/invitations', '/apiKey'])(
     '403s a member read of %s',
     path => {
       const r = res();
