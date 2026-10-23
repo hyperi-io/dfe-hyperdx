@@ -1606,3 +1606,178 @@ BAR, and every range admits 10.7.4: `yarn up -R ip-address`. The verdict in
 
 The four left are GHSA-mrhx-c7xc-m3w5 against zod, fixed only in 4.6.6. Not
 touched here, and Dependabot has raised no alert for it yet.
+
+## 2026-10-24 - body-parser and zod, the two the age gate and the major split
+
+Two high advisories. body-parser has a real vector and its fix is held by
+`npmMinimalAgeGate`, so it gets a code patch now and the pin on 2026-10-29. zod
+is the advisory whose published range reaches a major further back than the code
+it names.
+
+### body-parser GHSA-27r3-jxmh-p828 - the unauthenticated mounts patched, pin deferred
+
+| Alert | Advisory            | Severity | Needs                                                        | Here                       |
+| ----- | ------------------- | -------- | ------------------------------------------------------------ | -------------------------- |
+| 372   | GHSA-27r3-jxmh-p828 | high     | a request body under a Content-Encoding body-parser inflates | five mounts, all inflating |
+
+`express ^4.19.2` (`packages/api/package.json:43`) resolves express 4.22.1,
+which declares `body-parser ~1.20.3` and resolves 1.20.6 (`yarn.lock:14111`). It
+is in the api's production tree.
+
+The sink is live at five mounts, and every one of them had `inflate` on by
+default. Only the first three are patched:
+
+| Mount                          | Parser                              | Listener                      | Reached by            | Patched |
+| ------------------------------ | ----------------------------------- | ----------------------------- | --------------------- | ------- |
+| `api-app.ts:78`                | `express.json`, limit 32mb          | the API, 8000                 | anyone                | yes     |
+| `api-app.ts:79`                | `express.text`, limit 32mb          | the API, 8000                 | anyone                | yes     |
+| `api-app.ts:80`                | `express.urlencoded`, limit 32mb    | the API, 8000                 | anyone                | yes     |
+| `opamp/app.ts:15`              | `express.raw`, protobuf, limit 10mb | the OpAMP server, 4320        | a pod in-cluster      | no      |
+| `routers/api/prometheus.ts:56` | `express.urlencoded`                | the API, behind ENABLE_PROMQL | an authenticated user | no      |
+
+**Why two mounts are left.** `api-app.ts` is already in `.fork-surface`, so
+patching it adds no catalogue entry. The other two are pristine, and the
+pre-commit guard refuses an edit to either without a `.fork-surface` entry and a
+[what-we-changed.md](what-we-changed.md) description. Taking those would
+catalogue a fix due for deletion on 2026-10-29 as permanent conflict surface,
+which is the cost [the patch series](../../security/patches/README.md) exists to
+avoid. Neither mount carries the unauthenticated vector, so both wait for the
+pin.
+
+The guard reads the committed tree, so any security patch over an uncatalogued
+upstream file hits this. Patches 0001 and 0002 escaped it only because
+`renderChartConfig.ts` was already catalogued for an unrelated permanent delta.
+Exempting a path named by a `security/patches/*.patch` in
+`.githooks/fork-surface-check.py` would close the gap.
+
+`contentstream()` pipes the request into `zlib.createGunzip()` and leaves it
+piped with no error listener once the body is read (body-parser
+`lib/read.js:151-188`), so a decoder error raised after the parse completes is
+thrown uncaught. The mounts in `api-app.ts` run before routing, before
+`session`, and before `isUserAuthenticated` and `requireServicePrincipal`, so
+reaching them needs no account. That clears THE BAR.
+
+No DFE client sends a compressed request body, which is what makes
+`inflate: false` the right shape rather than a behaviour change:
+
+- The browser app sends none. `CompressionStream`, `Content-Encoding` and a
+  compression library appear nowhere in `packages/app/src`, `packages/app/pages`
+  or `packages/common-utils/src`.
+- The CLI sends none - no match in `packages/cli/src` either.
+- The engine sends none. `dfe_engine/hyperdx/client.py:302-309` sets
+  `Authorization` and `Content-Type` and nothing else, and its scalo
+  `AsyncHttpClient` adds no request encoding.
+- Nothing speaks OpAMP to 4320. The listener binds (`server.ts:67`, and
+  `docker/hyperdx/entry.prod.sh` sets `OPAMP_PORT`), but
+  `dfe/deploy/contract.json` publishes only `http` 8080 and the metrics port,
+  dfe-infra's gateway route sends `hyperdx` to backend port 8080
+  (`helm/edge/gateway/values.yaml:606-614`), and dfe-docker names OpAMP nowhere.
+  dfe-infra runs `otel/opentelemetry-collector-contrib`, not the OpAMP
+  supervisor.
+
+With `inflate: false` set, `contentstream()` raises a 415 at `lib/read.js:158`
+before any decompression stream exists, and `appErrorHandler` returns it as JSON
+because http-errors carries `statusCode`.
+
+Carried as `security/patches/0003-body-parser-no-inflate.patch`, not as a pin,
+because `npmMinimalAgeGate: 7d` refuses 1.20.9: it was published
+2026-10-22T11:38Z, so `yarn install` answers
+`All versions satisfying "^1.20.9" are quarantined`. A drafted
+`security/overrides.yaml` entry was removed rather than left in the register,
+since a register entry that cannot install fails `--verify` for everyone.
+
+**From 2026-10-29**, add the `^1.20.9` pin, run `--apply && yarn install`, and
+delete patch 0003 in the same change. That also covers the OpAMP and PromQL
+mounts.
+
+`packages/api/src/dfe/__tests__/body-parser-inflate.test.ts` asserts, per mount,
+that the shipped source declares `inflate: false` and that the parser 415s a
+gzip and a deflate body while still parsing an uncompressed one. The behaviour
+half rebuilds each parser from the same options rather than importing the real
+app, which opens a Mongo session store at import. So the source-text assertion
+is what ties the test to the shipped mounts, and it is the half that fails when
+the patch is stripped.
+
+### zod GHSA-mrhx-c7xc-m3w5 - the range spans a major the code does not
+
+| Alert   | Advisory            | Severity | Needs                                        |
+| ------- | ------------------- | -------- | -------------------------------------------- |
+| 367-371 | GHSA-mrhx-c7xc-m3w5 | high     | `handleArrayResult` in v4 core's `$ZodArray` |
+
+Not reachable. The advisory's `vulnerable_version_range` is `< 4.6.6` with no
+lower bound, so it matches zod 3.25.76 as readily as a 4.x release, and
+osv-scanner reports all four copies. The code it names is v4 only.
+
+- Every workspace declares `zod: "3.25"` and resolves 3.25.76.
+  `node_modules/zod/index.js` re-exports `./v3/external.js`, so
+  `import { z } from 'zod'` is the v3 classic API.
+- `handleArrayResult` exists only under `node_modules/zod/v4/**` in that
+  package. Nothing in `packages/*/src` imports `zod/v4`.
+- The three 4.x resolutions are dev-only, confirmed from the install state
+  rather than the lockfile: 4.1.13 at
+  `node_modules/eslint-plugin-react-hooks/node_modules/zod`, 4.3.6 at
+  `knip/node_modules/zod` and `@eslint-react/shared/node_modules/zod`, and 4.4.3
+  at `mutation-server-protocol/node_modules/zod`
+  (`.yarn-state.yml:11876-11892`). Each parent is a devDependency and none is in
+  the api production focus.
+- `@modelcontextprotocol/sdk` 1.32.1 declares `zod: ^3.25 || ^4.0`, and the
+  lockfile groups that descriptor on 4.3.6, which reads as a 4.x copy in the
+  production tree. It is not one: the SDK has no nested copy and resolves the
+  hoisted root, measured with `node -p "require.resolve('zod/package.json')"`
+  from the SDK's own directory, which answers `node_modules/zod` 3.25.76.
+- Next's vendored `next/dist/compiled/zod` carries `ZodArray` sixteen times and
+  `handleArrayResult` never, so the copy in the standalone trace is v3 too.
+
+**The residual, and it is not this advisory.** v3's `ZodArray._parse`
+(`node_modules/zod/v3/types.js:1747-1812`) checks `exactLength`, `minLength` and
+`maxLength` first, calls `status.dirty()`, and then still maps every element, so
+a declared bound does not short-circuit the walk. That is the same behaviour the
+fix removed from v4 - upstream's commit `a0ebf970` is titled "check array, set
+and map size bounds before parsing elements" and touches `src/v4/**` alone. No
+3.x release carries it, and the upstream issue the advisory cites
+(colinhacks/zod#1872) predates the v4 split.
+
+Reaching it needs an authenticated caller. `DashboardSchema.tiles` and `.tags`
+(`packages/common-utils/src/types.ts:2265-2266`) are unbounded arrays on the
+POST `/dashboards` body, which sits behind `isUserAuthenticated` and
+`blockProvisionedWrites` (`api-app.ts:156-161`), so a tenant user can make the
+parse accumulate one issue per element against a 32mb body. The unbounded arrays
+on the external API (`utils/zod.ts:127`, `v2/utils/dashboards.ts:1658`) and the
+MCP tool schemas are engine-only behind `requireServicePrincipal`
+(`api-app.ts:142`, `:248`).
+
+That residual is the class THREAT-MODEL.md already covers under "Design: no rate
+limit inside the HyperDX API", and bounding those two arrays would be a
+permanent fork delta on an upstream file for something upstream will not fix on
+the 3.x line. Left as it stands, recorded here, and no verdict is written into
+`scripts/dismiss-triaged-alerts.py` while the alerts have no fixed release that
+fits the declared range.
+
+### The audit, before and after
+
+| Run                                               | main                                      | This change                            |
+| ------------------------------------------------- | ----------------------------------------- | -------------------------------------- |
+| `yarn npm audit --severity moderate`, the CI gate | no suggestions                            | no suggestions                         |
+| `yarn npm audit --severity moderate --recursive`  | smol-toml 1.6.1, zod 4.3.6                | smol-toml 1.6.1, zod 4.3.6             |
+| osv-scanner on `yarn.lock`                        | 7 high, 6 medium, 3 low across 9 packages | unchanged - the lockfile does not move |
+
+The lockfile is untouched, so osv-scanner reads the same rows either side and
+body-parser 1.20.6 still appears. A scanner reading the lockfile cannot see a
+code patch, which is the normal shape for the patch layer: the row clears when
+the pin lands on 2026-10-29.
+
+`yarn npm audit` does not report body-parser at all, at any severity, while
+osv-scanner does. Worth remembering when the gate looks quiet.
+
+### Found on the way, not fixed here
+
+- osv-scanner now also reports fast-uri 3.1.8 (four advisories, all fixed in
+  3.1.9), undici 7.30.0 and 8.11.2 (three each, fixed in 7.30.1 and 8.12.2) and
+  serialize-javascript 6.0.2. None of them has a Dependabot alert in the set
+  this pass covers, and the 2026-09-21 fast-uri verdict names 3.1.4, not 3.1.8.
+  That verdict needs re-reading against the version now resolved.
+- `osv-scanner.toml` reports two unused ignores, GHSA-vfj7-8cjw-p6xm and
+  GHSA-hp3w-g68c-fv3c. Dead weight, and the file says to delete an id the
+  scanner no longer reports.
+- `packages/api`'s lint gate passes at exactly 309 warnings against its
+  `--max-warnings 309` ceiling, so the next warning anyone adds fails it.

@@ -1,0 +1,42 @@
+# advisory: GHSA-27r3-jxmh-p828 (body-parser, Dependabot 372)
+# severity: high
+# vector:   express 4 resolves body-parser 1.20.6. On a request carrying
+#           Content-Encoding, body-parser pipes the body into a decompression
+#           stream and leaves it piped with no error listener once the body is
+#           read, so trailing bytes after a valid frame reach the finished
+#           decoder and its error kills the process. These three mounts run
+#           before routing and before the engine token check, so any caller
+#           that reaches the API can do it unauthenticated. inflate: false
+#           refuses a compressed body with 415 in contentstream()
+#           (body-parser lib/read.js:158) before any decompression stream is
+#           created. No DFE client sends one: the browser app and the CLI send
+#           plain bodies, and the engine's scalo AsyncHttpClient sends JSON
+#           with no Content-Encoding.
+#           The OpAMP listener (opamp/app.ts) and the PromQL router
+#           (routers/api/prometheus.ts) mount body-parser too and are NOT
+#           covered here: both are pristine upstream files, so patching them
+#           would add permanent .fork-surface entries for a fix due to be
+#           deleted on 2026-10-29. Neither carries the unauthenticated vector
+#           -- nothing routes to OpAMP's 4320 and the PromQL router sits
+#           behind ENABLE_PROMQL and isUserAuthenticated. The pin covers all
+#           five mounts.
+# upstream: none - the pin to body-parser ^1.20.9 replaces this patch once
+#           npmMinimalAgeGate admits 1.20.9 on 2026-10-29.
+# added:    2026-10-24
+diff --git a/packages/api/src/api-app.ts b/packages/api/src/api-app.ts
+index f5cf98e0d..a1af8ace9 100644
+--- a/packages/api/src/api-app.ts
++++ b/packages/api/src/api-app.ts
+@@ -75,9 +75,9 @@ app.use(compression());
+ // scrapes are unauthenticated -- they must not hit passport or isUserAuthenticated.
+ mountObservability(app);
+ 
+-app.use(express.json({ limit: '32mb' }));
+-app.use(express.text({ limit: '32mb' }));
+-app.use(express.urlencoded({ extended: false, limit: '32mb' }));
++app.use(express.json({ limit: '32mb', inflate: false }));
++app.use(express.text({ limit: '32mb', inflate: false }));
++app.use(express.urlencoded({ extended: false, limit: '32mb', inflate: false }));
+ app.use(session(sess));
+ 
+ if (!config.IS_LOCAL_APP_MODE) {
