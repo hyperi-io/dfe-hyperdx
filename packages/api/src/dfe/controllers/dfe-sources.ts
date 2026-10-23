@@ -141,7 +141,7 @@ export async function upsertEverywhere(
   await retryUpsertRace(async () =>
     DfeSource.findOneAndUpdate(
       { name: { $eq: name } },
-      { name, spec },
+      { $set: { name, spec } },
       { upsert: true, new: true },
     ),
   );

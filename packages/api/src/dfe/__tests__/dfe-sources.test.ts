@@ -177,8 +177,8 @@ describe('upsertEverywhere', () => {
     await upsertEverywhere('filebeat', SPEC);
 
     expect(mockManifestUpsert).toHaveBeenCalledWith(
-      { name: 'filebeat' },
-      { name: 'filebeat', spec: SPEC },
+      { name: { $eq: 'filebeat' } },
+      { $set: { name: 'filebeat', spec: SPEC } },
       expect.objectContaining({ upsert: true }),
     );
     expect(mockManifestUpsert.mock.invocationCallOrder[0]).toBeLessThan(
@@ -221,7 +221,9 @@ describe('removeEverywhere', () => {
   test('drops the registration too, so a later team is not seeded with it', async () => {
     await removeEverywhere('filebeat');
 
-    expect(mockManifestDelete).toHaveBeenCalledWith({ name: 'filebeat' });
+    expect(mockManifestDelete).toHaveBeenCalledWith({
+      name: { $eq: 'filebeat' },
+    });
   });
 
   test('a team that never had it is left alone', async () => {
@@ -372,7 +374,9 @@ describe('the /dfe/sources routes', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.removed).toEqual(['dfe-admins', 'customer-acme', 'dfe']);
-    expect(mockManifestDelete).toHaveBeenCalledWith({ name: 'filebeat' });
+    expect(mockManifestDelete).toHaveBeenCalledWith({
+      name: { $eq: 'filebeat' },
+    });
   });
 
   test('DELETE refuses a seeded name and removes nothing', async () => {
