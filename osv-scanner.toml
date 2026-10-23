@@ -34,10 +34,6 @@ id = "GHSA-45rx-2jwx-cxfr"
 reason = "@opentelemetry/propagator-jaeger: runs only when OTEL_PROPAGATORS names jaeger, which nothing here, in dfe-infra or in dfe-docker sets; the default is tracecontext and baggage."
 
 [[IgnoredVulns]]
-id = "GHSA-82fw-gwwq-j7x9"
-reason = "@vitest/mocker: under @storybook/builder-webpack5, not in the image."
-
-[[IgnoredVulns]]
 id = "GHSA-2g4f-4pwh-qvx6"
 reason = "ajv 6.12.6: schema-utils 3 under webpack build plugins, not in the image, which ships ajv 8.20.0."
 

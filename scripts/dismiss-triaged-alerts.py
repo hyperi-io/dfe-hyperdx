@@ -288,8 +288,9 @@ VERDICTS: dict[str, tuple[str, str]] = {
     # Already above the range on the copy that matters.
     "ip-address": (
         "not_used",
-        "packages/api/package.json declares ^10.3.1 and the lock resolves "
-        "10.3.1, above the <= 10.3.0 range. isPrivateIp uses that copy. "
+        "packages/api/package.json declares ^10.7.1 and the lock resolves "
+        "10.7.4, above the <= 10.3.0 and <= 10.7.3 ranges. isPrivateIp uses "
+        "that copy. "
         "RE-CHECK EVERY SYNC - a merge dragging it below 10.3.1 makes this a "
         "real unauthenticated SSRF.",
     ),
