@@ -85,7 +85,7 @@ async function connectionIdFor(teamId: string): Promise<string | undefined> {
  * landing view of every team.
  */
 export async function isOwnedName(name: string): Promise<boolean> {
-  if (await DfeSource.exists({ name })) {
+  if (await DfeSource.exists({ name: { $eq: name } })) {
     return true;
   }
   for (const team of await teamIds()) {
@@ -140,7 +140,7 @@ export async function upsertEverywhere(
 ): Promise<{ written: string[]; skipped: string[] }> {
   await retryUpsertRace(async () =>
     DfeSource.findOneAndUpdate(
-      { name },
+      { name: { $eq: name } },
       { name, spec },
       { upsert: true, new: true },
     ),
@@ -167,7 +167,7 @@ export async function upsertEverywhere(
 export async function removeEverywhere(
   name: string,
 ): Promise<{ removed: string[] }> {
-  await DfeSource.deleteOne({ name });
+  await DfeSource.deleteOne({ name: { $eq: name } });
 
   const removed: string[] = [];
   for (const team of await teamIds()) {
