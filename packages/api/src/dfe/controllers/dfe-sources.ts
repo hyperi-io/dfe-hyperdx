@@ -25,6 +25,9 @@ import {
   updateSource,
 } from '@/controllers/sources';
 import DfeSource from '@/dfe/models/dfe-source';
+import { retryUpsertRace } from '@/dfe/models/duplicate-key';
+import { indexOnce } from '@/dfe/models/index-once';
+import { Source } from '@/models/source';
 import Team from '@/models/team';
 import logger from '@/utils/logger';
 
@@ -58,6 +61,17 @@ async function sourceNamed(teamId: string, name: string) {
   return sources.find(source => source.name === name);
 }
 
+// A team holds at most one source of a name. The index name is ours, so it
+// never collides with one upstream adds, and the upstream model stays pristine.
+const ensureOneSourceNamePerTeam = indexOnce(
+  () =>
+    Source.collection.createIndex(
+      { team: 1, name: 1 },
+      { unique: true, name: 'dfe_one_source_name_per_team' },
+    ),
+  'one source name per team',
+);
+
 async function connectionIdFor(teamId: string): Promise<string | undefined> {
   const connections = await getConnectionsByTeam(teamId);
   const first = connections[0];
@@ -71,7 +85,7 @@ async function connectionIdFor(teamId: string): Promise<string | undefined> {
  * landing view of every team.
  */
 export async function isOwnedName(name: string): Promise<boolean> {
-  if (await DfeSource.exists({ name })) {
+  if (await DfeSource.exists({ name: { $eq: name } })) {
     return true;
   }
   for (const team of await teamIds()) {
@@ -99,14 +113,19 @@ export async function upsertOnTeam(
     return undefined;
   }
 
-  const existing = await sourceNamed(teamId, name);
+  await ensureOneSourceNamePerTeam();
   const body = specForTeam(name, spec, connection);
-  if (existing) {
-    const updated = await updateSource(teamId, String(existing._id), body);
-    return updated ? String(existing._id) : undefined;
-  }
-  const created = await createSource(teamId, body);
-  return created ? String(created._id) : undefined;
+  // A racing write that creates the source first fails this create on the
+  // index, and the retry finds that source and replaces it.
+  return retryUpsertRace(async () => {
+    const existing = await sourceNamed(teamId, name);
+    if (existing) {
+      const updated = await updateSource(teamId, String(existing._id), body);
+      return updated ? String(existing._id) : undefined;
+    }
+    const created = await createSource(teamId, body);
+    return created ? String(created._id) : undefined;
+  });
 }
 
 /**
@@ -119,10 +138,12 @@ export async function upsertEverywhere(
   name: string,
   spec: DfeSourceSpec,
 ): Promise<{ written: string[]; skipped: string[] }> {
-  await DfeSource.findOneAndUpdate(
-    { name },
-    { name, spec },
-    { upsert: true, new: true },
+  await retryUpsertRace(async () =>
+    DfeSource.findOneAndUpdate(
+      { name: { $eq: name } },
+      { $set: { name, spec } },
+      { upsert: true, new: true },
+    ),
   );
 
   const written: string[] = [];
@@ -146,7 +167,7 @@ export async function upsertEverywhere(
 export async function removeEverywhere(
   name: string,
 ): Promise<{ removed: string[] }> {
-  await DfeSource.deleteOne({ name });
+  await DfeSource.deleteOne({ name: { $eq: name } });
 
   const removed: string[] = [];
   for (const team of await teamIds()) {

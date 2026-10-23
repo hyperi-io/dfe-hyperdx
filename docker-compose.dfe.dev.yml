@@ -1,4 +1,4 @@
-# DFE Dev Override: FerretDB + PostgreSQL (no app — app runs locally)
+# DFE Dev Override: DocumentDB (no app -- app runs locally)
 #
 # Usage (requires .env.dfe with POSTGRES_USER, POSTGRES_PASSWORD):
 #   docker compose --env-file .env.dfe -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml up -d
@@ -6,6 +6,10 @@
 # Use this with docker-compose.dev.yml. The app service is not defined in dev
 # (it runs locally via yarn dev), so this override omits the app section.
 # For production, use docker-compose.dfe.yml instead.
+#
+# The local app reaches the store with this in .env.dfe, the POSTGRES_ pair
+# being the DocumentDB login created on its first start:
+#   MONGO_URI=mongodb://<POSTGRES_USER>:<POSTGRES_PASSWORD>@localhost:27017/hyperdx?tls=true&tlsAllowInvalidCertificates=true&authMechanism=SCRAM-SHA-256
 
 services:
   db:
@@ -38,38 +42,36 @@ services:
     deploy:
       replicas: 0
 
-  postgres:
-    image: ghcr.io/ferretdb/postgres-documentdb:17-0.107.0-ferretdb-2.7.0
+  # The app runs on the host, which cannot read a CA held in a volume, so dev
+  # keeps the gateway's self-signed certificate and the MONGO_URI above sets
+  # tlsAllowInvalidCertificates. docker-compose.dfe.yml verifies the gateway.
+  documentdb:
+    image: ghcr.io/documentdb/documentdb/documentdb-local:pg18-1.0.0@sha256:03aef53ed72cd3007236f8ce1b4ef7a0c958dbbce1519074b85d8a3e10be89a5
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: postgres
+      USERNAME: ${POSTGRES_USER}
+      PASSWORD: ${POSTGRES_PASSWORD}
+      TLS_MODE: requireTLS
+      # Off, the gateway listens on the container's loopback only.
+      ALLOW_EXTERNAL_CONNECTIONS: 'true'
+      # On by default upstream: it reports to a third party at start and hourly.
+      DOCUMENTDB_USAGE_TELEMETRY: 'false'
+    ports:
+      - '27017:10260'
     volumes:
-      - .volumes/pg_data:/var/lib/postgresql/data
+      - documentdb-data:/data
     networks:
       - internal
     restart: on-failure
     healthcheck:
-      # -d names the real database: without it libpq dials one named after the user.
-      test: pg_isready -U ${POSTGRES_USER} -d postgres
+      # The image's own probe, polled faster than its 30s default.
+      test: ['CMD', '/usr/local/bin/documentdb-healthcheck']
       interval: 5s
-      timeout: 3s
+      timeout: 10s
+      start_period: 60s
       retries: 10
 
-  ferretdb:
-    image: ghcr.io/ferretdb/ferretdb:2.7.0
-    environment:
-      FERRETDB_POSTGRESQL_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/postgres
-      # Disable auth for local dev — allows createIndexes and other operations
-      FERRETDB_AUTH: 'false'
-    ports:
-      - '27017:27017'
-    networks:
-      - internal
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: on-failure
+volumes:
+  documentdb-data:
 
 networks:
   internal:

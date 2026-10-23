@@ -5,6 +5,7 @@
 
 import * as dfeConfig from '@/dfe/config';
 import { isDuplicateKey } from '@/dfe/models/duplicate-key';
+import { indexOnce } from '@/dfe/models/index-once';
 import Team from '@/models/team';
 import { setupTeamDefaults } from '@/setupDefaults';
 import logger from '@/utils/logger';
@@ -13,20 +14,10 @@ import logger from '@/utils/logger';
 // constraint is what makes find-or-create race-safe (a concurrent create
 // collides on it). Ensured from the dfe layer - idempotent createIndex - so the
 // upstream Team model stays pristine and off the fork conflict surface.
-let nameIndexEnsured = false;
-
-async function ensureUniqueNameIndex(): Promise<void> {
-  if (nameIndexEnsured) {
-    return;
-  }
-  nameIndexEnsured = true;
-  try {
-    await Team.collection.createIndex({ name: 1 }, { unique: true });
-  } catch (err) {
-    nameIndexEnsured = false;
-    logger.warn({ err }, 'DFE: failed to ensure unique team-name index');
-  }
-}
+const ensureUniqueNameIndex = indexOnce(
+  () => Team.collection.createIndex({ name: 1 }, { unique: true }),
+  'unique team-name index',
+);
 
 /**
  * Find an existing team by name, or create a new one.

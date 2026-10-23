@@ -1,4 +1,4 @@
-# DFE Override: Replace MongoDB with FerretDB + PostgreSQL (DocumentDB)
+# DFE Override: Replace MongoDB with DocumentDB
 #
 # Usage (production):
 #   docker compose -f docker-compose.yml -f docker-compose.dfe.yml up -d
@@ -8,12 +8,14 @@
 #
 # This override:
 #   1. Removes the upstream 'db' (mongo) service
-#   2. Adds 'postgres' (PG 17 + DocumentDB extension) and 'ferretdb' services
-#   3. Updates the 'app' service MONGO_URI to point at FerretDB
-#   4. FerretDB exposes the MongoDB wire protocol on port 27017
+#   2. Adds 'documentdb' (PostgreSQL 18 with the DocumentDB extensions and its
+#      Mongo-wire gateway in one container) and 'documentdb-tls', which mints the
+#      CA and the certificate the gateway serves
+#   3. Points the 'app' service MONGO_URI at the gateway, over TLS checked against
+#      that CA and with a SCRAM-SHA-256 login
 #
-# The HyperDX application code is completely unchanged — Mongoose, connect-mongo,
-# and passport-local-mongoose all work through FerretDB's MongoDB protocol proxy.
+# The HyperDX application code is completely unchanged -- Mongoose, connect-mongo,
+# and passport-local-mongoose all work through the DocumentDB gateway.
 
 services:
   # Disable upstream mongo service (empty profile prevents it from starting)
@@ -21,47 +23,99 @@ services:
     profiles:
       - disabled
 
-  # PostgreSQL 17 with DocumentDB extension (backing store for FerretDB)
-  postgres:
-    image: ghcr.io/ferretdb/postgres-documentdb:17-0.107.0-ferretdb-2.7.0
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: postgres
+  # Mints the CA and the gateway certificate once, into their own volume. The
+  # DocumentDB image is reused for its openssl. Root, because a fresh named volume
+  # is root-owned. The CA key is discarded once the certificate is signed.
+  documentdb-tls:
+    image: ghcr.io/documentdb/documentdb/documentdb-local:pg18-1.0.0@sha256:03aef53ed72cd3007236f8ce1b4ef7a0c958dbbce1519074b85d8a3e10be89a5
+    user: '0:0'
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -eu
+        umask 077
+        cd /tls
+        if [ ! -s ca/ca.crt ] || [ ! -s server/tls.crt ] || [ ! -s server/tls.key ]; then
+          rm -rf ca server
+          mkdir ca server
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-384 -nodes -sha384 -days 3650 \
+            -subj /CN=documentdb-ca \
+            -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign \
+            -keyout ca.key -out ca/ca.crt
+          openssl req -new -newkey ec -pkeyopt ec_paramgen_curve:P-384 -nodes -sha384 \
+            -subj /CN=documentdb -keyout server/tls.key -out server.csr
+          printf '%s\n' basicConstraints=critical,CA:FALSE keyUsage=critical,digitalSignature \
+            extendedKeyUsage=serverAuth subjectAltName=DNS:documentdb > server.ext
+          openssl x509 -req -in server.csr -CA ca/ca.crt -CAkey ca.key -CAcreateserial -CAserial ca.srl \
+            -days 3650 -sha384 -extfile server.ext -out server/tls.crt
+          rm -f ca.key ca.srl server.csr server.ext
+        fi
+        # The app reads the CA, and documentdb (uid 1000) the pair.
+        chmod 0755 ca
+        chmod 0644 ca/ca.crt
+        chown -R 1000:1000 server
     volumes:
-      - .volumes/pg_data:/var/lib/postgresql/data
+      - documentdb-tls:/tls
+    network_mode: none
+    restart: 'no'
+
+  documentdb:
+    image: ghcr.io/documentdb/documentdb/documentdb-local:pg18-1.0.0@sha256:03aef53ed72cd3007236f8ce1b4ef7a0c958dbbce1519074b85d8a3e10be89a5
+    environment:
+      USERNAME: ${POSTGRES_USER}
+      PASSWORD: ${POSTGRES_PASSWORD}
+      # The gateway refuses plain connections and serves the minted certificate.
+      TLS_MODE: requireTLS
+      CERT_PATH: /etc/documentdb/tls/tls.crt
+      KEY_FILE: /etc/documentdb/tls/tls.key
+      # Off, the gateway listens on the container's loopback only.
+      ALLOW_EXTERNAL_CONNECTIONS: 'true'
+      # On by default upstream: it reports to a third party at start and hourly.
+      DOCUMENTDB_USAGE_TELEMETRY: 'false'
+    volumes:
+      - documentdb-data:/data
+      - type: volume
+        source: documentdb-tls
+        target: /etc/documentdb/tls
+        read_only: true
+        volume:
+          subpath: server
     networks:
       - internal
     restart: on-failure
+    depends_on:
+      documentdb-tls:
+        condition: service_completed_successfully
     healthcheck:
-      # -d names the real database: without it libpq dials one named after the user.
-      test: pg_isready -U ${POSTGRES_USER} -d postgres
+      # The image's own probe, polled faster than its 30s default.
+      test: ['CMD', '/usr/local/bin/documentdb-healthcheck']
       interval: 5s
-      timeout: 3s
+      timeout: 10s
+      start_period: 60s
       retries: 10
 
-  # FerretDB: MongoDB wire protocol proxy → PostgreSQL
-  ferretdb:
-    image: ghcr.io/ferretdb/ferretdb:2.7.0
-    environment:
-      FERRETDB_POSTGRESQL_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/postgres
-    ports:
-      - '27017:27017'
-    networks:
-      - internal
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: on-failure
-
-  # Override app service to use FerretDB instead of mongo
+  # Override app service to use DocumentDB instead of mongo
   app:
     environment:
-      MONGO_URI: 'mongodb://${POSTGRES_USER}:${POSTGRES_PASSWORD}@ferretdb:27017/hyperdx?authMechanism=PLAIN'
+      MONGO_URI: 'mongodb://${POSTGRES_USER}:${POSTGRES_PASSWORD}@documentdb:10260/hyperdx?tls=true&tlsCAFile=/etc/dfe/documentdb-ca/ca.crt&authMechanism=SCRAM-SHA-256'
+    # The CA alone, never the gateway key beside it.
+    volumes:
+      - type: volume
+        source: documentdb-tls
+        target: /etc/dfe/documentdb-ca
+        read_only: true
+        volume:
+          subpath: ca
     # Replaces the base list: a merge would keep `db`, which the profile above removes.
     depends_on: !override
-      - ch-server
-      - ferretdb
+      ch-server:
+        condition: service_started
+      documentdb:
+        condition: service_healthy
+
+volumes:
+  documentdb-data:
+  documentdb-tls:
 
 networks:
   internal:

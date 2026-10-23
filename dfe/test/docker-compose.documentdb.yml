@@ -1,0 +1,33 @@
+# DocumentDB in place of MongoDB for the integration suite, layered over
+# upstream's docker-compose.ci.yml so that file stays as upstream ships it.
+#
+#   docker compose -f docker-compose.ci.yml -f dfe/test/docker-compose.documentdb.yml \
+#     up -d --wait ch-server db
+#
+# The gateway requires TLS and authenticates with SCRAM-SHA-256, as a deployed
+# store does. Its certificate is self-signed, so the suite connects with
+# tlsAllowInvalidCertificates=true - acceptable here and nowhere else. The
+# connection string is in .github/workflows/dfe-documentdb.yml.
+
+services:
+  db:
+    # DocumentDB 1.0 on Postgres 18, the pairing DFE deploys.
+    image: ghcr.io/documentdb/documentdb/documentdb-local:pg18-1.0.0@sha256:03aef53ed72cd3007236f8ce1b4ef7a0c958dbbce1519074b85d8a3e10be89a5
+    # Upstream's `--port 29999` is a mongod flag the DocumentDB entrypoint refuses.
+    command: !reset []
+    environment:
+      USERNAME: hyperdx
+      PASSWORD: hyperdx-int
+      TLS_MODE: requireTLS
+      # Off, the gateway listens on the container's loopback only.
+      ALLOW_EXTERNAL_CONNECTIONS: 'true'
+      DOCUMENTDB_USAGE_TELEMETRY: 'false'
+    ports: !override
+      - '${HDX_CI_MONGO_PORT:-39999}:10260'
+    # The image's own probe, polled faster than its 30s default so `--wait` returns promptly.
+    healthcheck:
+      test: ['CMD', '/usr/local/bin/documentdb-healthcheck']
+      interval: 2s
+      timeout: 10s
+      start_period: 120s
+      retries: 30

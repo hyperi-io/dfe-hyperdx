@@ -17,8 +17,8 @@
     "not planned). includePaths restricts EXTRACTION instead, so there is no",
     "disabled dependency to mis-filter and no rule to regress.",
     "",
-    "WHAT IS ON. The GitHub Actions pinned by SHA in our own five workflows, the",
-    "two compose files we added, and the node base of the root Dockerfile that",
+    "WHAT IS ON. The GitHub Actions pinned by SHA in our own six workflows, the",
+    "three compose files we added, and the node base of the root Dockerfile that",
     "builds the released image. The Dockerfiles under docker/ and packages/ are",
     "upstream's and stay out. The org preset supplies the rest: the",
     "fix(deps): prefix so a bump actually ships, digest pinning, the 7-day",
@@ -45,8 +45,10 @@
     ".github/workflows/upstream-drift.yml",
     ".github/workflows/fork-surface.yml",
     ".github/workflows/fork-security.yml",
+    ".github/workflows/dfe-documentdb.yml",
     "docker-compose.dfe.yml",
     "docker-compose.dfe.dev.yml",
+    "dfe/test/docker-compose.documentdb.yml",
     "Dockerfile"
   ],
   "enabledManagers": ["github-actions", "docker-compose", "dockerfile"],
@@ -62,7 +64,7 @@
     }
   ],
   "vulnerabilityAlerts": {
-    "description": "On, but not the primary net. Nothing outside includePaths is extracted, so this only ever covers our own two compose files, five workflows and root Dockerfile. Upstream's tree is covered by Dependabot alerts plus security/overrides.yaml.",
+    "description": "On, but not the primary net. Nothing outside includePaths is extracted, so this only ever covers our own three compose files, six workflows and root Dockerfile. Upstream's tree is covered by Dependabot alerts plus security/overrides.yaml.",
     "enabled": true
   },
   "osvVulnerabilityAlerts": true,

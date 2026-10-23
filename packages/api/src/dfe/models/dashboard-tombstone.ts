@@ -12,6 +12,7 @@
 
 import mongoose, { Schema } from 'mongoose';
 
+import { retryUpsertRace } from '@/dfe/models/duplicate-key';
 import type { ObjectId } from '@/models';
 
 export interface IDfeDashboardTombstone {
@@ -52,10 +53,12 @@ export async function recordDashboardTombstone(
   name: string,
   teamId: string,
 ): Promise<void> {
-  await DfeDashboardTombstone.findOneAndUpdate(
-    { name, team: teamId },
-    { $set: { deletedAt: new Date() } },
-    { upsert: true },
+  await retryUpsertRace(async () =>
+    DfeDashboardTombstone.findOneAndUpdate(
+      { name, team: teamId },
+      { $set: { deletedAt: new Date() } },
+      { upsert: true },
+    ),
   );
 }
 
