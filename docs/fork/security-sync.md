@@ -1930,9 +1930,8 @@ assertion fails.
 
 0004 does not depend on 0003. Its hunks sit clear of 0003's lines, and it
 applies to `api-app.ts` with 0003 reversed, so the 2026-10-29 pin leaves it
-standing. No verdict goes into `scripts/dismiss-triaged-alerts.py` for alerts
-#367-#371, because the vulnerable walk is still in the tree and only its input
-is bounded.
+standing. No verdict goes into `scripts/dismiss-triaged-alerts.py` for alerts #367-#371,
+because the vulnerable walk is still in the tree and only its input is bounded.
 
 ### fast-uri, undici, serialize-javascript - recorded, not fixed
 
