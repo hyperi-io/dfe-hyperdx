@@ -12,14 +12,14 @@
 #           created. No DFE client sends one: the browser app and the CLI send
 #           plain bodies, and the engine's scalo AsyncHttpClient sends JSON
 #           with no Content-Encoding.
-#           The OpAMP listener (opamp/app.ts) and the PromQL router
-#           (routers/api/prometheus.ts) mount body-parser too and are NOT
-#           covered here: both are pristine upstream files, so patching them
-#           would add permanent .fork-surface entries for a fix due to be
-#           deleted on 2026-10-29. Neither carries the unauthenticated vector
-#           -- nothing routes to OpAMP's 4320 and the PromQL router sits
-#           behind ENABLE_PROMQL and isUserAuthenticated. The pin covers all
-#           five mounts.
+#           The PromQL router (routers/api/prometheus.ts) mounts its own
+#           urlencoded parser on this app, behind these. read() sets
+#           req._body before contentstream() runs, so a compressed urlencoded
+#           body 415s here and that parser only ever sees it parsed. The
+#           OpAMP listener (opamp/app.ts) is a separate app on 4320 and keeps
+#           inflating: the OpAMP spec requires a server to accept a gzip
+#           request body, and nothing in DFE routes to 4320. The pin covers
+#           it.
 # upstream: none - the pin to body-parser ^1.20.9 replaces this patch once
 #           npmMinimalAgeGate admits 1.20.9 on 2026-10-29.
 # added:    2026-10-24

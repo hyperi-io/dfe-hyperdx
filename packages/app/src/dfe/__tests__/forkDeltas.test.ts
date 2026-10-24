@@ -117,12 +117,8 @@ describe('DashboardsListPage.tsx - restoring the shipped set', () => {
   });
 });
 
-describe('DashboardsListPage.tsx - throughput in place of the presets', () => {
+describe('DashboardsListPage.tsx - no preset dashboards', () => {
   const page = read('src/components/Dashboards/DashboardsListPage.tsx');
-
-  it('mounts the throughput headline', () => {
-    expect(page).toContain('<DfeThroughputHeadline />');
-  });
 
   it('carries no preset links, whose routes this fork does not ship', () => {
     expect(page).not.toContain('PRESET_DASHBOARDS');

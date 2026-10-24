@@ -93,7 +93,6 @@ VERDICTS: dict[str, tuple[str, str]] = {
     "brace-expansion": ("not_used", ABSENT),
     "tmp": ("not_used", ABSENT),
     "nx": ("not_used", ABSENT),
-    "serialize-javascript": ("not_used", ABSENT),
     "validator": ("not_used", ABSENT),
     "esbuild": ("not_used", ABSENT),
     "rollup": ("not_used", ABSENT),
@@ -159,6 +158,12 @@ VERDICTS: dict[str, tuple[str, str]] = {
         "Build-time CSS only - postcss-modules, postcss-nested, stylelint. "
         "Selectors come from our own stylesheets, never from a request.",
     ),
+    "serialize-javascript": (
+        "not_used",
+        "Absent from the api focus. Ships only in Next's server trace under "
+        "terser-webpack-plugin, which next/dist/build loads and next/dist/server "
+        "never does.",
+    ),
     # In the image, but the version we resolve is outside the advisory range.
     "ajv": (
         "not_used",
@@ -197,9 +202,16 @@ VERDICTS: dict[str, tuple[str, str]] = {
     # In the image and in range, but nothing an attacker can drive.
     "fast-uri": (
         "not_used",
-        "Resolves 3.1.4, INSIDE the < 3.1.6 ranges. Reached only by ajv via the "
-        "MCP SDK, which parses URIs from our own schemas and fetches none, so "
-        "host confusion has no requester behind it. /mcp is service-only.",
+        "Resolves 3.1.8, INSIDE the < 3.1.9 ranges. Reached only by ajv via the "
+        "MCP SDK, which resolves our own schema refs and checks uri formats, "
+        "and nothing fetches or authorises on the result. /mcp is service-only.",
+    ),
+    "undici": (
+        "not_used",
+        "7.30.0 is the AI SDK's fetch for untrusted URLs in a prompt. The api "
+        "sends text prompts only, and /ai throws unless AI_PROVIDER or "
+        "ANTHROPIC_API_KEY is set, which DFE does not. 8.11.2 is node-gyp, "
+        "build tooling.",
     ),
     "fflate": (
         "not_used",

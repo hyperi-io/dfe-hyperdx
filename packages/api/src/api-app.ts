@@ -13,6 +13,7 @@ import {
   stripMeTeamAdminFields,
 } from './dfe/middleware/admin-lockdown';
 import { dropClientCredentials } from './dfe/middleware/clickhouse-proxy-credentials';
+import { boundJsonBody } from './dfe/middleware/json-body-bound';
 import { blockProvisionedWrites } from './dfe/middleware/provisioned-lockdown';
 import { mountObservability } from './dfe/observability';
 import dfeSourcesRouter from './dfe/routers/dfe-sources';
@@ -84,6 +85,7 @@ if (!config.IS_LOCAL_APP_MODE) {
   app.use(passport.initialize());
   app.use(passport.session());
 }
+app.use(boundJsonBody);
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 // --- DFE START ---

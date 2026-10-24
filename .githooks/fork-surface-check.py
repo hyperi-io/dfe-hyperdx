@@ -20,6 +20,7 @@ Classification of each changed path:
   - under a ``dfe/`` directory        -> OK, additive, cannot conflict
   - absent from the upstream baseline -> OK, our own new file
   - listed in ``.fork-surface``       -> OK, sanctioned exception
+  - upstream plus only the security patches naming it -> OK, stripped before a sync
   - otherwise                         -> VIOLATION
 
 Deletions need their own catalogue, ``.fork-deleted``. An upstream file we
@@ -45,19 +46,21 @@ Usage::
     FORK_SURFACE_WARN=1 git commit ...
 """
 
-from __future__ import annotations
-
 import argparse
 import fnmatch
 import os
+import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CATALOGUE = REPO_ROOT / ".fork-surface"
 DELETIONS = REPO_ROOT / ".fork-deleted"
+PATCHES_DIR = "security/patches"
 UPSTREAM_REF = "upstream/main"
+_PATCH_TARGET = re.compile(r"^\+\+\+ b/(\S+)", re.MULTILINE)
 
 
 def _git(*args: str) -> str:
@@ -75,6 +78,23 @@ def _git(*args: str) -> str:
     except OSError:
         return ""
     return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def _git_raw(
+    *args: str, env: dict[str, str] | None = None, stdin: bytes | None = None
+) -> subprocess.CompletedProcess[bytes] | None:
+    """Run git in the repo on bytes, or None when git cannot be started."""
+    try:
+        return subprocess.run(
+            ["git", *args],
+            cwd=REPO_ROOT,
+            env=env,
+            input=stdin,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return None
 
 
 def load_catalogue() -> list[str]:
@@ -200,6 +220,65 @@ def matches_upstream(baseline: str, path: str, base: str | None) -> bool:
     # ':path' is the staged blob; for a range check use the tip of the range.
     ours = _git("rev-parse", f"HEAD:{path}" if base else f":{path}")
     return bool(ours) and ours == upstream_blob
+
+
+def patch_series(base: str | None) -> list[bytes]:
+    """The security patches in the checked tree, in apply order.
+
+    Read from the tip of the range for ``--base`` and from the index otherwise,
+    so a patch staged beside the file it fixes is seen by the pre-commit run.
+    """
+    if base:
+        listing = _git("ls-tree", "-r", "--name-only", "HEAD", "--", PATCHES_DIR)
+        prefix = "HEAD:"
+    else:
+        listing = _git("ls-files", "--", PATCHES_DIR)
+        prefix = ":"
+    series: list[bytes] = []
+    for name in sorted(listing.splitlines()):
+        if not name.endswith(".patch"):
+            continue
+        shown = _git_raw("show", f"{prefix}{name}")
+        if shown is not None and shown.returncode == 0:
+            series.append(shown.stdout)
+    return series
+
+
+def patched_paths(patch: bytes) -> set[str]:
+    """The files a patch writes, read from its ``+++ b/`` headers."""
+    return set(_PATCH_TARGET.findall(patch.decode("utf-8", errors="replace")))
+
+
+def carries_only_patches(
+    baseline: str, path: str, base: str | None, series: list[bytes]
+) -> bool:
+    """True when *path* is upstream's file plus the security patches naming it.
+
+    `security-override.py --unapply` reverses those patches before every
+    upstream merge, so their hunks never reach rerere. Any other edit in the
+    same file does, so the patches are reversed onto a scratch index and the
+    result compared with upstream, rather than the path merely being matched.
+    """
+    naming = [patch for patch in series if path in patched_paths(patch)]
+    if not naming or not baseline:
+        return False
+    upstream_blob = _git("rev-parse", f"{baseline}:{path}")
+    tree = "HEAD" if base else _git("write-tree")
+    if not upstream_blob or not tree:
+        return False
+    with tempfile.TemporaryDirectory(prefix="fork-surface-") as scratch:
+        env = {**os.environ, "GIT_INDEX_FILE": str(Path(scratch) / "index")}
+        loaded = _git_raw("read-tree", tree, env=env)
+        if loaded is None or loaded.returncode != 0:
+            return False
+        for patch in reversed(naming):
+            reverted = _git_raw("apply", "--cached", "-R", env=env, stdin=patch)
+            if reverted is None or reverted.returncode != 0:
+                return False
+        ours = _git_raw("rev-parse", f":{path}", env=env)
+    if ours is None or ours.returncode != 0:
+        return False
+    return ours.stdout.decode("utf-8", errors="replace").strip() == upstream_blob
 
 
 def exists_upstream(baseline: str, path: str) -> bool:
@@ -411,6 +490,7 @@ def main() -> int:
         return 0
 
     baseline = upstream_baseline()
+    series = patch_series(args.base)
     violations: list[str] = []
 
     for path in files:
@@ -422,6 +502,8 @@ def main() -> int:
             continue
         if matches_upstream(baseline, path, args.base):
             # Reverted to pristine - this REMOVES surface, always allowed.
+            continue
+        if carries_only_patches(baseline, path, args.base, series):
             continue
         violations.append(path)
 
@@ -439,6 +521,8 @@ def main() -> int:
         "  - move the change under a dfe/ directory (preferred, cannot conflict)\n"
         "  - exclude the path from the tool instead of editing it (formatters:\n"
         "    .prettierignore / eslint ignores) if this is a formatting-only edit\n"
+        "  - carry a temporary security fix as a security/patches/*.patch, and\n"
+        "    change nothing else in that file\n"
         "  - if the edit is genuinely required, land it as a documented\n"
         "    exception: add the path to .fork-surface AND describe the delta in\n"
         "    docs/fork/what-we-changed.md in this same commit, then re-run\n"
