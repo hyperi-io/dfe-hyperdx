@@ -9,9 +9,9 @@
  * exists. Carried as security/patches/0003-body-parser-no-inflate.patch until
  * the pin to body-parser ^1.20.9 can install.
  *
- * The OpAMP listener and the PromQL router mount body-parser too and are not
- * covered -- see the patch header for why, and docs/fork/security-sync.md for
- * the reachability of each.
+ * The PromQL router's own urlencoded parser sits behind these on the same app,
+ * so it never reads a raw body, and the last block below asserts it. The OpAMP
+ * listener is a separate app and keeps inflating -- see the patch header.
  *
  * The mounts are rebuilt here with the options the patched source uses rather
  * than imported, because api-app.ts opens a Mongo session store at import. The
@@ -100,5 +100,47 @@ describe.each(MOUNTS)('api-app $name', mount => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ parsed: true });
+  });
+});
+
+describe('the PromQL router parser behind the api-app mounts', () => {
+  const urlencoded = MOUNTS[2];
+
+  test('is mounted after the api-app urlencoded parser in the shipped source', () => {
+    const source = readFileSync(API_APP, 'utf8');
+    const outer = source.indexOf(urlencoded.declaration);
+
+    expect(outer).toBeGreaterThan(-1);
+    expect(source.indexOf("app.use('/v1/prometheus'")).toBeGreaterThan(outer);
+  });
+
+  test('never reads a raw body, so it never inflates one', async () => {
+    const promqlParser = express.urlencoded({ extended: true });
+    let rawBodies = 0;
+    const router = express.Router();
+    router.use((req, res, next) => {
+      if (!(req as express.Request & { _body?: boolean })._body) rawBodies += 1;
+      promqlParser(req, res, next);
+    });
+    router.post('/query', (_req, res) => {
+      res.status(200).json({ parsed: true });
+    });
+    const app = express();
+    app.use(urlencoded.parser());
+    app.use('/v1/prometheus', router);
+
+    const gzipped = await request(app)
+      .post('/v1/prometheus/query')
+      .set('Content-Type', urlencoded.contentType)
+      .set('Content-Encoding', 'gzip')
+      .send(gzipSync(Buffer.from(urlencoded.body)));
+    const plain = await request(app)
+      .post('/v1/prometheus/query')
+      .set('Content-Type', urlencoded.contentType)
+      .send(urlencoded.body);
+
+    expect(gzipped.status).toBe(415);
+    expect(plain.status).toBe(200);
+    expect(rawBodies).toBe(0);
   });
 });

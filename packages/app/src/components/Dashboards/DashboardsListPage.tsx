@@ -53,7 +53,6 @@ import {
   useDeleteDashboard,
 } from '@/dashboard';
 import RestoreShippedDashboards from '@/dfe/components/RestoreShippedDashboards';
-import DfeThroughputHeadline from '@/dfe/components/ThroughputHeadline';
 import { useFavorites } from '@/favorites';
 import { withAppNav } from '@/layout';
 import { usePageTitle } from '@/theme/ThemeProvider';
@@ -254,7 +253,6 @@ export default function DashboardsListPage() {
         w="100%"
         style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
       >
-        <DfeThroughputHeadline />
         <Text ta="right" mb="sm">
           <Anchor component={Link} href="/dashboards/templates" fz="sm">
             Browse dashboard templates &rarr;

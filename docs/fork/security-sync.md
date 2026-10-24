@@ -1781,3 +1781,139 @@ osv-scanner does. Worth remembering when the gate looks quiet.
   scanner no longer reports.
 - `packages/api`'s lint gate passes at exactly 309 warnings against its
   `--max-warnings 309` ceiling, so the next warning anyone adds fails it.
+
+## 2026-10-24 - the patch guard, the last two body-parser mounts, a zod OOM, and four osv packages
+
+The guard no longer pushes a security patch onto `.fork-surface`. Neither
+remaining body-parser mount needs patch 0004. The zod residual from the section
+above is real and kills the API from one authenticated request, and a `.max()`
+bound does not stop it. fast-uri, undici and serialize-javascript get recorded
+verdicts.
+
+### The guard admits a security patch, and nothing else in that file
+
+`.githooks/fork-surface-check.py` passes an uncatalogued upstream file when the
+changed content is upstream's plus the `security/patches/*.patch` files that
+name it in a `+++ b/` header. It reverses those patches onto a scratch index
+built from the checked tree and compares the result with the merge base's blob.
+A path match alone would let a permanent edit ride in beside a patch, and
+`--unapply` strips only the patch's hunk, so that edit would reach rerere
+uncatalogued.
+
+The series is read from the same tree as the change: `HEAD` for `--base`, the
+index for the pre-commit run, so an unstaged patch does not cover a staged edit.
+`fork-surface.yml` calls the same script, so CI picks it up with no workflow
+change. `scripts/__tests__/test_fork_surface.py` has five cases. Against
+origin/main's guard the two patch cases fail and the three block cases pass.
+
+### body-parser - no patch 0004
+
+The pin to `^1.20.9` stays tracked by #165, and the age gate clears it on
+2026-10-29.
+
+**The PromQL mount never reads a raw body.** `routers/api/prometheus.ts:56`
+mounts `express.urlencoded` on a router that `api-app.ts:211` mounts after the
+global parsers at `api-app.ts:78-80`. body-parser's `read()` sets `req._body`
+before `contentstream()` runs (`lib/read.js:46`), and the router's parser
+returns early on it (`lib/types/urlencoded.js:84`). Measured with that stack: a
+gzip and a deflate urlencoded body both 415 from the outer parser, a plain body
+parses, and the router's parser saw an unparsed body zero times.
+`dfe/__tests__/body-parser-inflate.test.ts` now pins the mount order and the
+behaviour.
+
+**OpAMP stays inflating.** The OpAMP specification's plain HTTP transport says
+"Server implementations MUST honour the "Content-Encoding" header and MUST
+support gzipped or uncompressed request bodies" (opamp-spec
+`specification.md:564-566`), so `inflate: false` on `opamp/app.ts:15` would
+break a conforming client. It is also unreached here. `dfe/deploy/contract.json`
+publishes 8080 and the metrics port, and `git grep -i -E "4320|opamp"` over
+dfe-infra origin/main matches only digest strings.
+
+### zod - one request takes the API down, and `.max()` does not bound it
+
+Measured with the built `DashboardWithoutIdSchema`, the schema POST
+`/dashboards` validates, on Node 24.17 with the default 4,288 MB heap it takes
+on desktop-derek. The image sets no `--max-old-space-size`.
+
+| Body                                          | Size    | Parse  | Issues    | Peak RSS               |
+| --------------------------------------------- | ------- | ------ | --------- | ---------------------- |
+| `tiles`: 100,000 x `{}`                       | 0.3 MB  | 6.1 s  | 600,000   | 975 MB                 |
+| `tiles`: 400,000 x `{}`                       | 1.1 MB  | 20.1 s | 2,400,000 | 3,304 MB               |
+| `tiles`: 1,000,000 x `{}`                     | 2.9 MB  | -      | -         | heap OOM abort at 62 s |
+| one tile, `config.select`: 100,000 x `{}`     | 0.29 MB | 22.0 s | 1         | 2,721 MB               |
+| `containers`: 100,000 x `{}`, upstream max 50 | 0.29 MB | 0.6 s  | 300,001   | 329 MB                 |
+| `tags`: 1,000,000 x `1`                       | 1.9 MB  | 1.3 s  | 1,000,000 | 750 MB                 |
+
+On a 100,000-tile failure, `zod-express-middleware` then serialises every issue
+into the 400 response: 107.5 MB, a further 1.0 s.
+
+Three things follow, and they change what a fix looks like.
+
+- The 32mb body limit is no bound. A 2.9 MB body exhausts the heap, and the
+  parse blocks the event loop for every org until it dies.
+- `.max()` does not stop the walk on 3.x. `ZodArray._parse` adds the `too_big`
+  issue and then still parses every element
+  (`node_modules/zod/v3/types.js:1788-1811`). Upstream's own
+  `containers.max(DASHBOARD_MAX_CONTAINERS)` shows it: 100,000 containers give
+  300,001 issues.
+- Bounding `tiles` and `tags` leaves the worse amplifier open.
+  `SavedChartConfigSchema` is a three-way union, and a failed union keeps every
+  branch's issues, so one tile with a 100,000-element `select` costs more than
+  100,000 tiles do.
+
+For scale, the eight dashboards dfe-engine ships (origin/main) carry at most 29
+tiles, 41 array elements, 457 JSON nodes and 26 KB.
+
+Not patched in this change. A fix has to bound the body's structure before zod
+sees it, and its shape and limit are open. The `THREAT-MODEL.md` "no rate limit
+inside the HyperDX API" class covers request volume, not a single request that
+ends the process, so the earlier "left as it stands" no longer holds. No verdict
+goes into `scripts/dismiss-triaged-alerts.py` for alerts #367-#371.
+
+### fast-uri, undici, serialize-javascript - recorded, not fixed
+
+| Package              | Version | Advisories                                                             | Highest CVSS | In the image                  |
+| -------------------- | ------- | ---------------------------------------------------------------------- | ------------ | ----------------------------- |
+| fast-uri             | 3.1.8   | GHSA-333x-w4r6-6crp, -w74x-v6f9-j3xg, -wjr9-j795-jxcr, -xhq7-xmqj-769h | 6.1          | yes, ajv under the MCP SDK    |
+| undici               | 7.30.0  | GHSA-4qv8-2p9j-2685, -f72v-6w45-q472, -xjj6-f33q-929c                  | 7.5          | yes, `@ai-sdk/provider-utils` |
+| undici               | 8.11.2  | the same three                                                         | 7.5          | no, node-gyp                  |
+| serialize-javascript | 6.0.2   | GHSA-m5mm-p8h7-m29v                                                    | 2.1          | Next's server trace only      |
+
+**fast-uri** moved from the 3.1.4 the 2026-09-21 verdict names to 3.1.8, and the
+four new advisories are all `< 3.1.9`, so it is inside the range again. ajv
+8.20.0 is still its only production parent, via `@modelcontextprotocol/sdk`
+1.32.1. The api's own `ajv ^8.20.0` is a devDependency
+(`packages/api/package.json:87`) for `mcp/__tests__/toolSchemas.test.ts`. ajv
+resolves `$ref` in our own schemas and answers whether a string is a `uri`, and
+nothing fetches or authorises on what fast-uri returns. All four are low or
+moderate. 3.1.9 was published 2026-10-19 and the `^3.0.1` range admits it.
+
+**undici 7.30.0** is the one high. GHSA-xjj6-f33q-929c needs undici's `fetch` to
+decode a response carrying many `Content-Encoding` layers, which means a
+malicious server answering a request undici made. provider-utils loads undici
+only in `createSafeNodeFetch` (`dist/index.js:1184-1201`), the fetch
+`fetchUntrustedUrl` uses to download a URL a prompt references. The api's
+prompts are text: `packages/api/src` holds no image or file part. And
+`getAIModel()` throws unless `AI_PROVIDER` or `ANTHROPIC_API_KEY` is set
+(`controllers/ai.ts:46-56`), which `.env.dfe-example` and
+`docker-compose.dfe.yml` do not name. 7.30.1 was published 2026-10-15 and
+`^7.29.0` admits it. **undici 8.11.2** comes from node-gyp, which fsevents and
+evp_bytestokey pull in at build time.
+
+**serialize-javascript 6.0.2** is the copy the existing GHSA-5c6j-r48x-rmvq and
+GHSA-qj8w-gfj5-8c6v ignores already cover, under terser-webpack-plugin. Its
+`scripts/dismiss-triaged-alerts.py` verdict said it was absent from the image,
+which the osv-scanner reason contradicts, and now says what the osv-scanner
+reason says.
+
+None has a Dependabot alert yet. Each now has a verdict in
+`scripts/dismiss-triaged-alerts.py` and `osv-scanner.toml`, and the osv-scanner
+ignores for braces (GHSA-vfj7-8cjw-p6xm) and sprintf-js (GHSA-hp3w-g68c-fv3c),
+which matched nothing, are gone.
+
+### The audit, before and after
+
+| Run                        | main                                                                                             | This change                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------- |
+| osv-scanner on `yarn.lock` | 16 rows: body-parser, fast-uri x4, serialize-javascript, undici x6, zod x4, and 2 unused ignores | 5 rows: body-parser, zod x4 |
+| `yarn npm audit`           | not run                                                                                          | not run                     |

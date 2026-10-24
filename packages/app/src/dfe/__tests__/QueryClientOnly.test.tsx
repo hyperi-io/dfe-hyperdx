@@ -2,7 +2,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { screen } from '@testing-library/react';
 
 import RestoreShippedDashboards from '@/dfe/components/RestoreShippedDashboards';
-import DfeThroughputHeadline from '@/dfe/components/ThroughputHeadline';
 import { QueryClientOnly } from '@/dfe/QueryClientOnly';
 
 describe('QueryClientOnly', () => {
@@ -29,18 +28,12 @@ describe('QueryClientOnly', () => {
   });
 
   // Upstream's DashboardsListPage test mounts the page with no QueryClient.
-  it('keeps the components injected into the dashboards list from throwing', () => {
+  it('keeps the component injected into the dashboards list from throwing', () => {
     expect(() => {
-      renderWithMantine(
-        <>
-          <RestoreShippedDashboards />
-          <DfeThroughputHeadline />
-        </>,
-      );
+      renderWithMantine(<RestoreShippedDashboards />);
     }).not.toThrow();
     expect(
       screen.queryByTestId('restore-shipped-dashboards-button'),
     ).not.toBeInTheDocument();
-    expect(screen.queryByTestId('dfe-throughput')).not.toBeInTheDocument();
   });
 });

@@ -467,26 +467,22 @@ header check is what holds when a deployment authenticates some other way.
   each team without the platform sources logged one warning per platform
   dashboard per minute. An unresolved reference written through with dead tiles
   still warns.
-- **The preset dashboards are replaced by a DFE throughput figure.** Upstream's
-  list page opens on Services, ClickHouse and Kubernetes links, and this fork
-  ships none of those pages, so all three were 404s.
-  `packages/app/src/dfe/components/ThroughputHeadline/` shows events written to
-  ClickHouse per second, averaged over the last 15 minutes, with a per-minute
-  sparkline. `dfe/throughput.ts` reads the loader's cumulative
-  `rows_inserted_total` from the `otel_metrics` source through `increase`,
-  upstream's reset-aware counter path, summed across every loader. A team
-  without that source, which is every tenant team, gets nothing rendered.
+- **The preset dashboards are removed.** Upstream's list page opens on Services,
+  ClickHouse and Kubernetes links, and this fork ships none of those pages, so
+  all three were 404s. The usage figures live in the shipped Overview dashboard
+  instead. `/dashboards/default` (`dfe/DefaultDashboardRedirect.tsx`) opens it
+  for the platform team, the only team it is seeded for, and DFE Throughput for
+  every other team.
 
   **`DashboardsListPage.tsx` (catalogued)** loses `PRESET_DASHBOARDS`, the
-  import only it used and the block that rendered it, and gains one import and
-  one element. `dfe/__tests__/forkDeltas.test.ts` pins the swap. Both injected
-  components render only under a QueryClientProvider
-  (`dfe/QueryClientOnly.tsx`), because upstream's own
-  `DashboardsListPage.test.tsx` mounts the page with its data hooks mocked and
-  no QueryClient, and an unguarded query of ours failed all 21 of its tests.
-  Upstream's `tests/e2e/features/dashboards-list.spec.ts` still asserts the
-  preset links and is left untouched, like the specs for the three pages this
-  fork does not ship.
+  import only it used and the block that rendered it.
+  `dfe/__tests__/forkDeltas.test.ts` pins the removal. The restore control it
+  gains renders only under a QueryClientProvider (`dfe/QueryClientOnly.tsx`),
+  because upstream's own `DashboardsListPage.test.tsx` mounts the page with its
+  data hooks mocked and no QueryClient, and an unguarded query of ours failed
+  all 21 of its tests. Upstream's `tests/e2e/features/dashboards-list.spec.ts`
+  still asserts the preset links and is left untouched, like the specs for the
+  three pages this fork does not ship.
 
   **`Spotlights.tsx` (catalogued)**, the Cmd+K command palette, offered the same
   three presets. Upstream's list stays as written and the loop that adds it

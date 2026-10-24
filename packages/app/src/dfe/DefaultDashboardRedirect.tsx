@@ -2,8 +2,9 @@
 //
 // dfe-ui cannot link straight to the seeded dashboard: provisioned ids are
 // per-team ObjectIds, so there is no stable id to embed in another repo. This
-// route resolves the caller's own team's DFE Throughput dashboard and redirects,
-// giving dfe-ui one deployment-independent path to point `/observe` at.
+// route resolves the caller's own team's shipped default dashboard and
+// redirects, giving dfe-ui one deployment-independent path to point `/observe`
+// at.
 //
 // This is a NEW file - it does not modify any upstream HyperDX files.
 
@@ -11,11 +12,26 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { Center, Loader, Stack, Text } from '@mantine/core';
 
-import { useDashboards } from '@/dashboard';
+import { type Dashboard, useDashboards } from '@/dashboard';
+import { isDfeManaged } from '@/dfe/shippedDashboard';
 
-// Must match the name dfe-engine ships in
-// src/dfe_engine/hyperdx/dashboards/dfe-throughput.json.
-const DFE_DEFAULT_DASHBOARD_NAME = 'DFE Throughput';
+// Names dfe-engine ships in src/dfe_engine/hyperdx/dashboards/, in order of
+// preference. Overview reads the platform connection, so only the platform team
+// is seeded with it, and every other team lands on DFE Throughput.
+export const DFE_DEFAULT_DASHBOARD_NAMES = ['Overview', 'DFE Throughput'];
+
+// Shipped copies only: a team's own dashboard may carry the same name.
+export function pickDefaultDashboard(
+  dashboards: ReadonlyArray<Pick<Dashboard, 'id' | 'name' | 'provisioned'>>,
+) {
+  for (const name of DFE_DEFAULT_DASHBOARD_NAMES) {
+    const match = dashboards.find(d => d.name === name && isDfeManaged(d));
+    if (match) {
+      return match;
+    }
+  }
+  return undefined;
+}
 
 export default function DefaultDashboardRedirect() {
   const router = useRouter();
@@ -26,7 +42,7 @@ export default function DefaultDashboardRedirect() {
       return;
     }
 
-    const target = dashboards.find(d => d.name === DFE_DEFAULT_DASHBOARD_NAME);
+    const target = pickDefaultDashboard(dashboards);
 
     // Falling back to the dashboard list rather than 404ing: a deployment whose
     // seeding has not run yet should still land somewhere useful.
@@ -52,7 +68,7 @@ export default function DefaultDashboardRedirect() {
       <Stack align="center" gap="xs">
         <Loader size="sm" />
         <Text size="sm" c="dimmed">
-          Opening {DFE_DEFAULT_DASHBOARD_NAME}...
+          Opening dashboards...
         </Text>
       </Stack>
     </Center>

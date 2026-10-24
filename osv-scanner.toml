@@ -110,10 +110,6 @@ id = "GHSA-rgw5-rvv9-x895"
 reason = "brace-expansion 5.0.8: nx's exact pin, a root devDependency, not in the image."
 
 [[IgnoredVulns]]
-id = "GHSA-vfj7-8cjw-p6xm"
-reason = "braces: no fixed release. http-proxy-middleware reaches micromatch only for a glob pathFilter, both proxies use a function or the default, and braces expands the pattern, never the URL."
-
-[[IgnoredVulns]]
 id = "GHSA-73wf-gq98-2v4g"
 reason = "browserslist: in Next's server trace, loaded only by next/dist/build over our own config, never by next/dist/server."
 
@@ -144,6 +140,22 @@ reason = "elliptic: no fixed release. browserify-sign and create-ecdh under Stor
 [[IgnoredVulns]]
 id = "GHSA-g7r4-m6w7-qqqr"
 reason = "esbuild 0.27.4: tsx's dev server on Windows, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-333x-w4r6-6crp"
+reason = "fast-uri 3.1.8: ajv under the MCP SDK resolves our own schema refs and checks uri formats with it, and nothing fetches or authorises on the parsed URI. /mcp is service-only."
+
+[[IgnoredVulns]]
+id = "GHSA-w74x-v6f9-j3xg"
+reason = "fast-uri 3.1.8: ajv under the MCP SDK resolves our own schema refs and checks uri formats with it, and nothing fetches or authorises on the parsed URI. /mcp is service-only."
+
+[[IgnoredVulns]]
+id = "GHSA-wjr9-j795-jxcr"
+reason = "fast-uri 3.1.8: ajv under the MCP SDK resolves our own schema refs and checks uri formats with it, and nothing fetches or authorises on the parsed URI. /mcp is service-only."
+
+[[IgnoredVulns]]
+id = "GHSA-xhq7-xmqj-769h"
+reason = "fast-uri 3.1.8: ajv under the MCP SDK resolves our own schema refs and checks uri formats with it, and nothing fetches or authorises on the parsed URI. /mcp is service-only."
 
 [[IgnoredVulns]]
 id = "GHSA-gh4j-gqv2-49f6"
@@ -310,6 +322,10 @@ id = "GHSA-qj8w-gfj5-8c6v"
 reason = "serialize-javascript: terser-webpack-plugin in Next's server trace, loaded only by next/dist/build, never by next/dist/server."
 
 [[IgnoredVulns]]
+id = "GHSA-m5mm-p8h7-m29v"
+reason = "serialize-javascript: terser-webpack-plugin in Next's server trace, loaded only by next/dist/build, never by next/dist/server."
+
+[[IgnoredVulns]]
 id = "GHSA-7w5x-hrqm-74c2"
 reason = "smol-toml 1.6.1: nx's exact pin, a root devDependency, not in the image."
 
@@ -318,16 +334,24 @@ id = "GHSA-r4xh-jqrq-34v2"
 reason = "smol-toml 1.6.1: nx's exact pin, a root devDependency, not in the image."
 
 [[IgnoredVulns]]
-id = "GHSA-hp3w-g68c-fv3c"
-reason = "sprintf-js: no fixed release. argparse under js-yaml 3's CLI, not in the image."
-
-[[IgnoredVulns]]
 id = "GHSA-52f5-9888-hmc6"
 reason = "tmp 0.0.33: external-editor under CLI prompts, not in the image."
 
 [[IgnoredVulns]]
 id = "GHSA-ph9p-34f9-6g65"
 reason = "tmp 0.0.33: external-editor under CLI prompts, not in the image."
+
+[[IgnoredVulns]]
+id = "GHSA-4qv8-2p9j-2685"
+reason = "undici: 7.30.0 is the AI SDK's fetch for untrusted URLs in a prompt, the api sends text prompts only, and the AI routes throw unless AI_PROVIDER or ANTHROPIC_API_KEY is set. 8.11.2 is node-gyp, build tooling."
+
+[[IgnoredVulns]]
+id = "GHSA-f72v-6w45-q472"
+reason = "undici: 7.30.0 is the AI SDK's fetch for untrusted URLs in a prompt, the api sends text prompts only, and the AI routes throw unless AI_PROVIDER or ANTHROPIC_API_KEY is set. 8.11.2 is node-gyp, build tooling."
+
+[[IgnoredVulns]]
+id = "GHSA-xjj6-f33q-929c"
+reason = "undici: 7.30.0 is the AI SDK's fetch for untrusted URLs in a prompt, the api sends text prompts only, and the AI routes throw unless AI_PROVIDER or ANTHROPIC_API_KEY is set. 8.11.2 is node-gyp, build tooling."
 
 [[IgnoredVulns]]
 id = "GHSA-w5hq-g745-h8pq"
