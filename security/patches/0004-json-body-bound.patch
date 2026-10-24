@@ -1,0 +1,40 @@
+# advisory: GHSA-mrhx-c7xc-m3w5 residual (Dependabot 367-371)
+# severity: high
+# vector:   zod 3.25.76's ZodArray and ZodRecord parse every element and key
+#           even after a .max() fails, and keep an issue for each. Any signed-in
+#           member of any team reaches that walk through POST and PATCH
+#           /dashboards, POST and PATCH /saved-search, PUT /pinned-filters and
+#           POST /dfe/export-sql, whose bodies carry unbounded arrays, unions
+#           over arrays, or a record whose key cap is a refine that runs after
+#           the walk. A 2.9 MB POST /dashboards body exhausts the API's heap,
+#           and the process every org shares exits. The engine-only routes
+#           (/alerts, /webhooks, /sources, /connections, /team writes,
+#           /dfe/sources, /api/v2, /mcp) carry the same shapes behind
+#           requireServicePrincipal. Query strings and urlencoded bodies stop
+#           at qs and body-parser's 1,000-parameter limit, so only JSON bodies
+#           need the bound. boundJsonBody counts the parsed body before any
+#           router runs: 2,000 array elements, 20,000 object members
+#           (dfe/middleware/json-body-bound.ts).
+# upstream: none - the fix (colinhacks/zod a0ebf970) is zod 4 only, and every
+#           workspace imports zod 3.
+# added:    2026-10-24
+diff --git a/packages/api/src/api-app.ts b/packages/api/src/api-app.ts
+index a1af8ace9..a52d71a6a 100644
+--- a/packages/api/src/api-app.ts
++++ b/packages/api/src/api-app.ts
+@@ -13,6 +13,7 @@ import {
+   stripMeTeamAdminFields,
+ } from './dfe/middleware/admin-lockdown';
+ import { dropClientCredentials } from './dfe/middleware/clickhouse-proxy-credentials';
++import { boundJsonBody } from './dfe/middleware/json-body-bound';
+ import { blockProvisionedWrites } from './dfe/middleware/provisioned-lockdown';
+ import { mountObservability } from './dfe/observability';
+ import dfeSourcesRouter from './dfe/routers/dfe-sources';
+@@ -84,6 +85,7 @@ if (!config.IS_LOCAL_APP_MODE) {
+   app.use(passport.initialize());
+   app.use(passport.session());
+ }
++app.use(boundJsonBody);
+ 
+ /* eslint-disable @typescript-eslint/no-require-imports */
+ // --- DFE START ---

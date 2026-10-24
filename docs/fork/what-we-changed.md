@@ -544,7 +544,8 @@ header check is what holds when a deployment authenticates some other way.
   against `git merge-base` rather than trusted
 - `security/overrides.yaml`, `security/patches/`,
   `scripts/security-override.py`, `scripts/security-triage.py` - the generated
-  temporary security layer
+  temporary security layer. `packages/api/src/dfe/middleware/json-body-bound.ts`
+  is the guard patch 0004 mounts, and goes when that patch does.
 - `.gitattributes` - ONE added line routing `yarn.lock` to
   `scripts/merge-lockfile.sh`
 - `knip.json` - added ignores so the pre-commit hook can run. Two classes, and

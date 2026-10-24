@@ -1785,9 +1785,10 @@ osv-scanner does. Worth remembering when the gate looks quiet.
 ## 2026-10-24 - the patch guard, the last two body-parser mounts, a zod OOM, and four osv packages
 
 The guard no longer pushes a security patch onto `.fork-surface`. Neither
-remaining body-parser mount needs patch 0004. The zod residual from the section
-above is real and kills the API from one authenticated request, and a `.max()`
-bound does not stop it. fast-uri, undici and serialize-javascript get recorded
+remaining body-parser mount needs a patch of its own. The zod residual from the
+section above is real and kills the API from one authenticated request, a
+`.max()` bound does not stop it, and patch 0004 bounds every JSON body before a
+route validates it. fast-uri, undici and serialize-javascript get recorded
 verdicts.
 
 ### The guard admits a security patch, and nothing else in that file
@@ -1806,7 +1807,7 @@ index for the pre-commit run, so an unstaged patch does not cover a staged edit.
 change. `scripts/__tests__/test_fork_surface.py` has five cases. Against
 origin/main's guard the two patch cases fail and the three block cases pass.
 
-### body-parser - no patch 0004
+### body-parser - no further patch
 
 The pin to `^1.20.9` stays tracked by #165, and the age gate clears it on
 2026-10-29.
@@ -1864,11 +1865,74 @@ Three things follow, and they change what a fix looks like.
 For scale, the eight dashboards dfe-engine ships (origin/main) carry at most 29
 tiles, 41 array elements, 457 JSON nodes and 26 KB.
 
-Not patched in this change. A fix has to bound the body's structure before zod
-sees it, and its shape and limit are open. The `THREAT-MODEL.md` "no rate limit
-inside the HyperDX API" class covers request volume, not a single request that
-ends the process, so the earlier "left as it stands" no longer holds. No verdict
-goes into `scripts/dismiss-triaged-alerts.py` for alerts #367-#371.
+The `THREAT-MODEL.md` "no rate limit inside the HyperDX API" class covers
+request volume, not a single request that ends the process, so the earlier "left
+as it stands" no longer holds.
+
+### zod - patch 0004 bounds the body before any route validates it
+
+Every authenticated route whose body or query schema walks an unbounded array or
+record:
+
+| Route                                                                                 | Validated at                                                                                      | What the walk runs over                                                                                 | Who reaches it |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------- |
+| POST `/dashboards`                                                                    | `routers/api/dashboards.ts:140-141`                                                               | `tiles`, `tags`, `filters`, `savedFilterValues` (`types.ts:2265-2270`), `select` under the config union | any member     |
+| PATCH `/dashboards/:id`                                                               | `routers/api/dashboards.ts:175-179`                                                               | the same, through `DashboardSchema.partial()`                                                           | any member     |
+| PUT and POST `/dashboards/preset/:presetDashboard/filter`                             | `routers/api/dashboards.ts:269`, `:306`                                                           | `appliesToSourceIds` (`types.ts:2153`)                                                                  | any member     |
+| POST `/saved-search`                                                                  | `routers/api/savedSearch.ts:38-39`                                                                | `tags`, `filters`, `alerts` (`types.ts:1268-1271`), `alerts` a union                                    | any member     |
+| PATCH `/saved-search/:id`                                                             | `routers/api/savedSearch.ts:62-63`                                                                | the same, through `.partial()`                                                                          | any member     |
+| PUT `/pinned-filters`                                                                 | `routers/api/pinnedFilters.ts:55-67`                                                              | the `filters` record, whose 100-key cap is a refine that runs after the walk (`types.ts:1305-1312`)     | any member     |
+| POST `/dfe/export-sql`                                                                | `dfe/routers/query-export.ts:30-32`, `:85-88`                                                     | `select` under the config union, behind `limitExportBody`'s 16 KiB cap                                  | any member     |
+| GET `/v1/prometheus` label lookups                                                    | `routers/api/prometheus.ts:997`                                                                   | `match[]` in the query, which qs stops at 1,000 parameters                                              | any member     |
+| `/alerts`, `/webhooks`, `/sources`, `/connections` and `/team` writes, `/dfe/sources` | `routers/api/alerts.ts:344`, `:366`, `webhooks.ts:140`, `sources.ts:41`, `:72`                    | alert, webhook and source arrays                                                                        | the engine     |
+| `/api/v2`, `/mcp`                                                                     | `utils/zod.ts:127`, `:862`, `v2/utils/dashboards.ts:1403`, `mcp/tools/dashboards/schemas.ts:1577` | tiles, fields, containers                                                                               | the engine     |
+
+No other member route walks one: `/ai` (`ai.ts:27-31`), the onboarding bodies
+(`me.ts:97`, `:117`), `/favorites` (`favorites.ts:31`, `:57`) and registration
+(`root.ts:18-26`) carry no array. Query strings stop at qs's 1,000-parameter
+default and urlencoded bodies at body-parser's, so the vector is the JSON body
+alone.
+
+Every route's real use fits one bound, so the patch mounts one guard in
+`api-app.ts`, after the passport block and before any router.
+`dfe/middleware/json-body-bound.ts` walks the parsed body once and answers 413
+at the first container that takes the total past either limit:
+
+- **2,000 array elements.** Upstream's own 500-tile cap at the 2.9 elements per
+  tile the shipped dashboards carry is 1,450.
+- **20,000 object members.** The same 500 tiles at the shipped 28 members a tile
+  is 14,000, and members are what bounds a record.
+
+The worst bodies inside both limits, measured the same way:
+
+| Body                                                    | Parse | Peak RSS |
+| ------------------------------------------------------- | ----- | -------- |
+| `/saved-search` `alerts`: 2,000 x `{}`                  | 1.9 s | 270 MB   |
+| `/saved-search` `alerts`: 2,000 x 9 wrong-typed members | 1.6 s | 269 MB   |
+| one tile, `select`: 2,000 x 9 wrong-typed members       | 0.9 s | 190 MB   |
+| one tile, `select`: 2,000 x `{}`                        | 0.5 s | 154 MB   |
+| `/pinned-filters` record: 20,000 invalid keys           | 0.1 s | 85 MB    |
+
+Outside them, the same record at 1,000,000 keys took 3.8 s and 756 MB.
+
+So one request can no longer end the process, and the most it holds the event
+loop is about 2 s. That residual is the request-volume class THREAT-MODEL.md
+already carries. PUT `/pinned-filters` declares up to 100 keys of 50 values,
+5,100 array elements, which the bound refuses above 2,000. The console pins a
+handful.
+
+`dfe/__tests__/json-body-bound.test.ts` sends the 400,000-tile body and gets 413
+in 189 ms with the dashboard schema never called. Without the guard a 2,001-tile
+body reaches it. The shipped-dashboard fixture and a valid 500-tile dashboard
+pass. Each route class above has an over-bound case that 413s before its schema
+runs and an in-bound case that reaches it. With 0004 stripped, the mount
+assertion fails.
+
+0004 does not depend on 0003. Its hunks sit clear of 0003's lines, and it
+applies to `api-app.ts` with 0003 reversed, so the 2026-10-29 pin leaves it
+standing. No verdict goes into `scripts/dismiss-triaged-alerts.py` for alerts
+#367-#371, because the vulnerable walk is still in the tree and only its input
+is bounded.
 
 ### fast-uri, undici, serialize-javascript - recorded, not fixed
 
