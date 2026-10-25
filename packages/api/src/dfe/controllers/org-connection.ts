@@ -27,7 +27,11 @@ import { createSource, getSources } from '@/controllers/sources';
 import * as dfeConfig from '@/dfe/config';
 import { seedDfeSources } from '@/dfe/controllers/dfe-sources';
 import { isDuplicateKey } from '@/dfe/models/duplicate-key';
-import { claimTeamSeed } from '@/dfe/models/team-seed';
+import {
+  awaitTeamSeed,
+  claimTeamSeed,
+  settleTeamSeed,
+} from '@/dfe/models/team-seed';
 import Connection from '@/models/connection';
 import { syncDashboards } from '@/tasks/provisionDashboards';
 import logger from '@/utils/logger';
@@ -315,8 +319,8 @@ function clickhouseSystemSource(connectionId: string) {
  *
  * - `present`: the team already holds its own connection, and nothing else.
  * - `seeded`: this call created it.
- * - `unavailable`: the engine or the store could not answer, or another request
- *   is seeding the team; a later request retries.
+ * - `unavailable`: the engine or the store could not answer, or another
+ *   request's seed did not settle in time; a later request retries.
  * - `refused`: the engine refused this caller a connection.
  * - `mismatch`: the team holds, or the engine offered, a ClickHouse user other
  *   than the one the team is named after.
@@ -334,6 +338,35 @@ const SEED_LEASE_MS = 30_000;
 
 // When this process next claims a team its last attempt could not seed.
 const nextSeedCheck = new Map<string, number>();
+
+// Teams this process has seen with no seed in flight since they last held no connection.
+const seedSettled = new Set<string>();
+
+/**
+ * Wait for another request's seed of the team to settle, so this request does
+ * not read the team half-seeded. False when it did not settle within the lease.
+ */
+async function waitForTeamSeed(teamId: string): Promise<boolean> {
+  if (seedSettled.has(teamId)) {
+    return true;
+  }
+  let wait;
+  try {
+    wait = await awaitTeamSeed(teamId, SEED_LEASE_MS);
+  } catch (err) {
+    logger.warn({ err, teamId }, 'DFE: could not read the team seed claim');
+    return false;
+  }
+  if (wait === 'timeout') {
+    logger.warn(
+      { teamId },
+      'DFE: another request seeding the team did not finish; going on without it',
+    );
+    return false;
+  }
+  seedSettled.add(teamId);
+  return true;
+}
 
 // ClickHouse's HTTP interface names a refused credential with this code in this header.
 const CLICKHOUSE_EXCEPTION_CODE = 'x-clickhouse-exception-code';
@@ -375,9 +408,11 @@ export function recheckOnAuthFailure(res: Response, teamId: string): void {
  * seeded, whatever an earlier attempt did, so a first seed that failed or a
  * connection since deleted is restored. One claim per team (dfe/models/team-seed)
  * keeps that to a single attempt at a time across replicas, and a failed attempt
- * is retried once the claim lapses. The engine's material is seeded only when its
- * username is `identity`. Engine and store faults are logged and answered
- * `unavailable`, which does not block a login.
+ * is retried once the claim lapses. A request that meets an attempt in flight
+ * waits for it to settle, bounded by the lease, so it never answers for a team
+ * that has its connection and not yet its sources. The engine's material is
+ * seeded only when its username is `identity`. Engine and store faults are
+ * logged and answered `unavailable`, which does not block a login.
  */
 export async function ensureOrgConnection(
   token: string,
@@ -396,6 +431,7 @@ export async function ensureOrgConnection(
       .map(connection => connection.username)
       .filter(username => username !== identity);
     if (foreign.length === 0) {
+      await waitForTeamSeed(teamId);
       await recheckRefusedConnection(
         token,
         teamId,
@@ -411,6 +447,7 @@ export async function ensureOrgConnection(
     return 'mismatch';
   }
 
+  seedSettled.delete(teamId);
   if ((nextSeedCheck.get(teamId) ?? 0) > Date.now()) {
     return 'unavailable';
   }
@@ -418,6 +455,12 @@ export async function ensureOrgConnection(
   try {
     if ((await claimTeamSeed(teamId, SEED_LEASE_MS)) === 'claimed') {
       outcome = await seedTeam(token, teamId, identity);
+      await settleTeamSeed(teamId);
+    } else if (await waitForTeamSeed(teamId)) {
+      const seeded = await getConnectionsByTeam(teamId);
+      const own =
+        seeded.length > 0 && seeded.every(conn => conn.username === identity);
+      outcome = own ? 'present' : 'unavailable';
     }
   } catch (err) {
     logger.warn({ err, teamId }, 'DFE: team seeding failed (non-fatal)');
@@ -433,6 +476,7 @@ export async function ensureOrgConnection(
 /** Forget every team this process is waiting to seed again or re-check. */
 export function clearTeamSeedCache(): void {
   nextSeedCheck.clear();
+  seedSettled.clear();
   refusedTeams.clear();
   lastRecheck.clear();
 }

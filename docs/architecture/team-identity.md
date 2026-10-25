@@ -34,10 +34,13 @@ placed on the team.
 ```mermaid
 flowchart TB
     held{"team holds a connection?"}
-    held -->|as the team name| present["present: carry on"]
+    held -->|as the team name| present["present: carry on once any seed in flight settles"]
     held -->|as anyone else| mismatch["mismatch: 403"]
     held -->|none| claim{"seed claim taken?"}
-    claim -->|another request holds it, or this team failed under 30s ago| unavailable
+    claim -->|this team failed under 30s ago| unavailable
+    claim -->|another request holds it| wait{"that seed settles within 30s?"}
+    wait -->|yes| present
+    wait -->|no| unavailable
     claim -->|taken| ask["ask the engine for the caller's connection"]
     ask -->|401 or 403| refused["refused: 403"]
     ask -->|unreachable, 5xx, unreadable| unavailable["unavailable: log in, retry once the claim lapses"]
@@ -61,7 +64,13 @@ flowchart TB
   first seed or a connection since deleted is restored.
 - `dfe/models/team-seed.ts` holds one claim per team, atomic across replicas. A
   login's parallel requests make one seeding attempt, and a failed attempt is
-  retried once the 30-second claim lapses.
+  retried once the 30-second claim lapses. The attempt marks the claim settled
+  when it ends, and every other request on the team waits for that mark, at most
+  until the claim lapses, so none answers for a team holding its connection but
+  not yet its sources.
+- The `dfe_one_source_name_per_team` index is started once Mongo connects. On
+  DocumentDB a unique index on a non-empty collection builds in the background,
+  and a first seed that started the build would wait on it.
 - A query ClickHouse refuses with code 516 marks the team's connection for a
   re-check. The team's next request asks the engine for its material and updates
   the stored host and password in place when they differ. A replica asks at most

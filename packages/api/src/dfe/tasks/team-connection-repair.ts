@@ -12,6 +12,7 @@
 // This is a NEW file - it does not modify any upstream HyperDX files.
 
 import * as dfeConfig from '@/dfe/config';
+import { ensureOneSourceNamePerTeam } from '@/dfe/controllers/dfe-sources';
 import { ensureOneConnectionPerTeam } from '@/dfe/controllers/org-connection';
 import { mongooseConnection } from '@/models';
 import Alert from '@/models/alert';
@@ -96,7 +97,8 @@ export async function repairTeamConnections(): Promise<RepairReport> {
 }
 
 /**
- * Run the repair once, as soon as Mongo is connected (oidc-proxy mode only).
+ * Run the repair once, as soon as Mongo is connected (oidc-proxy mode only),
+ * and start building the one-source-name-per-team index beside it.
  *
  * A failure is logged and not retried. Sessions stay fenced without it: each
  * lands on the team named after its own identity, and ensureOrgConnection
@@ -107,6 +109,8 @@ export function scheduleTeamConnectionRepair(): void {
     return;
   }
   const run = () => {
+    // DocumentDB builds a unique index on a non-empty collection in the background, and a seed upserting a source waits for it.
+    void ensureOneSourceNamePerTeam();
     repairTeamConnections().catch(err => {
       logger.error({ err }, 'DFE: team connection repair failed');
     });
