@@ -54,6 +54,12 @@
   "enabledManagers": ["github-actions", "docker-compose", "dockerfile"],
   "packageRules": [
     {
+      "description": "The workflow Python runs semgrep, whose wheels stop at CPython 3.14. A 3.15 bump fails `pip install semgrep` in fork-security. Lift the cap once semgrep publishes cp315 wheels.",
+      "matchManagers": ["github-actions"],
+      "matchDepNames": ["python"],
+      "allowedVersions": "<3.15"
+    },
+    {
       "description": "ClickHouse is pinned to what this fork's dev and CI stacks actually run (26.5), which is ABOVE the org preset's <26.4 LTS ceiling. The ceiling exists because dfe-infra runs 26.3.13.31 and dfe-engine writes DDL against it. Constrained to the 26.5 line rather than left open, so patches still flow and a further major cannot arrive unnoticed. Resolve the split deliberately - either this fork moves to the estate's LTS line or the estate moves up - and delete this rule when it is resolved.",
       "matchDatasources": ["docker"],
       "matchPackageNames": [
