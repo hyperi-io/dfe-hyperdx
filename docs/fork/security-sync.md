@@ -1981,3 +1981,47 @@ which matched nothing, are gone.
 | -------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------- |
 | osv-scanner on `yarn.lock` | 16 rows: body-parser, fast-uri x4, serialize-javascript, undici x6, zod x4, and 2 unused ignores | 5 rows: body-parser, zod x4 |
 | `yarn npm audit`           | not run                                                                                          | not run                     |
+
+## 2026-10-25 - the last two osv-scanner rows recorded
+
+osv-scanner reported five rows on `yarn.lock`, and CI printed "issues found
+(non-blocking)" for them. Both advisories now carry a verdict in
+`osv-scanner.toml`. Neither moves the lockfile.
+
+### body-parser GHSA-27r3-jxmh-p828 - patched, ignored until the pin
+
+Patch 0003 is applied on main: `api-app.ts:79-81` carry `inflate: false`, and
+`scripts/security-override.py --verify` reports all four patches applied. The
+image builds from that tree (`Dockerfile:48`), and `fork-surface.yml:84` runs
+`--verify` on every change. The ignore carries `ignoreUntil = 2026-10-29`, the
+day the age gate admits 1.20.9, so the row comes back the day #165 is due.
+
+### zod GHSA-mrhx-c7xc-m3w5 - the v4 core ships inside 3.25.76
+
+The 2026-10-24 sections hold the v3 measurements and patch 0004. One claim there
+is incomplete: nothing in `packages/*/src` imports `zod/v4`, but shipped
+dependencies do. 3.25.76 carries the v4 core, and `handleArrayResult`, the
+function the advisory names, is at `node_modules/zod/v4/core/schemas.js:616`.
+
+| Package                     | Loads                                                                | On what input                    | Who reaches it                                            |
+| --------------------------- | -------------------------------------------------------------------- | -------------------------------- | --------------------------------------------------------- |
+| `@modelcontextprotocol/sdk` | `zod/v4` at `dist/cjs/types.js:32`                                   | every JSON-RPC message on `/mcp` | the engine, `requireServicePrincipal` at `api-app.ts:144` |
+| `ai`, `@ai-sdk/*`           | `zod/v4` in `ai`, `provider-utils`, `openai`, `anthropic`, `gateway` | the AI provider's responses      | nobody unless `AI_PROVIDER` or `ANTHROPIC_API_KEY` is set |
+
+`/mcp` hands the transport the parsed `req.body` (`mcp/app.ts:77`), so
+`boundJsonBody` at `api-app.ts:88` bounds it too.
+
+`yarn workspaces focus @hyperdx/api --production`, the image's install, leaves
+one copy, `node_modules/zod` 3.25.76. The 4.x copies exist only in the full
+install, nested under devDependencies: 4.4.3 under Stryker
+(`common-utils/package.json:29`), 4.3.6 under knip and `@eslint-react/shared`,
+and 4.1.13 under `eslint-plugin-react-hooks`. The image's
+`packages/common-utils/node_modules` (`Dockerfile:99`) holds only `dotenv`.
+
+Recorded as mitigated rather than fixed. No 3.x release carries the fix, and
+4.6.6 is a zod major across four workspaces and `zod-express-middleware`'s
+`^3.2.0` peer, which is an upstream migration, not an override.
+
+| Run                        | main                        | This change     |
+| -------------------------- | --------------------------- | --------------- |
+| osv-scanner on `yarn.lock` | 5 rows: body-parser, zod x4 | no issues found |
