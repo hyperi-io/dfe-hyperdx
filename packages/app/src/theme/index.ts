@@ -238,7 +238,7 @@ export function getDevThemeName(): ThemeName {
 
 // Get theme configuration by name
 export function getTheme(name: ThemeName = DEFAULT_THEME): ThemeConfig {
-  const theme = themes[name] || themes[FALLBACK_THEME];
+  const theme = themes[name] || themes[DEFAULT_THEME];
 
   // Runtime validation - ensure theme is valid before returning
   // This catches cases where theme config was corrupted after module load

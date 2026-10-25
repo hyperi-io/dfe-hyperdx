@@ -88,8 +88,6 @@ packages/app/src/LandingPage.tsx
 # none - see docs/fork/what-we-changed.md.
 packages/app/src/Spotlights.tsx
 packages/app/src/UserPreferencesModal.tsx
-packages/app/src/__tests__/ChartUtils.test.ts
-packages/app/src/__tests__/utils.test.ts
 packages/app/src/components/AppNav/AppNav.tsx
 packages/app/src/components/ContextSidePanel.tsx
 # The restore-shipped control in the toolbar, and the preset dashboards removed
@@ -104,7 +102,6 @@ packages/app/src/config.ts
 packages/app/src/hooks/useRowWhere.tsx
 packages/app/src/layout.tsx
 packages/app/src/theme/ThemeProvider.tsx
-packages/app/src/theme/__tests__/index.test.ts
 packages/app/src/theme/index.ts
 packages/app/src/theme/themes/_base-tokens.scss
 packages/app/src/theme/types.ts

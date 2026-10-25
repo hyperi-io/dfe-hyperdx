@@ -336,16 +336,13 @@ header check is what holds when a deployment authenticates some other way.
   rather than compiled, so no tsconfig project covers it and typed linting
   cannot parse it; **`packages/app/eslint.config.mjs`** carries one added
   `ignores` entry for it, beside upstream's own `global-setup.js` line. The env
-  pin does not reach the CHART palette or `getTheme`'s fallback, both of which
-  resolve the brand without reading `NEXT_PUBLIC_THEME`, so three upstream test
-  files still carry a corrected expectation and stay catalogued:
-  **`src/__tests__/ChartUtils.test.ts`** and **`src/__tests__/utils.test.ts`**
-  (`detectActiveTheme` in `utils.ts` returns `dfe` for a jsdom document with no
-  theme class, never upstream's `hyperdx`) and
-  **`src/theme/__tests__/index.test.ts`** (`getTheme` on an unknown name falls
-  back to `FALLBACK_THEME`, which is `dfe`). Each is one assertion. Shrinking
-  them further is a product decision about what an unbranded document and an
-  unknown theme name should resolve to, not a test move - see #64.
+  pin reaches the CHART palette and `getTheme`'s fallback too, because both
+  resolve an unmatched brand to the configured `DEFAULT_THEME`:
+  `detectActiveTheme` in **`src/utils.ts`** for a document carrying no theme
+  class, and `getTheme` in **`src/theme/index.ts`** for an unknown name. A DFE
+  deployment, where `NEXT_PUBLIC_THEME` is unset or `dfe`, resolves both to
+  `dfe` as before, and upstream's three theme assertions pass unedited.
+  `src/dfe/__tests__/themeFallback.test.ts` pins the DFE side.
 - `packages/app/src/dfe/defaultSource.ts` - which source `/search` opens on
   cold. The embed opens on `main`, the landing every record falls into, because
   a first Observe load that shows an empty window reads as a broken deployment;
