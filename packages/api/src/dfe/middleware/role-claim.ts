@@ -9,6 +9,9 @@
 // The check is gated on the role's PRESENCE: a session with none (an engine that
 // issues neither, or header-dev) keeps team membership as the whole authorisation.
 //
+// The engine's `viewer` role is read-only: it may query and read, and every
+// other write it sends is refused (refuseReadOnlyWrites).
+//
 // This is a NEW file - it does not modify any upstream HyperDX files.
 
 import type { NextFunction, Request, Response } from 'express';
@@ -58,4 +61,53 @@ export function requireTeamAdminRole(
     return res.status(403).json(ROLE_FORBIDDEN);
   }
   return next();
+}
+
+/** The role the engine hands an account that may read and query but change nothing. */
+const READ_ONLY_ROLE = 'viewer';
+
+const READ_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+// The writes a read-only session keeps: running a query, the caller's own
+// favourites and profile, and the rule export the engine authorises itself.
+// Anything else, a route upstream adds included, is refused.
+const READ_ONLY_ALLOWED: readonly RegExp[] = [
+  /^\/clickhouse-proxy(\/|$)/i,
+  /^\/v1\/prometheus\//i,
+  /^\/ai\/assistant\/?$/i,
+  /^\/dfe\/(export-sql|create-rule)\/?$/i,
+  /^\/favorites(\/|$)/i,
+  /^\/me(\/|$)/i,
+];
+
+export const READ_ONLY_FORBIDDEN = {
+  error: 'Your role is read-only, so it cannot change this.',
+};
+
+/** True when the caller carries the engine's read-only role. */
+function dfeRoleIsReadOnly(req: Request): boolean {
+  if (!isDfeEnabled) {
+    return false;
+  }
+  return req.dfeRole?.toLowerCase() === READ_ONLY_ROLE;
+}
+
+/**
+ * 403 a read-only session's write, outside READ_ONLY_ALLOWED.
+ *
+ * Runs app-wide behind the identity middleware, so `req.path` is the whole
+ * request path, matched case-insensitively as express routes it.
+ */
+export function refuseReadOnlyWrites(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  if (READ_METHODS.has(req.method) || !dfeRoleIsReadOnly(req)) {
+    return next();
+  }
+  if (READ_ONLY_ALLOWED.some(route => route.test(req.path))) {
+    return next();
+  }
+  return res.status(403).json(READ_ONLY_FORBIDDEN);
 }

@@ -177,6 +177,15 @@ to the token's `role` claim for an engine that sends none. The check is gated on
 the role's PRESENCE, so a session with none keeps team membership as the whole
 authorisation; header-dev mode sets none, so local dev is unchanged.
 
+**The engine's `viewer` role is read-only (`refuseReadOnlyWrites`).** A team is
+one ClickHouse identity, so a viewer shares its team with accounts that write,
+and HyperDX routes check team membership alone. `dfeIdentityMiddleware` runs the
+gate once the identity is known, so it covers every route, ones upstream adds
+included. A `viewer` gets 403 on any non-read request outside the query proxy,
+PromQL, the chart assistant, its own favourites and profile, and the
+engine-authorised SQL export and rule creation. The UI still shows Save and
+Create Rule, because hiding them means editing upstream's search page.
+
 **Restore refuses a simple request (`dfe/middleware/cross-site.ts`).** A form
 post needs no CORS preflight and carries no header the posting page had to be
 allowed to set, so a hostile page could aim one at

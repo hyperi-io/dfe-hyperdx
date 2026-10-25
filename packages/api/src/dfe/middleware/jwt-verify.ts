@@ -30,6 +30,7 @@ import {
   findOrCreateUserFromOIDC,
   placeUserOnTeam,
 } from '@/dfe/controllers/user-provisioning';
+import { refuseReadOnlyWrites } from '@/dfe/middleware/role-claim';
 import { scheduleTeamConnectionRepair } from '@/dfe/tasks/team-connection-repair';
 import logger from '@/utils/logger';
 
@@ -272,14 +273,18 @@ export async function engineJwtMiddleware(
  * Default (DFE_AUTH_MODE=oidc-proxy): verify the engine's ES384 JWT.
  * Dev fallback (DFE_AUTH_MODE=header-dev): trust the identity headers
  * without verification, so local dev works without a running engine.
+ *
+ * Either way, a read-only role's writes are refused once the identity is known.
  */
 export async function dfeIdentityMiddleware(
   req: Request,
   res: Response,
   next: NextFunction,
 ) {
+  const identified: NextFunction = (err?: unknown) =>
+    err ? next(err) : refuseReadOnlyWrites(req, res, next);
   if (dfeConfig.DFE_AUTH_MODE === 'header-dev') {
-    return oidcIdentityMiddleware(req, res, next);
+    return oidcIdentityMiddleware(req, res, identified);
   }
-  return engineJwtMiddleware(req, res, next);
+  return engineJwtMiddleware(req, res, identified);
 }
