@@ -19,6 +19,7 @@ import {
 } from '@hyperdx/common-utils/dist/types';
 import { SortingState } from '@tanstack/react-table';
 
+import { DEFAULT_THEME } from './theme';
 import { MetricsDataType, NumberFormat } from './types';
 
 // From: https://usehooks.com/useWindowSize/
@@ -506,23 +507,31 @@ export type { ChartPaletteToken };
 
 /**
  * Detects the active theme by checking for theme classes on documentElement.
- * Returns theme from documentElement classes, or 'dfe' when none match.
+ * Returns theme from documentElement classes, or the configured DEFAULT_THEME when none match.
  * Note: classList.contains() is O(1) and fast - no caching needed.
  */
 function detectActiveTheme(): 'clickstack' | 'hyperdx' | 'dfe' {
   if (typeof window === 'undefined') {
     // SSR: default to hyperdx (can't detect theme without DOM)
-    return 'dfe';
+    return DEFAULT_THEME;
   }
 
   try {
     const isDFE = document.documentElement.classList.contains('theme-dfe');
+    const isHyperDX =
+      document.documentElement.classList.contains('theme-hyperdx');
     const isClickStack =
       document.documentElement.classList.contains('theme-clickstack');
-    return isDFE ? 'dfe' : isClickStack ? 'clickstack' : 'dfe';
+    return isDFE
+      ? 'dfe'
+      : isHyperDX
+        ? 'hyperdx'
+        : isClickStack
+          ? 'clickstack'
+          : DEFAULT_THEME;
   } catch {
     // Fallback if DOM access fails
-    return 'dfe';
+    return DEFAULT_THEME;
   }
 }
 

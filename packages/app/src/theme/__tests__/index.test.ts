@@ -75,7 +75,7 @@ describe('theme/index', () => {
 
   describe('DEFAULT_THEME', () => {
     it('should be a valid theme name', () => {
-      expect(['hyperdx', 'clickstack', 'dfe']).toContain(DEFAULT_THEME);
+      expect(['hyperdx', 'clickstack']).toContain(DEFAULT_THEME);
     });
 
     it('should exist in themes registry', () => {
@@ -100,10 +100,10 @@ describe('theme/index', () => {
       expect(theme.name).toBe(DEFAULT_THEME);
     });
 
-    it('should fallback to dfe for invalid theme name', () => {
+    it('should fallback to hyperdx for invalid theme name', () => {
       // @ts-expect-error Testing invalid input
       const theme = getTheme('invalid-theme');
-      expect(theme.name).toBe('dfe');
+      expect(theme.name).toBe('hyperdx');
     });
 
     it('should return theme with all required properties', () => {
