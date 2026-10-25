@@ -310,6 +310,43 @@ describe('seedDfeSources', () => {
     expect(await seedDfeSources('team-new', 'conn-new')).toEqual([]);
     expect(mockCreateSource).not.toHaveBeenCalled();
   });
+
+  test('a seed after the index was built at start does not build it again', async () => {
+    // A first build inside the seed stalls it on DocumentDB's background index builder.
+    let createIndex: jest.Mock | undefined;
+    let fresh: typeof import('@/dfe/controllers/dfe-sources') | undefined;
+    jest.isolateModules(() => {
+      const source =
+        jest.requireMock<typeof import('@/models/source')>('@/models/source');
+      createIndex = source.Source.collection
+        .createIndex as unknown as jest.Mock;
+      const manifest = jest.requireMock<
+        typeof import('@/dfe/models/dfe-source')
+      >('@/dfe/models/dfe-source');
+      (manifest.default.find as unknown as jest.Mock).mockResolvedValue([
+        { name: 'filebeat', spec: SPEC },
+      ]);
+      const sources = jest.requireMock<typeof import('@/controllers/sources')>(
+        '@/controllers/sources',
+      );
+      (sources.getSources as jest.Mock).mockResolvedValue([]);
+      (sources.createSource as jest.Mock).mockResolvedValue({ _id: 'src-1' });
+      fresh = jest.requireActual<
+        typeof import('@/dfe/controllers/dfe-sources')
+      >('@/dfe/controllers/dfe-sources');
+    });
+    if (!fresh || !createIndex) {
+      throw new Error('jest.isolateModules did not run');
+    }
+
+    await fresh.ensureOneSourceNamePerTeam();
+    expect(createIndex).toHaveBeenCalledTimes(1);
+
+    await expect(fresh.seedDfeSources('team-new', 'conn-new')).resolves.toEqual(
+      ['filebeat'],
+    );
+    expect(createIndex).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('the /dfe/sources routes', () => {

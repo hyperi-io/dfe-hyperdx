@@ -63,7 +63,8 @@ async function sourceNamed(teamId: string, name: string) {
 
 // A team holds at most one source of a name. The index name is ours, so it
 // never collides with one upstream adds, and the upstream model stays pristine.
-const ensureOneSourceNamePerTeam = indexOnce(
+// Started at API start so a team's first seed does not wait on the build.
+export const ensureOneSourceNamePerTeam = indexOnce(
   () =>
     Source.collection.createIndex(
       { team: 1, name: 1 },

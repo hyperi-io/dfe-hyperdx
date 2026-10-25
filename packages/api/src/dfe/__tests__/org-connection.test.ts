@@ -53,6 +53,8 @@ jest.mock('@/models/connection', () => ({
 
 jest.mock('@/dfe/models/team-seed', () => ({
   claimTeamSeed: jest.fn(),
+  awaitTeamSeed: jest.fn(),
+  settleTeamSeed: jest.fn(),
 }));
 
 import { EventEmitter } from 'node:events';
@@ -72,7 +74,11 @@ import {
   ensureOrgConnection,
   recheckOnAuthFailure,
 } from '@/dfe/controllers/org-connection';
-import { claimTeamSeed } from '@/dfe/models/team-seed';
+import {
+  awaitTeamSeed,
+  claimTeamSeed,
+  settleTeamSeed,
+} from '@/dfe/models/team-seed';
 import { syncDashboards } from '@/tasks/provisionDashboards';
 import logger from '@/utils/logger';
 
@@ -83,6 +89,8 @@ const mockCreateSource = createSource as jest.Mock;
 const mockSyncDashboards = syncDashboards as jest.Mock;
 const mockSeedDfeSources = seedDfeSources as jest.Mock;
 const mockClaim = claimTeamSeed as jest.Mock;
+const mockAwaitSeed = awaitTeamSeed as jest.Mock;
+const mockSettle = settleTeamSeed as jest.Mock;
 const mockConnById = getConnectionById as jest.Mock;
 const mockUpdateConn = updateConnection as jest.Mock;
 const mockWarn = logger.warn as jest.Mock;
@@ -102,6 +110,8 @@ beforeEach(() => {
   jest.clearAllMocks();
   clearTeamSeedCache();
   mockClaim.mockResolvedValue('claimed');
+  mockAwaitSeed.mockResolvedValue('idle');
+  mockSettle.mockResolvedValue(undefined);
   global.fetch = jest.fn();
   // A copy, so a test can set the provisioner env and restoreAllMocks undoes it.
   jest.replaceProperty(process, 'env', { ...process.env });
@@ -180,9 +190,13 @@ describe('ensureOrgConnection - the team identity', () => {
     expect(mockCreateSource).not.toHaveBeenCalled();
   });
 
-  test('concurrent first requests on one team seed it once', async () => {
-    // The claim is the one seed per team; the requests that lose it go on unseeded.
-    mockConns.mockResolvedValue([]);
+  test('concurrent first requests on one team seed it once, and the others wait for that seed', async () => {
+    // A loser answering before the winner seeds the sources hands the page a half-seeded team.
+    mockConns
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{ _id: 'conn-1', username: ORG }]);
     mockCreateConn.mockResolvedValue({ _id: 'conn-1' });
     mockSources.mockResolvedValue([]);
     mockClaim
@@ -190,14 +204,36 @@ describe('ensureOrgConnection - the team identity', () => {
       .mockResolvedValueOnce('busy')
       .mockResolvedValueOnce('busy');
     okFetch(ORG_CONN);
+    const events: string[] = [];
+    let settle = () => {};
+    const settled = new Promise<void>(resolve => {
+      settle = resolve;
+    });
+    mockSettle.mockImplementation(async () => {
+      events.push('settled');
+      settle();
+    });
+    mockAwaitSeed.mockImplementation(async () => {
+      await settled;
+      return 'settled';
+    });
 
-    const outcomes = await Promise.all([
-      ensureOrgConnection('tok', 'team-1', ORG),
-      ensureOrgConnection('tok', 'team-1', ORG),
-      ensureOrgConnection('tok', 'team-1', ORG),
-    ]);
+    const outcomes = await Promise.all(
+      [1, 2, 3].map(() =>
+        ensureOrgConnection('tok', 'team-1', ORG).then(outcome => {
+          events.push(outcome);
+          return outcome;
+        }),
+      ),
+    );
 
-    expect(outcomes).toEqual(['seeded', 'unavailable', 'unavailable']);
+    expect(outcomes).toEqual(['seeded', 'present', 'present']);
+    expect(events[0]).toBe('settled');
+    expect(mockSeedDfeSources.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSettle.mock.invocationCallOrder[0],
+    );
+    expect(mockAwaitSeed).toHaveBeenCalledTimes(2);
+    expect(mockAwaitSeed).toHaveBeenCalledWith('team-1', 30_000);
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(mockCreateConn).toHaveBeenCalledTimes(1);
   });
@@ -716,6 +752,99 @@ describe('ensureOrgConnection - the seed claim', () => {
       expect.objectContaining({ err: boom, teamId: 'team-1' }),
       'DFE: team seeding failed (non-fatal)',
     );
+  });
+});
+
+describe("ensureOrgConnection - another request's seed in flight", () => {
+  const OWN = [{ _id: 'conn-1', username: ORG }];
+
+  test('a request that finds the connection waits for the seed to settle before answering', async () => {
+    mockConns.mockResolvedValue(OWN);
+    let release = (_wait: string) => {};
+    mockAwaitSeed.mockReturnValue(
+      new Promise(resolve => {
+        release = resolve;
+      }),
+    );
+    let answered = false;
+
+    const pending = ensureOrgConnection('tok', 'team-1', ORG).then(outcome => {
+      answered = true;
+      return outcome;
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    expect(answered).toBe(false);
+
+    release('settled');
+    await expect(pending).resolves.toBe('present');
+    expect(mockAwaitSeed).toHaveBeenCalledWith('team-1', 30_000);
+  });
+
+  test('a team seen settled is not read again by this process', async () => {
+    mockConns.mockResolvedValue(OWN);
+
+    await ensureOrgConnection('tok', 'team-1', ORG);
+    await ensureOrgConnection('tok', 'team-1', ORG);
+
+    expect(mockAwaitSeed).toHaveBeenCalledTimes(1);
+  });
+
+  test('a seed that never settles on a busy claim falls back to unavailable, logged once', async () => {
+    mockConns.mockResolvedValue([]);
+    mockClaim.mockResolvedValue('busy');
+    mockAwaitSeed.mockResolvedValue('timeout');
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'unavailable',
+    );
+
+    const gaveUp = mockWarn.mock.calls.filter(
+      call =>
+        call[1] ===
+        'DFE: another request seeding the team did not finish; going on without it',
+    );
+    expect(gaveUp).toHaveLength(1);
+    expect(gaveUp[0]?.[0]).toEqual({ teamId: 'team-1' });
+    expect(mockConns).toHaveBeenCalledTimes(1);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('a seed that never settles on a held connection still answers present', async () => {
+    mockConns.mockResolvedValue(OWN);
+    mockAwaitSeed.mockResolvedValue('timeout');
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'present',
+    );
+    expect(mockWarn).toHaveBeenCalledWith(
+      { teamId: 'team-1' },
+      'DFE: another request seeding the team did not finish; going on without it',
+    );
+  });
+
+  test('a claim the store cannot read never fails the request', async () => {
+    const boom = new Error('documentdb down');
+    mockConns.mockResolvedValue(OWN);
+    mockAwaitSeed.mockRejectedValue(boom);
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'present',
+    );
+    expect(mockWarn).toHaveBeenCalledWith(
+      { err: boom, teamId: 'team-1' },
+      'DFE: could not read the team seed claim',
+    );
+  });
+
+  test('the request holding the claim settles it even when the seed fails', async () => {
+    mockConns.mockResolvedValue([]);
+    (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 503 });
+
+    await expect(ensureOrgConnection('tok', 'team-1', ORG)).resolves.toBe(
+      'unavailable',
+    );
+    expect(mockSettle).toHaveBeenCalledWith('team-1');
+    expect(mockAwaitSeed).not.toHaveBeenCalled();
   });
 });
 

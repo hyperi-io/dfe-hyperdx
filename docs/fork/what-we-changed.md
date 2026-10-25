@@ -211,11 +211,11 @@ header check is what holds when a deployment authenticates some other way.
   none is seeded whether its first attempt failed (the engine unreachable, or
   the reader not yet minted) or its connection was since deleted.
   `dfe/models/team-seed.ts` holds one claim per team, atomic across replicas, so
-  a login's parallel requests make one seeding attempt, and a failed attempt is
-  retried once the 30-second claim lapses. A dfe-layer unique index on
-  `connections.team` stops two replicas seeding one team twice, and
-  `dfe/tasks/team-connection-repair.ts` deletes, once at startup, every
-  connection that is not its team's own - see
+  a login's parallel requests make one seeding attempt, the rest wait for it to
+  settle, and a failed attempt is retried once the 30-second claim lapses. A
+  dfe-layer unique index on `connections.team` stops two replicas seeding one
+  team twice, and `dfe/tasks/team-connection-repair.ts` deletes, once at
+  startup, every connection that is not its team's own - see
   [../architecture/team-identity.md](../architecture/team-identity.md).
 - `packages/api/src/dfe/routers/dfe-sources.ts` +
   `packages/api/src/dfe/controllers/dfe-sources.ts` -

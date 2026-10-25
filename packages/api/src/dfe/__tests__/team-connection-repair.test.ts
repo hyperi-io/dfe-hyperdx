@@ -30,6 +30,10 @@ jest.mock('@/dfe/controllers/org-connection', () => ({
   ensureOneConnectionPerTeam: jest.fn(async () => true),
 }));
 
+jest.mock('@/dfe/controllers/dfe-sources', () => ({
+  ensureOneSourceNamePerTeam: jest.fn(async () => undefined),
+}));
+
 jest.mock('@/models', () => ({
   mongooseConnection: { readyState: 0, once: jest.fn() },
 }));
@@ -62,6 +66,7 @@ jest.mock('@/models/alert', () => ({
 }));
 
 import * as dfeConfig from '@/dfe/config';
+import { ensureOneSourceNamePerTeam } from '@/dfe/controllers/dfe-sources';
 import { ensureOneConnectionPerTeam } from '@/dfe/controllers/org-connection';
 import {
   repairTeamConnections,
@@ -234,6 +239,24 @@ describe('scheduleTeamConnectionRepair', () => {
       expect(conn.once).not.toHaveBeenCalled();
     },
   );
+
+  test('starts the one-source-name-per-team index once Mongo connects, before any team is seeded', () => {
+    scheduleTeamConnectionRepair();
+    expect(ensureOneSourceNamePerTeam).not.toHaveBeenCalled();
+
+    const onConnected = conn.once.mock.calls[0]?.[1] as () => void;
+    onConnected();
+
+    expect(ensureOneSourceNamePerTeam).toHaveBeenCalledTimes(1);
+  });
+
+  test('starts the index at once when Mongo is already connected', () => {
+    conn.readyState = 1;
+
+    scheduleTeamConnectionRepair();
+
+    expect(ensureOneSourceNamePerTeam).toHaveBeenCalledTimes(1);
+  });
 
   test('a failed repair is logged, never thrown', async () => {
     conn.readyState = 1;
