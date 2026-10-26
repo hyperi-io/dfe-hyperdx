@@ -34,7 +34,7 @@ env:
 jobs:
   integration:
     name: Integration on DocumentDB (shard ${{ matrix.shard }})
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # The whole suite took 949s serially on DocumentDB, so it is split like upstream's.
     timeout-minutes: 30
     strategy:
