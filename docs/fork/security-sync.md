@@ -1679,24 +1679,25 @@ With `inflate: false` set, `contentstream()` raises a 415 at `lib/read.js:158`
 before any decompression stream exists, and `appErrorHandler` returns it as JSON
 because http-errors carries `statusCode`.
 
-Carried as `security/patches/0003-body-parser-no-inflate.patch`, not as a pin,
-because `npmMinimalAgeGate: 7d` refuses 1.20.9: it was published
-2026-10-22T11:38Z, so `yarn install` answers
-`All versions satisfying "^1.20.9" are quarantined`. A drafted
-`security/overrides.yaml` entry was removed rather than left in the register,
-since a register entry that cannot install fails `--verify` for everyone.
+Carried as patch 0003, removed on 2026-10-28 (below), not as a pin, because
+`npmMinimalAgeGate: 7d` refuses 1.20.9: it was published 2026-10-22T11:38Z, so
+`yarn install` answers `All versions satisfying "^1.20.9" are quarantined`. A
+drafted `security/overrides.yaml` entry was removed rather than left in the
+register, since a register entry that cannot install fails `--verify` for
+everyone.
 
 **From 2026-10-29**, add the `^1.20.9` pin, run `--apply && yarn install`, and
 delete patch 0003 in the same change. That also covers the OpAMP and PromQL
 mounts.
 
-`packages/api/src/dfe/__tests__/body-parser-inflate.test.ts` asserts, per mount,
-that the shipped source declares `inflate: false` and that the parser 415s a
-gzip and a deflate body while still parsing an uncompressed one. The behaviour
-half rebuilds each parser from the same options rather than importing the real
-app, which opens a Mongo session store at import. So the source-text assertion
-is what ties the test to the shipped mounts, and it is the half that fails when
-the patch is stripped.
+`body-parser-inflate.test.ts`, replaced on 2026-10-28 by
+`packages/api/src/dfe/__tests__/body-parser-version.test.ts`, asserted, per
+mount, that the shipped source declares `inflate: false` and that the parser
+415s a gzip and a deflate body while still parsing an uncompressed one. The
+behaviour half rebuilds each parser from the same options rather than importing
+the real app, which opens a Mongo session store at import. So the source-text
+assertion is what ties the test to the shipped mounts, and it is the half that
+fails when the patch is stripped.
 
 ### zod GHSA-mrhx-c7xc-m3w5 - the range spans a major the code does not
 
@@ -2029,10 +2030,9 @@ Recorded as mitigated rather than fixed. No 3.x release carries the fix, and
 ## 2026-10-28 - body-parser 1.20.9 pinned, patch 0003 dropped
 
 GHSA-27r3-jxmh-p828 is fixed by the `body-parser ^1.20.9` entry in
-`security/overrides.yaml`, and
-`security/patches/0003-body-parser-no-inflate.patch` is gone with its
-`inflate: false` hunks in `api-app.ts`. The pin covers every mount, including
-the OpAMP and PromQL parsers the patch left inflating.
+`security/overrides.yaml`, and patch 0003 is gone with its `inflate: false`
+hunks in `api-app.ts`. The pin covers every mount, including the OpAMP and
+PromQL parsers the patch left inflating.
 
 body-parser 1.20.9 was published 2026-10-22T11:38Z, six days before this change.
 `npmMinimalAgeGate: 7d` refuses it until 2026-10-29, so `.yarnrc.yml` carries a
@@ -2050,3 +2050,30 @@ The lockfile moves two things:
 `dfe/__tests__/body-parser-version.test.ts`, which resolves body-parser from
 express and fails below 1.20.9. The `osv-scanner.toml` ignore for the advisory
 is deleted, since the lockfile no longer carries an affected version.
+
+## 2026-10-29 - undici pinned, qs and deepmerge recorded
+
+Thirteen Dependabot alerts, graded against the root Dockerfile's image.
+
+| Alerts  | Package                       | Verdict                                                                                     |
+| ------- | ----------------------------- | ------------------------------------------------------------------------------------------- |
+| 386-395 | undici 7.30.0, 8.11.2         | pinned `^7.30.1` in `security/overrides.yaml`, no live vector (the register entry says why) |
+| 385     | qs 6.14.2, 6.15.1             | recorded in `osv-scanner.toml`: the throw needs `qs.stringify` with `arrayFormat: 'comma'`  |
+| 384     | postcss-selector-parser 6.1.4 | already recorded in `osv-scanner.toml`: CSS-modules build plugins under Storybook           |
+| 396     | deepmerge 4.3.1               | recorded in `osv-scanner.toml`: no fixed release, jest and Storybook only                   |
+
+The undici pin is one generated line and upstream already took 7.30.1 in
+hyperdxio/hyperdx#3462, so `--check` unwinds it at the next sync. It also moves
+node-gyp's 8.11.2 to 7.30.1. node-gyp installs only on macOS, under fsevents,
+and 7.30.1 exports the `Agent`, `EnvHttpProxyAgent`, `RetryAgent` and `fetch`
+its `lib/download.js:2` takes. The image's Node 24.22.1 reports
+`process.versions.undici` 7.30.1, so the global `fetch` the provider calls use
+is already patched.
+
+The three undici ignores in `osv-scanner.toml` (GHSA-4qv8-2p9j-2685,
+GHSA-f72v-6w45-q472, GHSA-xjj6-f33q-929c) are deleted, because the lockfile no
+longer carries an affected version.
+
+| Run                        | main                                  | This change     |
+| -------------------------- | ------------------------------------- | --------------- |
+| osv-scanner on `yarn.lock` | 13 rows: undici x10, qs x2, deepmerge | no issues found |
