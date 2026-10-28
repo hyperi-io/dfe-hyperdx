@@ -134,6 +134,10 @@ id = "GHSA-8cw4-87c7-c6xx"
 reason = "csv-parse: csv under @changesets/cli, not in the image."
 
 [[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+reason = "deepmerge 4.3.1: no fixed release. jest-config and Storybook's fork-ts-checker-webpack-plugin, both devDependencies, not in the image."
+
+[[IgnoredVulns]]
 id = "GHSA-848j-6mx2-7j84"
 reason = "elliptic: no fixed release. browserify-sign and create-ecdh under Storybook, not in the image."
 
@@ -306,6 +310,10 @@ id = "GHSA-x5fp-wj9c-mxmx"
 reason = "qs: tolerable risk. express parses every query string and urlencoded body with it, behind the OIDC gateway; moderate, and express's ~6.14.0 admits no fix."
 
 [[IgnoredVulns]]
+id = "GHSA-6pq8-jhm2-2vcw"
+reason = "qs: the throw needs qs.stringify with arrayFormat 'comma'. express 4.22.1 only calls qs.parse (lib/utils.js:289), and no workspace source or shipped dependency passes 'comma'. 6.15.1 is typed-rest-client under Stryker."
+
+[[IgnoredVulns]]
 id = "GHSA-mw96-cpmx-2vgc"
 reason = "rollup 2.79.2: @stoplight/spectral-ruleset-bundler, lint tooling, not in the image."
 
@@ -340,18 +348,6 @@ reason = "tmp 0.0.33: external-editor under CLI prompts, not in the image."
 [[IgnoredVulns]]
 id = "GHSA-ph9p-34f9-6g65"
 reason = "tmp 0.0.33: external-editor under CLI prompts, not in the image."
-
-[[IgnoredVulns]]
-id = "GHSA-4qv8-2p9j-2685"
-reason = "undici: 7.30.0 is the AI SDK's fetch for untrusted URLs in a prompt, the api sends text prompts only, and the AI routes throw unless AI_PROVIDER or ANTHROPIC_API_KEY is set. 8.11.2 is node-gyp, build tooling."
-
-[[IgnoredVulns]]
-id = "GHSA-f72v-6w45-q472"
-reason = "undici: 7.30.0 is the AI SDK's fetch for untrusted URLs in a prompt, the api sends text prompts only, and the AI routes throw unless AI_PROVIDER or ANTHROPIC_API_KEY is set. 8.11.2 is node-gyp, build tooling."
-
-[[IgnoredVulns]]
-id = "GHSA-xjj6-f33q-929c"
-reason = "undici: 7.30.0 is the AI SDK's fetch for untrusted URLs in a prompt, the api sends text prompts only, and the AI routes throw unless AI_PROVIDER or ANTHROPIC_API_KEY is set. 8.11.2 is node-gyp, build tooling."
 
 [[IgnoredVulns]]
 id = "GHSA-w5hq-g745-h8pq"
