@@ -107,3 +107,21 @@ overrides:
 #       authentication.
 #     upstream: none            # or the upstream issue/release that tracks it
 #     added: 2026-07-23
+  - package: body-parser
+    range: '^1.20.9'
+    advisory: GHSA-27r3-jxmh-p828
+    severity: high
+    vector: >-
+      express 4.22.1 declares body-parser ~1.20.3 and resolves 1.20.6. On a
+      request carrying Content-Encoding, body-parser pipes the body into a
+      decompression stream and leaves it piped with no error listener once the
+      body is read, so trailing bytes after a valid frame reach the finished
+      decoder and its error ends the process (body-parser lib/read.js:151-188).
+      The three parsers at packages/api/src/api-app.ts:78-80 run before routing
+      and before the engine token check, so any caller that reaches the API can
+      do it unauthenticated. 1.20.9 detaches and destroys the stream and adds an
+      error listener. The pin also covers the OpAMP raw parser
+      (opamp/app.ts:15) and the PromQL urlencoded parser
+      (routers/api/prometheus.ts:56), which stay inflating.
+    upstream: none
+    added: 2026-10-28
