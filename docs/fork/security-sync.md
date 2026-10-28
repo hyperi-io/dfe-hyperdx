@@ -2029,9 +2029,10 @@ Recorded as mitigated rather than fixed. No 3.x release carries the fix, and
 ## 2026-10-28 - body-parser 1.20.9 pinned, patch 0003 dropped
 
 GHSA-27r3-jxmh-p828 is fixed by the `body-parser ^1.20.9` entry in
-`security/overrides.yaml`, and `security/patches/0003-body-parser-no-inflate.patch`
-is gone with its `inflate: false` hunks in `api-app.ts`. The pin covers every
-mount, including the OpAMP and PromQL parsers the patch left inflating.
+`security/overrides.yaml`, and
+`security/patches/0003-body-parser-no-inflate.patch` is gone with its
+`inflate: false` hunks in `api-app.ts`. The pin covers every mount, including
+the OpAMP and PromQL parsers the patch left inflating.
 
 body-parser 1.20.9 was published 2026-10-22T11:38Z, six days before this change.
 `npmMinimalAgeGate: 7d` refuses it until 2026-10-29, so `.yarnrc.yml` carries a
