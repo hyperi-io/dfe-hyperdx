@@ -789,6 +789,15 @@ describe("ensureOrgConnection - another request's seed in flight", () => {
     expect(mockAwaitSeed).toHaveBeenCalledTimes(1);
   });
 
+  test('a re-seeded connection is waited on even after the team was cached settled', async () => {
+    mockConns.mockResolvedValue(OWN);
+    await ensureOrgConnection('tok', 'team-1', ORG);
+    mockConns.mockResolvedValue([{ _id: 'conn-2', username: ORG }]);
+    await ensureOrgConnection('tok', 'team-1', ORG);
+
+    expect(mockAwaitSeed).toHaveBeenCalledTimes(2);
+  });
+
   test('a seed that never settles on a busy claim falls back to unavailable, logged once', async () => {
     mockConns.mockResolvedValue([]);
     mockClaim.mockResolvedValue('busy');
@@ -845,6 +854,16 @@ describe("ensureOrgConnection - another request's seed in flight", () => {
     );
     expect(mockSettle).toHaveBeenCalledWith('team-1');
     expect(mockAwaitSeed).not.toHaveBeenCalled();
+  });
+
+  test('a settle write that fails once is retried so waiters do not sit the lease', async () => {
+    mockConns.mockResolvedValue([]);
+    (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 503 });
+    mockSettle.mockRejectedValueOnce(new Error('documentdb blip'));
+
+    await ensureOrgConnection('tok', 'team-1', ORG);
+
+    expect(mockSettle).toHaveBeenCalledTimes(2);
   });
 });
 
