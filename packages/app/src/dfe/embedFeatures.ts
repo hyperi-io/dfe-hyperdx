@@ -40,6 +40,18 @@ export function isBlockedRoute(pathname: string): boolean {
 }
 
 /**
+ * The source picker's admin actions (add, edit, manage). A source is the engine's
+ * to configure, so while 'team' is disabled the picker offers none of them.
+ */
+export const DFE_SOURCE_ADMIN_PROPS: {
+  onCreate?: undefined;
+  onEdit?: undefined;
+  onManageSources?: undefined;
+} = isEmbedFeatureEnabled('team')
+  ? {}
+  : { onCreate: undefined, onEdit: undefined, onManageSources: undefined };
+
+/**
  * Embed (chromeless) mode. When DFE embeds this fork as a seamless sibling in
  * dfe-ui (an iframe), dfe-ui owns the nav -- hyperdx must render NO chrome (no
  * AppNav) so there is a single nav, not two. Triggered by `?embed=1` on the URL;

@@ -146,3 +146,18 @@ describe('layout.tsx and AppNav.tsx - chromeless embed', () => {
     );
   });
 });
+
+describe('api.ts - a 4xx carries the response body reason', () => {
+  it('runs every client error through the fork hook', () => {
+    expect(read('src/api.ts')).toContain('beforeError: [dfeApiErrorDetail]');
+  });
+});
+
+describe('DBSearchPage.tsx - no source admin actions in the picker', () => {
+  it('spreads the fork props after the upstream ones so they win', () => {
+    const page = read('src/DBSearchPage.tsx');
+    expect(page).toMatch(
+      /onManageSources=\{onManageSources\}\s+\{\.\.\.DFE_SOURCE_ADMIN_PROPS\}/,
+    );
+  });
+});

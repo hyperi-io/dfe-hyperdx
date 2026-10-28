@@ -12,6 +12,7 @@
 import {
   DFE_BLOCKED_ROUTE_PREFIXES,
   DFE_EMBED_FEATURES,
+  DFE_SOURCE_ADMIN_PROPS,
   isBlockedRoute,
   isEmbedChrome,
   isEmbedFeatureEnabled,
@@ -124,5 +125,21 @@ describe('isEmbedChrome', () => {
     expect(isEmbedChrome()).toBe(false);
 
     spy.mockRestore();
+  });
+});
+
+describe('DFE source picker admin actions', () => {
+  it('offers no add, edit or manage action while team is disabled', () => {
+    expect(isEmbedFeatureEnabled('team')).toBe(false);
+    expect(DFE_SOURCE_ADMIN_PROPS).toEqual({
+      onCreate: undefined,
+      onEdit: undefined,
+      onManageSources: undefined,
+    });
+    expect(Object.keys(DFE_SOURCE_ADMIN_PROPS).sort()).toEqual([
+      'onCreate',
+      'onEdit',
+      'onManageSources',
+    ]);
   });
 });

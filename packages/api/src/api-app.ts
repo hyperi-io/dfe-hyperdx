@@ -161,6 +161,8 @@ app.use(
   blockProvisionedWrites,
   routers.dashboardRouter,
 );
+// DFE: minting a personal access key is an admin action, and the key only opens the engine-only /api/v2 and /mcp.
+app.use('/me/accessKey', isUserAuthenticated, requireServicePrincipal);
 // /me embeds the caller's team record, stripped the same way as /team below.
 app.use('/me', stripMeTeamAdminFields);
 app.use('/me', isUserAuthenticated, routers.meRouter);
@@ -208,7 +210,7 @@ app.use(
   dropClientCredentials,
   clickhouseProxyRouter,
 );
-app.use('/iac', isUserAuthenticated, iacRouter);
+app.use('/iac', isUserAuthenticated, requireServicePrincipal, iacRouter);
 if (config.IS_PROMQL_ENABLED) {
   app.use('/v1/prometheus', isUserAuthenticated, routers.prometheusRouter);
 }

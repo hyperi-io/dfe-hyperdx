@@ -46,6 +46,7 @@ import {
 
 import { IS_LOCAL_MODE } from './config';
 import { getLocalDashboardTags } from './dashboard';
+import { dfeApiErrorDetail } from './dfe/apiErrorDetail';
 import { getLocalSavedSearchTags } from './savedSearch';
 type ServicesResponse = {
   data: Record<
@@ -84,6 +85,7 @@ const server = ky.create({
   credentials: 'include',
   hooks: {
     afterResponse: [loginHook],
+    beforeError: [dfeApiErrorDetail],
   },
   timeout: false,
 });

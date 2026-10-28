@@ -93,7 +93,6 @@ const KEPT: ReadonlyArray<[Method, string]> = [
   ['post', '/dfe/create-rule'],
   ['put', '/favorites'],
   ['delete', '/favorites/dashboard/507f1f77bcf86cd799439011'],
-  ['patch', '/me/accessKey'],
   ['post', '/me/onboarding/task'],
 ];
 
