@@ -339,15 +339,32 @@ const SEED_LEASE_MS = 30_000;
 // When this process next claims a team its last attempt could not seed.
 const nextSeedCheck = new Map<string, number>();
 
-// Teams this process has seen with no seed in flight since they last held no connection.
-const seedSettled = new Set<string>();
+// Teams this process has seen with no seed in flight, with the connection they held then.
+// A re-seed on another replica writes a new connection, so a different id is not settled.
+const seedSettled = new Map<string, string>();
+
+/** Settle the team's claim, once more if the first write fails, so waiters are not left to the lease. */
+async function settleSeedClaim(teamId: string): Promise<void> {
+  try {
+    await settleTeamSeed(teamId);
+  } catch (err) {
+    logger.warn(
+      { err, teamId },
+      'DFE: could not settle the team seed, retrying',
+    );
+    await settleTeamSeed(teamId);
+  }
+}
 
 /**
  * Wait for another request's seed of the team to settle, so this request does
  * not read the team half-seeded. False when it did not settle within the lease.
  */
-async function waitForTeamSeed(teamId: string): Promise<boolean> {
-  if (seedSettled.has(teamId)) {
+async function waitForTeamSeed(
+  teamId: string,
+  connectionId?: string,
+): Promise<boolean> {
+  if (connectionId != null && seedSettled.get(teamId) === connectionId) {
     return true;
   }
   let wait;
@@ -364,7 +381,9 @@ async function waitForTeamSeed(teamId: string): Promise<boolean> {
     );
     return false;
   }
-  seedSettled.add(teamId);
+  if (connectionId != null) {
+    seedSettled.set(teamId, connectionId);
+  }
   return true;
 }
 
@@ -431,7 +450,7 @@ export async function ensureOrgConnection(
       .map(connection => connection.username)
       .filter(username => username !== identity);
     if (foreign.length === 0) {
-      await waitForTeamSeed(teamId);
+      await waitForTeamSeed(teamId, String(held[0]._id));
       await recheckRefusedConnection(
         token,
         teamId,
@@ -454,8 +473,11 @@ export async function ensureOrgConnection(
   let outcome: SeedOutcome = 'unavailable';
   try {
     if ((await claimTeamSeed(teamId, SEED_LEASE_MS)) === 'claimed') {
-      outcome = await seedTeam(token, teamId, identity);
-      await settleTeamSeed(teamId);
+      try {
+        outcome = await seedTeam(token, teamId, identity);
+      } finally {
+        await settleSeedClaim(teamId);
+      }
     } else if (await waitForTeamSeed(teamId)) {
       const seeded = await getConnectionsByTeam(teamId);
       const own =
