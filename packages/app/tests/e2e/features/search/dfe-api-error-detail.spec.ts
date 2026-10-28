@@ -12,49 +12,53 @@ import { SearchPage } from '../../page-objects/SearchPage';
 import { getApiUrl } from '../../utils/api-helpers';
 import { expect, test } from '../../utils/base-test';
 
-test.describe('A 4xx on a save shows its reason', { tag: '@full-stack' }, () => {
-  test('saved-search create surfaces the API validation detail', async ({
-    page,
-  }) => {
-    test.skip(
-      process.env.E2E_FULLSTACK !== 'true',
-      'needs the real API for the 400 body',
-    );
+test.describe(
+  'A 4xx on a save shows its reason',
+  { tag: '@full-stack' },
+  () => {
+    test('saved-search create surfaces the API validation detail', async ({
+      page,
+    }) => {
+      test.skip(
+        process.env.E2E_FULLSTACK !== 'true',
+        'needs the real API for the 400 body',
+      );
 
-    const searchPage = new SearchPage(page);
-    await searchPage.goto();
+      const searchPage = new SearchPage(page);
+      await searchPage.goto();
 
-    const refused = await page.request.post(`${getApiUrl()}/saved-search`, {
-      data: {
-        name: '   ',
-        select: '',
-        where: '',
-        whereLanguage: 'lucene',
-        source: '000000000000000000000000',
-        tags: [],
-      },
+      const refused = await page.request.post(`${getApiUrl()}/saved-search`, {
+        data: {
+          name: '   ',
+          select: '',
+          where: '',
+          whereLanguage: 'lucene',
+          source: '000000000000000000000000',
+          tags: [],
+        },
+      });
+      expect(refused.status()).toBe(400);
+      const body = await refused.text();
+      const reason = body.match(/"message":"([^"]+)"/)?.[1];
+      expect(reason).toBeTruthy();
+
+      await page.route('**/api/saved-search', route =>
+        route.request().method() === 'POST'
+          ? route.fulfill({
+              status: 400,
+              contentType: 'application/json',
+              body,
+            })
+          : route.continue(),
+      );
+
+      await searchPage.openSaveSearchModal();
+      await searchPage.savedSearchModal.fillName('A search the API refuses');
+      await searchPage.savedSearchModal.submit();
+
+      const toast = page.locator('.mantine-Notification-root');
+      await expect(toast).toContainText(reason!);
+      await expect(toast).not.toContainText('An error occurred while saving');
     });
-    expect(refused.status()).toBe(400);
-    const body = await refused.text();
-    const reason = body.match(/"message":"([^"]+)"/)?.[1];
-    expect(reason).toBeTruthy();
-
-    await page.route('**/api/saved-search', route =>
-      route.request().method() === 'POST'
-        ? route.fulfill({
-            status: 400,
-            contentType: 'application/json',
-            body,
-          })
-        : route.continue(),
-    );
-
-    await searchPage.openSaveSearchModal();
-    await searchPage.savedSearchModal.fillName('A search the API refuses');
-    await searchPage.savedSearchModal.submit();
-
-    const toast = page.locator('.mantine-Notification-root');
-    await expect(toast).toContainText(reason!);
-    await expect(toast).not.toContainText('An error occurred while saving');
-  });
-});
+  },
+);

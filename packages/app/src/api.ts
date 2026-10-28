@@ -44,9 +44,9 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 
+import { dfeApiErrorDetail } from './dfe/apiErrorDetail';
 import { IS_LOCAL_MODE } from './config';
 import { getLocalDashboardTags } from './dashboard';
-import { dfeApiErrorDetail } from './dfe/apiErrorDetail';
 import { getLocalSavedSearchTags } from './savedSearch';
 type ServicesResponse = {
   data: Record<
