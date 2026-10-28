@@ -94,11 +94,6 @@ id = "GHSA-378v-28hj-76wf"
 reason = "bn.js 5.2.1: browserify-rsa and browserify-sign under Storybook, not in the image."
 
 [[IgnoredVulns]]
-id = "GHSA-27r3-jxmh-p828"
-ignoreUntil = 2026-10-29
-reason = "body-parser 1.20.6: security/patches/0003 sets inflate: false on the three api-app.ts parsers anyone reaches, so a compressed body 415s before a decoder exists. The PromQL parser only sees bodies those have parsed, and nothing routes to OpAMP's 4320. 1.20.9 clears the age gate on 2026-10-29: #165."
-
-[[IgnoredVulns]]
 id = "GHSA-6j4f-fj2g-mc7p"
 reason = "brace-expansion 5.0.8: nx's exact pin, a root devDependency, not in the image."
 

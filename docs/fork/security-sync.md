@@ -2025,3 +2025,28 @@ Recorded as mitigated rather than fixed. No 3.x release carries the fix, and
 | Run                        | main                        | This change     |
 | -------------------------- | --------------------------- | --------------- |
 | osv-scanner on `yarn.lock` | 5 rows: body-parser, zod x4 | no issues found |
+
+## 2026-10-28 - body-parser 1.20.9 pinned, patch 0003 dropped
+
+GHSA-27r3-jxmh-p828 is fixed by the `body-parser ^1.20.9` entry in
+`security/overrides.yaml`, and
+`security/patches/0003-body-parser-no-inflate.patch` is gone with its
+`inflate: false` hunks in `api-app.ts`. The pin covers every mount, including
+the OpAMP and PromQL parsers the patch left inflating.
+
+body-parser 1.20.9 was published 2026-10-22T11:38Z, six days before this change.
+`npmMinimalAgeGate: 7d` refuses it until 2026-10-29, so `.yarnrc.yml` carries a
+`body-parser` line under `npmPreapprovedPackages` for the one day. Delete the
+line on or after 2026-10-29.
+
+The lockfile moves two things:
+
+- `body-parser` 1.20.6 to 1.20.9. The `~1.20.3` descriptor from express becomes
+  `^1.20.9`.
+- `qs` 6.15.3 to 6.16.1, because body-parser 1.20.9 declares `qs ~6.16.0`.
+  express keeps its own qs 6.14.2.
+
+`dfe/__tests__/body-parser-inflate.test.ts` is replaced by
+`dfe/__tests__/body-parser-version.test.ts`, which resolves body-parser from
+express and fails below 1.20.9. The `osv-scanner.toml` ignore for the advisory
+is deleted, since the lockfile no longer carries an affected version.

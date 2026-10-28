@@ -76,9 +76,9 @@ app.use(compression());
 // scrapes are unauthenticated -- they must not hit passport or isUserAuthenticated.
 mountObservability(app);
 
-app.use(express.json({ limit: '32mb', inflate: false }));
-app.use(express.text({ limit: '32mb', inflate: false }));
-app.use(express.urlencoded({ extended: false, limit: '32mb', inflate: false }));
+app.use(express.json({ limit: '32mb' }));
+app.use(express.text({ limit: '32mb' }));
+app.use(express.urlencoded({ extended: false, limit: '32mb' }));
 app.use(session(sess));
 
 if (!config.IS_LOCAL_APP_MODE) {

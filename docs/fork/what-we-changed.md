@@ -569,7 +569,9 @@ header check is what holds when a deployment authenticates some other way.
   by advisory id, never by package name - `npmAuditExcludePackages` would mute
   the next advisory against the same package too. Each id carries its reason and
   the traces are in [security-sync.md](security-sync.md). Upstream churns this
-  file rarely, so the conflict is small.
+  file rarely, so the conflict is small. `npmPreapprovedPackages` also carries a
+  temporary `body-parser` line that admits 1.20.9 past `npmMinimalAgeGate`, and
+  it goes on 2026-10-29.
 
 - `.github/workflows/docker-build.yml` - three deltas. The first two are for the
   same failure (#51). A `Free disk space` step calling
@@ -622,11 +624,11 @@ header check is what holds when a deployment authenticates some other way.
   touched the file four times, and the conflict is trivial either way: take
   ours, then re-run `yarn ratchet:update` after the sync so the numbers match
   the merged tree.
-- `package.json` `resolutions` - three generated fork pins,
+- `package.json` `resolutions` - four generated fork pins,
   `systeminformation ^5.31.7`, raising upstream's own `^5.24.0`, and
-  `follow-redirects ^1.16.1` and `next ^16.4.1`, which upstream does not pin.
-  All three are generated from `security/overrides.yaml` by
-  `scripts/security-override.py --apply`, so edit the register, never these
+  `follow-redirects ^1.16.1`, `next ^16.4.1` and `body-parser ^1.20.9`, which
+  upstream does not pin. All four are generated from `security/overrides.yaml`
+  by `scripts/security-override.py --apply`, so edit the register, never these
   lines. The vectors are in the register entries. `--check` judges the pin
   against upstream's own lockfile at our merge base, never ours: the pin makes
   our lockfile resolve above its own floor, so ours would call every live pin
