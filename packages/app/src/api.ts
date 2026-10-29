@@ -44,6 +44,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 
+import { dfeApiErrorDetail } from './dfe/apiErrorDetail';
 import { IS_LOCAL_MODE } from './config';
 import { getLocalDashboardTags } from './dashboard';
 import { getLocalSavedSearchTags } from './savedSearch';
@@ -84,6 +85,7 @@ const server = ky.create({
   credentials: 'include',
   hooks: {
     afterResponse: [loginHook],
+    beforeError: [dfeApiErrorDetail],
   },
   timeout: false,
 });

@@ -79,6 +79,8 @@ packages/app/pages/_document.tsx
 packages/app/pages/register.tsx
 packages/app/public/pyodide/pyodide.asm.js
 packages/app/public/pyodide/pyodide.js
+# One hook entry on the ky instance: a 4xx carries the response body's reason.
+packages/app/src/api.ts
 packages/app/src/DBChartPage.tsx
 packages/app/src/DBDashboardPage.tsx
 packages/app/src/DBSearchPage.tsx

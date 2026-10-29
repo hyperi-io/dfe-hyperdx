@@ -110,6 +110,7 @@ import { Tags } from '@/components/Tags';
 import { TimePicker } from '@/components/TimePicker';
 import { IS_LOCAL_MODE } from '@/config';
 import { dfePreferredSourceId } from '@/dfe/defaultSource';
+import { DFE_SOURCE_ADMIN_PROPS } from '@/dfe/embedFeatures';
 import { useAliasMapFromChartConfig } from '@/hooks/useChartConfig';
 import { useExplainQuery } from '@/hooks/useExplainQuery';
 import { useResolvedSourceParam } from '@/hooks/useResolvedSourceParam';
@@ -139,6 +140,7 @@ import {
   usePrevious,
   withMapKeyAlias,
 } from '@/utils';
+import { getApiErrorMessage } from '@/utils/apiErrors';
 
 import ChartSQLPreview, { SQLPreview } from './components/ChartSQLPreview';
 import DBSqlRowTableWithSideBar from './components/DBSqlRowTableWithSidebar';
@@ -537,13 +539,15 @@ function SaveSearchModalComponent({
             onSuccess: () => {
               onClose();
             },
-            onError: error => {
+            onError: async error => {
               console.error('Error updating saved search:', error);
               notifications.show({
                 color: 'red',
                 title: 'Error',
-                message:
+                message: await getApiErrorMessage(
+                  error,
                   'An error occurred while updating your saved search. Please try again.',
+                ),
               });
             },
           },
@@ -579,8 +583,10 @@ function SaveSearchModalComponent({
           notifications.show({
             color: 'red',
             title: 'Error',
-            message:
+            message: await getApiErrorMessage(
+              error,
               'An error occurred while saving your search. Please try again.',
+            ),
           });
         }
       }
@@ -2346,6 +2352,7 @@ function DBSearchPageContent() {
             onCreate={openNewSourceModal}
             onEdit={onEditCurrentSource}
             onManageSources={onManageSources}
+            {...DFE_SOURCE_ADMIN_PROPS}
             onSchemaPreview={() => setIsSourceSchemaPreviewOpen(true)}
             isSchemaPreviewEnabled={isSourceSchemaPreviewEnabled(
               inputSourceObj,

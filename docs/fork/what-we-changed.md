@@ -164,6 +164,17 @@ document whose fields are getters, not own properties. The delta in
 **`api-app.ts`** is one added mount ahead of upstream's `/me` line, which stays
 untouched.
 
+**A member cannot mint a personal access key or read the IaC manifest.**
+`PATCH /me/accessKey` rotates a key that only opens `/api/v2` and `/mcp`, both
+engine-only, and `GET /iac/import-manifest` lists the team's connection, webhook
+and alert names for the team-settings export. Both now take
+`requireServicePrincipal`. The delta in **`api-app.ts`** is one added mount
+ahead of upstream's `/me` line and one identifier on the `/iac` mount.
+`dfe/__tests__/admin-surface.int.test.ts` drives the whole admin surface as a
+member and as the engine service identity through the real app, and shows a
+session the engine gives no group or no ClickHouse identity provisions no user
+or team.
+
 **`requireDfeMode`** takes a DFE-only router out of the app when `DFE_AUTH_MODE`
 is unset - `next('router')`, so the request 404s as it would upstream.
 `dfe/routers/shipped-dashboards.ts` mounts it, inside our own router rather than
@@ -501,6 +512,21 @@ header check is what holds when a deployment authenticates some other way.
   Health and Team Settings are commented out because this fork blocks or does
   not ship those pages, and so are the Documentation and Cloud entries, which
   link to ClickStack.
+
+- `packages/app/src/dfe/apiErrorDetail.ts` - a ky `beforeError` hook. ky names a
+  failed request "Request failed with status code 400 Bad Request", and the
+  reason sits in the response body, so every toast built from `error.message`
+  hid it. A 4xx error now carries the body's `message`, a schema rejection's
+  issues, or the fork's own `{ error }`. **`api.ts` (catalogued)** gains one
+  import and one entry in the `ky.create` hooks. **`DBSearchPage.tsx`
+  (catalogued)** passes its two saved-search error toasts through upstream's own
+  `getApiErrorMessage`, which keeps the existing copy as the fallback.
+  `dfe/__tests__/apiErrorDetail.test.ts` covers the shapes and
+  `forkDeltas.test.ts` pins the wiring.
+- `DFE_SOURCE_ADMIN_PROPS` in `packages/app/src/dfe/embedFeatures.ts` - the
+  source picker's Add, Edit and Manage actions. **`DBSearchPage.tsx`** spreads
+  it after the three upstream props, one added line, so none shows while `team`
+  is disabled. The API refuses the writes either way.
 
 ## Config and bootstrap
 
