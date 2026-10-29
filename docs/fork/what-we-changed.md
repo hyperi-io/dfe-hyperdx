@@ -168,8 +168,8 @@ untouched.
 `PATCH /me/accessKey` rotates a key that only opens `/api/v2` and `/mcp`, both
 engine-only, and `GET /iac/import-manifest` lists the team's connection, webhook
 and alert names for the team-settings export. Both now take
-`requireServicePrincipal`. The delta in **`api-app.ts`** is one added mount ahead
-of upstream's `/me` line and one identifier on the `/iac` mount.
+`requireServicePrincipal`. The delta in **`api-app.ts`** is one added mount
+ahead of upstream's `/me` line and one identifier on the `/iac` mount.
 `dfe/__tests__/admin-surface.int.test.ts` drives the whole admin surface as a
 member and as the engine service identity through the real app, and shows a
 session the engine gives no group or no ClickHouse identity provisions no user
@@ -521,12 +521,12 @@ header check is what holds when a deployment authenticates some other way.
   import and one entry in the `ky.create` hooks. **`DBSearchPage.tsx`
   (catalogued)** passes its two saved-search error toasts through upstream's own
   `getApiErrorMessage`, which keeps the existing copy as the fallback.
-  `dfe/__tests__/apiErrorDetail.test.ts` covers the shapes and `forkDeltas.test.ts`
-  pins the wiring.
-- `DFE_SOURCE_ADMIN_PROPS` in `packages/app/src/dfe/embedFeatures.ts` - the source
-  picker's Add, Edit and Manage actions. **`DBSearchPage.tsx`** spreads it after
-  the three upstream props, one added line, so none shows while `team` is
-  disabled. The API refuses the writes either way.
+  `dfe/__tests__/apiErrorDetail.test.ts` covers the shapes and
+  `forkDeltas.test.ts` pins the wiring.
+- `DFE_SOURCE_ADMIN_PROPS` in `packages/app/src/dfe/embedFeatures.ts` - the
+  source picker's Add, Edit and Manage actions. **`DBSearchPage.tsx`** spreads
+  it after the three upstream props, one added line, so none shows while `team`
+  is disabled. The API refuses the writes either way.
 
 ## Config and bootstrap
 
