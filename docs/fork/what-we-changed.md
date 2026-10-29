@@ -205,10 +205,11 @@ the page cannot get reads as "not read-only", so upstream's page is unchanged
 there. The hook uses plain state, not react-query, because upstream's tests
 render the search page behind a partial react-query mock. The server still
 refuses the writes: this only stops the page offering a button that answers 403.
-The deltas are **`api-app.ts`** (one import and one mount in the DFE routes
-block) and **`DBSearchPage.tsx`** (one import, one hook call, and one spread on
-each of the Save and Update buttons). `CreateRuleFromSearch` is ours and takes
-the same hook. `dfe/__tests__/readOnlySession.test.tsx` pins the wiring.
+The only upstream delta is **`DBSearchPage.tsx`** (one import, one hook call,
+and one spread on each of the Save and Update buttons). The route is mounted by
+`shipped-dashboards.ts`, so `api-app.ts` is untouched. `CreateRuleFromSearch` is
+ours and takes the same hook. `dfe/__tests__/readOnlySession.test.tsx` pins the
+wiring.
 
 **Restore refuses a simple request (`dfe/middleware/cross-site.ts`).** A form
 post needs no CORS preflight and carries no header the posting page had to be

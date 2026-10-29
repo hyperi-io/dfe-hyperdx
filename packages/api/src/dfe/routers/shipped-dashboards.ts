@@ -18,6 +18,7 @@ import { requireDfeMode } from '@/dfe/middleware/admin-lockdown';
 import { requireNonSimpleRequest } from '@/dfe/middleware/cross-site';
 import { requireTeamAdminRole } from '@/dfe/middleware/role-claim';
 import { clearDashboardTombstones } from '@/dfe/models/dashboard-tombstone';
+import sessionRoleRouter from '@/dfe/routers/session-role';
 import { getNonNullUserWithTeam } from '@/middleware/auth';
 import { syncDashboards } from '@/tasks/provisionDashboards';
 import logger from '@/utils/logger';
@@ -26,6 +27,9 @@ const router = express.Router();
 
 // The restore surface is DFE's, so outside DFE mode it is not there at all.
 router.use(requireDfeMode);
+
+// The session role shares this mount, which keeps api-app.ts untouched.
+router.use(sessionRoleRouter);
 
 /**
  * POST /dfe/dashboards/restore-shipped

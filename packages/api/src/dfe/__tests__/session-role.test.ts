@@ -13,10 +13,36 @@ jest.mock('@/dfe/config', () => ({
 
 let mockDfeEnabled = true;
 
+jest.mock('@/utils/logger', () => ({
+  __esModule: true,
+  default: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
+jest.mock('@/middleware/auth', () => ({
+  __esModule: true,
+  getNonNullUserWithTeam: jest.fn(),
+}));
+
+jest.mock('@/dfe/models/dashboard-tombstone', () => ({
+  __esModule: true,
+  clearDashboardTombstones: jest.fn(),
+}));
+
+jest.mock('@/tasks/provisionDashboards', () => ({
+  __esModule: true,
+  syncDashboards: jest.fn(),
+}));
+
 import express from 'express';
 import request from 'supertest';
 
-import sessionRoleRouter from '@/dfe/routers/session-role';
+// The route is reached the way api-app.ts reaches it: through this router.
+import shippedDashboardsRouter from '@/dfe/routers/shipped-dashboards';
 
 function appWithRole() {
   const app = express();
@@ -24,7 +50,7 @@ function appWithRole() {
     req.dfeRole = req.header('x-test-role');
     next();
   });
-  app.use('/dfe', sessionRoleRouter);
+  app.use('/dfe', shippedDashboardsRouter);
   return app;
 }
 

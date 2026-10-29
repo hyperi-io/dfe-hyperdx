@@ -18,7 +18,6 @@ import { blockProvisionedWrites } from './dfe/middleware/provisioned-lockdown';
 import { mountObservability } from './dfe/observability';
 import dfeSourcesRouter from './dfe/routers/dfe-sources';
 import queryExportRouter from './dfe/routers/query-export';
-import sessionRoleRouter from './dfe/routers/session-role';
 import shippedDashboardsRouter from './dfe/routers/shipped-dashboards';
 import mcpRouter from './mcp/app';
 import { isUserAuthenticated } from './middleware/auth';
@@ -229,8 +228,6 @@ app.use(
 app.use('/dfe', isUserAuthenticated, queryExportRouter);
 // DFE: restoring the shipped dashboard set follows team membership, as delete does.
 app.use('/dfe', isUserAuthenticated, shippedDashboardsRouter);
-// DFE: which role the session holds, so the page can leave out what it would refuse.
-app.use('/dfe', isUserAuthenticated, sessionRoleRouter);
 // --- DFE ROUTES END ---
 // ---------------------------------------------------------------------
 
