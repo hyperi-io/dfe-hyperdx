@@ -44,7 +44,7 @@ overrides:
   - package: systeminformation
     # Narrowest range that clears every open advisory against this package.
     # ^ rather than >= so a major bump cannot arrive silently.
-    range: '^5.31.7'
+    range: '^5.33.16'
     advisory: GHSA-5xpp-75jx-m839
     severity: high
     vector: >-
@@ -58,6 +58,11 @@ overrides:
       network configuration gets code execution inside the API process rather
       than only on the host. The sink is provably live; the source is
       host-local, not remote. It is the only pin we carry with a live sink.
+      The floor is 5.33.16 for GHSA-3f7j-7jwc-fxfj, a Windows-only PowerShell
+      injection in services(). host-metrics requires only
+      systeminformation/lib/network (build/src/stats/si.js:22), so services()
+      is never loaded, and the image runs Linux. No live vector, taken because
+      the vulnerable copy ships and the fix is one generated line.
     upstream: https://github.com/hyperdxio/hyperdx/issues/3306
     added: 2026-08-26
   - package: follow-redirects
