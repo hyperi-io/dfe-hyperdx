@@ -111,6 +111,7 @@ import { TimePicker } from '@/components/TimePicker';
 import { IS_LOCAL_MODE } from '@/config';
 import { dfePreferredSourceId } from '@/dfe/defaultSource';
 import { DFE_SOURCE_ADMIN_PROPS } from '@/dfe/embedFeatures';
+import { useDfeWriteActionProps } from '@/dfe/readOnlySession';
 import { useAliasMapFromChartConfig } from '@/hooks/useChartConfig';
 import { useExplainQuery } from '@/hooks/useExplainQuery';
 import { useResolvedSourceParam } from '@/hooks/useResolvedSourceParam';
@@ -1533,6 +1534,7 @@ function DBSearchPageContent() {
   }, [setIsLive]);
 
   const [modelFormExpanded, setModelFormExpanded] = useState(false); // Used in local mode
+  const dfeWriteActionProps = useDfeWriteActionProps();
   const [saveSearchModalState, setSaveSearchModalState] = useState<
     'create' | 'update' | undefined
   >(undefined);
@@ -2403,6 +2405,7 @@ function DBSearchPageContent() {
                 size="xs"
                 onClick={onSaveSearch}
                 style={{ flexShrink: 0 }}
+                {...dfeWriteActionProps}
               >
                 Save
               </Button>
@@ -2415,6 +2418,7 @@ function DBSearchPageContent() {
                   setSaveSearchModalState('update');
                 }}
                 style={{ flexShrink: 0 }}
+                {...dfeWriteActionProps}
               >
                 Update
               </Button>

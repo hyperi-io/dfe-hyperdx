@@ -194,8 +194,21 @@ and HyperDX routes check team membership alone. `dfeIdentityMiddleware` runs the
 gate once the identity is known, so it covers every route, ones upstream adds
 included. A `viewer` gets 403 on any non-read request outside the query proxy,
 PromQL, the chart assistant, its own favourites and profile, and the
-engine-authorised SQL export and rule creation. The UI still shows Save and
-Create Rule, because hiding them means editing upstream's search page.
+engine-authorised SQL export and rule creation.
+
+**A read-only session is not offered Save, Update or Create Rule
+(`dfe/routers/session-role.ts`, `dfe/readOnlySession.ts`).** `GET /dfe/session`
+answers `{ role, readOnly }` from the same `req.dfeRole` the gate above reads,
+and `useDfeWriteActionProps` hides the three buttons with `display: none` when
+`readOnly` is true. A deployment outside DFE mode has no route, and an answer
+the page cannot get reads as "not read-only", so upstream's page is unchanged
+there. The hook uses plain state, not react-query, because upstream's tests
+render the search page behind a partial react-query mock. The server still
+refuses the writes: this only stops the page offering a button that answers 403.
+The deltas are **`api-app.ts`** (one import and one mount in the DFE routes
+block) and **`DBSearchPage.tsx`** (one import, one hook call, and one spread on
+each of the Save and Update buttons). `CreateRuleFromSearch` is ours and takes
+the same hook. `dfe/__tests__/readOnlySession.test.tsx` pins the wiring.
 
 **Restore refuses a simple request (`dfe/middleware/cross-site.ts`).** A form
 post needs no CORS preflight and carries no header the posting page had to be
