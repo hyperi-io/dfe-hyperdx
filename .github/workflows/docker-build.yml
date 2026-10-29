@@ -94,7 +94,7 @@ jobs:
   app-image:
     name: Build App Image
     runs-on: arc-native-16cpu
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v6
