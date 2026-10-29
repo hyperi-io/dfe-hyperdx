@@ -6,6 +6,7 @@ import { notifications } from '@mantine/notifications';
 
 import { hdxServer } from '@/api';
 import { DFE_UI_BASE_URL } from '@/config';
+import { useDfeWriteActionProps } from '@/dfe/readOnlySession';
 
 export type ExportedSql = {
   sql: string;
@@ -59,6 +60,8 @@ export function CreateRuleFromSearch({
   // second hook out of that module makes their pristine tests explode. Owning
   // the one-shot request state here keeps our delta invisible to them.
   const [isPending, setIsPending] = useState(false);
+  // A read-only session cannot create a rule, so the action is not drawn for it.
+  const writeActionProps = useDfeWriteActionProps();
 
   const onClick = useCallback(async () => {
     setIsPending(true);
@@ -127,6 +130,7 @@ export function CreateRuleFromSearch({
       loading={isPending}
       disabled={!chartConfig}
       style={{ flexShrink: 0 }}
+      {...writeActionProps}
     >
       Create Rule
     </Button>

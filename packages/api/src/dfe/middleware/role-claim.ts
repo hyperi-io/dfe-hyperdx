@@ -85,7 +85,7 @@ export const READ_ONLY_FORBIDDEN = {
 };
 
 /** True when the caller carries the engine's read-only role. */
-function dfeRoleIsReadOnly(req: Request): boolean {
+export function dfeRoleIsReadOnly(req: Request): boolean {
   if (!isDfeEnabled) {
     return false;
   }
