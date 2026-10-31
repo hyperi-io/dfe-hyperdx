@@ -7,6 +7,7 @@ import { ClickhouseClient } from '@hyperdx/common-utils/dist/clickhouse/node';
 import {
   Metadata,
   MetadataCache,
+  quoteIdentifierIfNeeded,
 } from '@hyperdx/common-utils/dist/core/metadata';
 import { SourceKind } from '@hyperdx/common-utils/dist/types';
 import { z } from 'zod';
@@ -16,6 +17,7 @@ import {
   getConnectionsByTeam,
 } from '@/controllers/connection';
 import { getSources } from '@/controllers/sources';
+import { READ_ONLY_TOOL } from '@/mcp/tools/annotations';
 import type { ToolRegistrar } from '@/mcp/tools/types';
 import { runWithTimeout } from '@/mcp/utils/timeout';
 import logger from '@/utils/logger';
@@ -205,7 +207,7 @@ export function registerListSources({
     'clickstack_list_sources',
     {
       title: 'List Sources & Connections',
-      annotations: { readOnlyHint: true },
+      annotations: READ_ONLY_TOOL,
       description:
         'List all data sources (logs, metrics, traces) and database connections available to this team. ' +
         'Returns source IDs, names, kinds, and connection IDs as a lightweight catalog. ' +
@@ -244,6 +246,16 @@ export function registerListSources({
           timestampColumn: s.timestampValueExpression,
         };
 
+        // For clickstack_sql's FROM, so each part is quoted when it needs to
+        // be. An unqualified name only resolves in the connection's default
+        // database. Metric sources query the tables in metricTables, even
+        // when from.tableName is set, so they get the database instead.
+        if (s.kind !== SourceKind.Metric && s.from.tableName) {
+          meta.table = `${quoteIdentifierIfNeeded(s.from.databaseName)}.${quoteIdentifierIfNeeded(s.from.tableName)}`;
+        } else {
+          meta.database = quoteIdentifierIfNeeded(s.from.databaseName);
+        }
+
         if (s.section) {
           meta.section = s.section;
         }
@@ -273,6 +285,8 @@ export function registerListSources({
             body: s.bodyExpression,
             serviceName: s.serviceNameExpression,
             severityText: s.severityTextExpression,
+            severityNumber: s.severityNumberExpression,
+            eventName: s.eventNameExpression,
             traceId: s.traceIdExpression,
           };
         } else if (s.kind === SourceKind.Metric) {

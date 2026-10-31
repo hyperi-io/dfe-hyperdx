@@ -35,6 +35,7 @@ import { NextApiConfigResponseData } from '@/types';
 import { ConfirmProvider } from '@/useConfirm';
 import {
   SystemColorSchemeScript,
+  useContentFontSize,
   useResolvedColorScheme,
   useUserPreferences,
 } from '@/useUserPreferences';
@@ -102,6 +103,8 @@ function AppContent({
   // In embed mode, dfe-ui owns light/dark; otherwise use hyperdx's own resolution.
   const colorScheme = useEmbedColorScheme(resolvedColorScheme);
   const { themeName } = useAppTheme();
+  const { base: contentFontSize, compact: compactContentFontSize } =
+    useContentFontSize();
 
   // DFE embed route guard (top level, covers ALL pages regardless of layout):
   // a disabled feature must not be reachable even by direct URL.
@@ -136,6 +139,21 @@ function AppContent({
       document.documentElement.style.setProperty('--app-font-family', fontVar);
     }
   }, [effectiveFont]);
+
+  useEffect(() => {
+    // Single write point for the content font size preference; tables and
+    // chart CSS read these vars (see styles/app.scss for the defaults).
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.setProperty(
+        '--hdx-content-font-size',
+        `${contentFontSize}px`,
+      );
+      document.documentElement.style.setProperty(
+        '--hdx-content-font-size-compact',
+        `${compactContentFontSize}px`,
+      );
+    }
+  }, [contentFontSize, compactContentFontSize]);
 
   const getLayout = Component.getLayout ?? (page => page);
 
