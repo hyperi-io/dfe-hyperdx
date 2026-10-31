@@ -29,7 +29,7 @@ yarn app:dev:dfe
 (Add `otel-collector otel-collector-json prometheus` to step 1 only if you need
 telemetry ingestion; they require `OTEL_COLLECTOR_VERSION` from the base
 `.env`.) App: <http://localhost:8080> - API: <http://localhost:8000>. Needs
-`.env.dfe` (dev creds; gitignored - copy from `.env.dfe-example`).
+`.env.dfe` (dev creds; gitignored - copy from `.env.dfe.example`).
 
 ### Prod image (containerised app - closest to k8s)
 
@@ -83,7 +83,7 @@ The fork keeps upstream HyperDX code pristine; DFE behaviour is additive
   `x-forwarded-email` / `x-forwarded-groups`. Empty `DFE_AUTH_MODE` = upstream
   local login (fine for look/feel iteration).
 - **ClickHouse connection + sources** via `DEFAULT_CONNECTIONS` /
-  `DEFAULT_SOURCES` env (see `.env.dfe-example`).
+  `DEFAULT_SOURCES` env (see `.env.dfe.example`).
 
 ## Reuse for Kaz (dfe-docker)
 
