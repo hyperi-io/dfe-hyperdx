@@ -81,23 +81,6 @@ overrides:
       exact 1.16.0 pin, dev only, moves with it.
     upstream: none
     added: 2026-10-21
-  - package: next
-    range: '^16.4.1'
-    advisory: GHSA-2464-fhr4-w9xw
-    severity: critical
-    vector: >-
-      The image runs Next's standalone server with the image optimiser on, since
-      images.unoptimized is set only in the static-export branch of
-      packages/app/next.config.mjs:180. GHSA-2464-fhr4-w9xw is librsvg under the
-      sharp the optimiser loads. The lockfile already resolves sharp 0.35.5, the
-      fix, and 16.4.1 raises next's own sharp floor to ^0.35.5 so the fix no
-      longer rests on a re-resolve. GHSA-673q-mjm6-r5xr needs an App Router `use
-      cache` function and GHSA-p3m5-59mp-jv5r an App Router Server Action, and
-      packages/app is Pages Router with neither. Pinned rather than re-resolved
-      because the sync merge driver takes upstream's lockfile, which is how the
-      2.40.0 sync took next 16.3.6 back to 16.3.4.
-    upstream: https://github.com/hyperdxio/hyperdx/pull/3460
-    added: 2026-10-24
   - package: body-parser
     range: '^1.20.9'
     advisory: GHSA-27r3-jxmh-p828
@@ -116,26 +99,6 @@ overrides:
       stay inflating.
     upstream: none
     added: 2026-10-28
-  - package: undici
-    range: '^7.30.1'
-    advisory: GHSA-qrxm-fqhp-jwvm
-    severity: high
-    vector: >-
-      No live vector. It is pinned because the vulnerable copy ships and the fix
-      is one generated line. packages/api/package.json declares ai,
-      @ai-sdk/anthropic and @ai-sdk/openai, whose @ai-sdk/provider-utils 5.0.49
-      resolves undici 7.30.0 into the production focus. provider-utils loads it
-      only in createSafeNodeFetch (src/safe-node-fetch.ts:146), the dispatcher
-      for untrusted URL downloads, and builds that Agent with connect.lookup
-      alone. The API's one model call (routers/api/ai.ts:104) passes a string
-      prompt, so nothing is downloaded, and provider requests go through Node's
-      own fetch. GHSA-qrxm-fqhp-jwvm needs a TLS 1.2 peer reached through that
-      dispatcher, GHSA-2m5v-pch6-74hx a function-valued tls option and
-      GHSA-4w7w-5xrc-9h26 the cache interceptor. The pin also takes node-gyp's
-      8.11.2, a macOS-only fsevents build dependency, to 7.30.1, which has every
-      export node-gyp 13 uses (lib/download.js:2).
-    upstream: https://github.com/hyperdxio/hyperdx/pull/3462
-    added: 2026-10-29
 # Example of the shape (keep commented - an empty register is the goal state):
 #
 #   - package: some-parser
