@@ -28,6 +28,7 @@ import {
 } from '@/dfe/controllers/org-connection';
 import Connection from '@/models/connection';
 import clickhouseProxyRouter from '@/routers/api/clickhouseProxy';
+import { captureProxyBody } from '@/utils/proxyBody';
 
 const ORG = 'dfe_org_acme';
 
@@ -87,7 +88,8 @@ describe('a team connection ClickHouse refuses, through the real proxy', () => {
   // The identity middleware's two calls, for a signed-in member of `teamId`.
   const appFor = (teamId: string) => {
     const app = express();
-    app.use(express.text());
+    // The proxy forwards the bytes the parser captured, as api-app.ts wires it.
+    app.use(express.text({ verify: captureProxyBody }));
     app.use(async (req, res, next) => {
       await ensureOrgConnection('tok', teamId, ORG);
       recheckOnAuthFailure(res, teamId);
