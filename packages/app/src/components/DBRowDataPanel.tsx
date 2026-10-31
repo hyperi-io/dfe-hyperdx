@@ -265,7 +265,7 @@ export function useRowData({
   const isLoading =
     queryResult.isLoading || (isBoundedEmpty && queryResult.isPending);
 
-  // Normalize resource and event attributes to always use flat keys for both JSON and Map columns
+  // Normalize resource, event and span-event exception attributes to always use flat keys for both JSON and Map columns
   const normalizedData = useMemo(() => {
     if (!queryResult.data?.data?.[0]) {
       return queryResult.data;
@@ -283,6 +283,12 @@ export function useRowData({
     if (row[ROW_DATA_ALIASES.EVENT_ATTRIBUTES]) {
       normalizedRow[ROW_DATA_ALIASES.EVENT_ATTRIBUTES] = flatten(
         row[ROW_DATA_ALIASES.EVENT_ATTRIBUTES],
+      );
+    }
+
+    if (row[ROW_DATA_ALIASES.EVENTS_EXCEPTION_ATTRIBUTES]) {
+      normalizedRow[ROW_DATA_ALIASES.EVENTS_EXCEPTION_ATTRIBUTES] = flatten(
+        row[ROW_DATA_ALIASES.EVENTS_EXCEPTION_ATTRIBUTES],
       );
     }
 

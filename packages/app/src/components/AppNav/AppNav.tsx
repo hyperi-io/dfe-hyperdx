@@ -3,12 +3,12 @@ import Link from 'next/link';
 import Router, { useRouter } from 'next/router';
 import Script from 'next/script';
 import cx from 'classnames';
+import { Badge } from '@clickhouse/click-ui';
 import HyperDX from '@hyperdx/browser';
 import { SavedSearchListApiResponse } from '@hyperdx/common-utils/dist/types';
 import {
   ActionIcon,
   Anchor,
-  Badge,
   Collapse,
   Flex,
   Group,
@@ -31,6 +31,7 @@ import {
 import api from '@/api';
 import { AlertStatusIcon } from '@/components/AlertStatusIcon';
 import { InstanceLabel } from '@/components/AppNav/InstanceLabel';
+import { useCompactViewport } from '@/components/CompactViewport/useCompactViewport';
 import { APP_VERSION, IS_LOCAL_MODE } from '@/config';
 import { Dashboard, useDashboards } from '@/dashboard';
 import { isEmbedFeatureEnabled } from '@/dfe/embedFeatures';
@@ -40,9 +41,9 @@ import InstallInstructionModal from '@/InstallInstructionsModal';
 import OnboardingChecklist from '@/OnboardingChecklist';
 import { useSavedSearches } from '@/savedSearch';
 import { useLogomark, useWordmark } from '@/theme/ThemeProvider';
+import { getTimeZoneShortName } from '@/timeZone';
+import { useDisplayTimeZone } from '@/useDisplayTimeZone';
 import { UserPreferencesModal } from '@/UserPreferencesModal';
-import { useUserPreferences } from '@/useUserPreferences';
-import { useWindowSize } from '@/utils';
 
 import {
   AppNavCloudBanner,
@@ -83,7 +84,7 @@ type NavLinkConfig = {
 const NAV_LINKS: NavLinkConfig[] = [
   {
     id: 'chart',
-    label: 'Chart Explorer',
+    label: 'Chart explorer',
     href: '/chart',
     icon: <IconChartDots size={16} />,
   },
@@ -96,13 +97,13 @@ const NAV_LINKS: NavLinkConfig[] = [
   },
   {
     id: 'sessions',
-    label: 'Client Sessions',
+    label: 'Client sessions',
     href: '/sessions',
     icon: <IconDeviceLaptop size={16} />,
   },
   {
     id: 'service-map',
-    label: 'Service Map',
+    label: 'Service map',
     href: '/service-map',
     icon: <IconSitemap size={16} />,
     isBeta: true,
@@ -186,15 +187,12 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
 
   const { data: meData } = api.useMe();
 
-  const { width } = useWindowSize();
-
   const [isPreferCollapsed, setIsPreferCollapsed] = useLocalStorage<boolean>({
     key: 'isNavCollapsed',
     defaultValue: false,
   });
 
-  const isSmallScreen = (width ?? 1000) < 900;
-  const isCollapsed = isSmallScreen || isPreferCollapsed;
+  const isCollapsed = useCompactViewport() || isPreferCollapsed;
 
   const navWidth = isCollapsed ? 50 : 250;
 
@@ -280,9 +278,8 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
     { close: closeUserPreferences, open: openUserPreferences },
   ] = useDisclosure(false);
 
-  const {
-    userPreferences: { isUTC },
-  } = useUserPreferences();
+  const timeZone = useDisplayTimeZone();
+  const timeZoneShortName = timeZone && getTimeZoneShortName(timeZone);
 
   const [
     showInstallInstructions,
@@ -377,16 +374,13 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
                       would be redundant and crowd this already-tight row. */}
                   <InstanceLabel
                     fallback={
-                      isUTC && (
+                      timeZoneShortName && (
                         <Badge
-                          size="xs"
-                          color="gray"
-                          variant="light"
-                          fw="normal"
-                          title="Showing time in UTC"
-                        >
-                          UTC
-                        </Badge>
+                          size="sm"
+                          text={timeZoneShortName}
+                          state="neutral"
+                          title={`Showing time in ${timeZoneShortName}`}
+                        />
                       )
                     }
                   />
@@ -399,7 +393,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
               className={cx(styles.collapseButton, {
                 [styles.collapseButtonCollapsed]: isCollapsed,
               })}
-              title="Collapse/Expand Navigation"
+              title="Collapse/expand navigation"
               onClick={() => setIsPreferCollapsed((v: boolean) => !v)}
             >
               <IconArrowBarToLeft size={16} />
@@ -424,7 +418,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
 
             {/* Saved Searches */}
             <AppNavLink
-              label="Saved Searches"
+              label="Saved searches"
               href="/search/list"
               icon={<IconDeviceFloppy size={16} />}
               isActive={isSavedSearchActive}
@@ -441,7 +435,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
                     <Text size="xs" c="dimmed" pl="lg" pr="xs" py={4} lh={1.4}>
                       No favorites. Star on{' '}
                       <Anchor component={Link} href="/search/list" size="xs">
-                        Saved Searches
+                        Saved searches
                       </Anchor>
                       .
                     </Text>
@@ -509,7 +503,7 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
             {isEmbedFeatureEnabled('feedback') && <AppNavFeedback />}
             {!IS_LOCAL_MODE && isEmbedFeatureEnabled('team') && (
               <AppNavLink
-                label="Team Settings"
+                label="Team settings"
                 href="/team"
                 icon={<IconSettings size={16} />}
               />

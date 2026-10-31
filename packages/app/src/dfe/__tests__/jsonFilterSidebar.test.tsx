@@ -52,6 +52,7 @@ jest.mock('@/hooks/useMetadata', () => ({
   useMapColumns: jest.fn(),
   useAllFields: jest.fn(),
   useGetKeyValues: jest.fn(),
+  useFilterKeysFetchLimit: jest.fn(),
 }));
 
 const useMe = jest.mocked(api.useMe);
@@ -66,6 +67,9 @@ const useJsonColumns = jest.mocked(useMetadataModule.useJsonColumns);
 const useMapColumns = jest.mocked(useMetadataModule.useMapColumns);
 const useAllFields = jest.mocked(useMetadataModule.useAllFields);
 const useGetKeyValues = jest.mocked(useMetadataModule.useGetKeyValues);
+const useFilterKeysFetchLimit = jest.mocked(
+  useMetadataModule.useFilterKeysFetchLimit,
+);
 
 const DATE_RANGE: [Date, Date] = [
   new Date('2026-08-24T16:00:00Z'),
@@ -175,6 +179,7 @@ function setup({ jsonColumns }: { jsonColumns: string[] }) {
     data: { team: { filterKeysFetchLimit: 100 } },
     isFetched: true,
   });
+  stub(useFilterKeysFetchLimit, 100);
   stub(useSource, {
     data: {
       id: 'source1',

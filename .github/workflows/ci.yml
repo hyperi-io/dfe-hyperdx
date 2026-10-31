@@ -54,4 +54,6 @@ jobs:
       bump: ${{ inputs.bump || 'auto' }}
       # PRs run the release's container build of the root Dockerfile (linux/amd64, no push), so a broken Dockerfile fails the PR instead of the release.
       branch-build: 'true'
+      # The test run with coverage peaks above the 8 GiB of the 4x8 default, which OOM-kills the runner container.
+      runner-test: arc-native-8x16
     secrets: inherit

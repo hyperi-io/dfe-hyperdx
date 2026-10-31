@@ -378,13 +378,13 @@ why it has to stay accurate.
 Sync cost over time is the evidence the [de-fork decision](leaving-upstream.md)
 should be taken against, so it gets recorded.
 
-|                        | 2026-07-23 (dry run) | 2026-08-04 (2.29.0 -> 2.33.0, full run) | 2026-09-21 (2.36.0 -> 2.39.1, aborted) | 2026-10-06 (2.36.0 -> 2.40.0, full run) |
-| ---------------------- | -------------------- | --------------------------------------- | -------------------------------------- | --------------------------------------- |
-| upstream commits ahead | 122                  | 164                                     | 116                                    | 164                                     |
-| conflicting files      | 11                   | 12                                      | 14                                     | 18                                      |
-| replayed by rerere     | n/a                  | n/a                                     | **0 of 9**                             | **0 of 13**                             |
-| `yarn.lock` conflicted | yes                  | **no**                                  | no                                     | no                                      |
-| delta gate             | 81 `src/dfe` tests   | 211 suites / 4795 tests                 | not reached                            | 427 suites / 9159 tests, 5 packages     |
+|                        | 2026-07-23 (dry run) | 2026-08-04 (2.29.0 -> 2.33.0, full run) | 2026-09-21 (2.36.0 -> 2.39.1, aborted) | 2026-10-06 (2.36.0 -> 2.40.0, full run) | 2026-11-01 (2.41.0 -> 2.43.0, full run) |
+| ---------------------- | -------------------- | --------------------------------------- | -------------------------------------- | --------------------------------------- | --------------------------------------- |
+| upstream commits ahead | 122                  | 164                                     | 116                                    | 164                                     | 105                                     |
+| conflicting files      | 11                   | 12                                      | 14                                     | 18                                      | 9                                       |
+| replayed by rerere     | n/a                  | n/a                                     | **0 of 9**                             | **0 of 13**                             | **0 of 7**                              |
+| `yarn.lock` conflicted | yes                  | **no**                                  | no                                     | no                                      | no                                      |
+| delta gate             | 81 `src/dfe` tests   | 211 suites / 4795 tests                 | not reached                            | 427 suites / 9159 tests, 5 packages     | 529 suites / 10780 tests, 5 packages    |
 
 What changed between the two rows is the merge driver and the generated security
 layer. The lockfile stopped conflicting outright: the driver took upstream's
@@ -452,6 +452,22 @@ Three breakages got past a merge git called resolved:
 - **Upstream's new `DashboardsListPage.test.tsx`** mounts the page with no
   QueryClient, and both components we inject there query. All 21 of its tests
   failed until they went behind `dfe/QueryClientOnly.tsx`.
+
+### 2026-11-01 - two pins unwound, 120 packages put back
+
+2.43.0 conflicted on seven content files and the deleted `release.yml` and
+`vouch.yml`. `rr-cache` held 26 entries and replayed none. Upstream now ships
+next 16.4.2 and undici 7.30.1, so `--check` called both register entries
+redundant and they were removed.
+
+The lockfile regressed again, and wider: 120 packages main had moved with
+`yarn up -R` came back older, Storybook 10.6.2 to 10.1.4 and tar 7.5.22 to 6.2.1
+among them. osv-scanner read 10 unfiltered packages until `yarn up -R` on the
+whole list put them back.
+
+Upstream moved the filter-key limit read into `useFilterKeysFetchLimit`, which
+our `dfe/__tests__/jsonFilterSidebar.test.tsx` mocks partially, so its suite
+failed until the mock gained the new hook.
 
 ### Expect `Build All-in-One Image` to fail on a sync PR
 
