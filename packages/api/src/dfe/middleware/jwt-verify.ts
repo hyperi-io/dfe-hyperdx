@@ -77,7 +77,15 @@ export function extractToken(req: Request): string | undefined {
       const name = part.slice(0, eq).trim();
       if (name === 'dfe_token') {
         const value = part.slice(eq + 1).trim();
-        return value ? decodeURIComponent(value) : undefined;
+        if (!value) {
+          return undefined;
+        }
+        try {
+          return decodeURIComponent(value);
+        } catch {
+          // A malformed escape is no token. Throwing would leave the request unanswered.
+          return undefined;
+        }
       }
     }
   }
@@ -286,5 +294,7 @@ export async function dfeIdentityMiddleware(
   if (dfeConfig.DFE_AUTH_MODE === 'header-dev') {
     return oidcIdentityMiddleware(req, res, identified);
   }
+  // A user passport restored from an old session is not an engine identity.
+  req.user = undefined;
   return engineJwtMiddleware(req, res, identified);
 }

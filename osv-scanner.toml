@@ -170,6 +170,14 @@ id = "GHSA-px8p-9vwx-vf98"
 reason = "fflate: only the session recorder pulls it, inlined into @hyperdx/browser's prebuilt bundle, which compresses and never calls unzipSync."
 
 [[IgnoredVulns]]
+id = "GHSA-mrwp-f3q8-3g9p"
+reason = "follow-redirects 1.16.1: the image reaches it only through @slack/webhook 7.0.7, whose axios client sets maxRedirects: 0 and sends only a User-Agent, so no redirect is followed and no credential rides one; nx's copy is a root devDependency."
+
+[[IgnoredVulns]]
+id = "GHSA-3g3m-2fjr-6pw4"
+reason = "glob: moderate, and the bypass needs a caller relying on an AbortSignal to bound a walk of a tree an attacker chose; every caller here (jest, rollup, rimraf, sucrase, swagger-jsdoc, the CLI) walks our own source or build tree."
+
+[[IgnoredVulns]]
 id = "GHSA-2883-xcg3-v3hh"
 reason = "js-yaml: 4.1.1 ships only under swagger-jsdoc, which api-app.ts mounts outside NODE_ENV=production, and the image runs production; 3.15.0 is @changesets and jest tooling."
 
@@ -208,6 +216,10 @@ reason = "minimatch: 3.1.2 ships only under swagger-jsdoc's glob, mounted outsid
 [[IgnoredVulns]]
 id = "GHSA-7r86-cg39-jmmj"
 reason = "minimatch: 3.1.2 ships only under swagger-jsdoc's glob, mounted outside production, over our own patterns; 8.0.4 and 9.0.4 are build tooling."
+
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+reason = "minimatch: moderate, and the amplification needs an attacker-written pattern; every caller here (eslint, jest, nodemon, serve-handler, glob) is given patterns written in code or config, never request input."
 
 [[IgnoredVulns]]
 id = "GHSA-2v37-7h3g-55p8"

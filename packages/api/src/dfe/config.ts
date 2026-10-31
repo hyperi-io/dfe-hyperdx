@@ -16,13 +16,17 @@ const env = process.env;
 const DFE_AUTH_MODES = ['oidc-proxy', 'header-dev'] as const;
 export type DfeAuthMode = (typeof DFE_AUTH_MODES)[number];
 
-// Narrowed by CHECKING the value, not by asserting it. A cast told the compiler
-// this was one of the two modes without looking, so a typo (`oidc_proxy`) typed
-// as valid and then matched neither branch - disabling the PEP with no warning.
-// It still ends up disabled, but now that is a value we actually read as unset.
+// Narrowed by checking the value. A set value naming no mode throws below,
+// because read as unset it serves stock HyperDX auth.
 export const DFE_AUTH_MODE: DfeAuthMode | undefined = DFE_AUTH_MODES.find(
   mode => mode === env.DFE_AUTH_MODE,
 );
+
+if (env.DFE_AUTH_MODE && DFE_AUTH_MODE === undefined) {
+  throw new Error(
+    `DFE_AUTH_MODE=${JSON.stringify(env.DFE_AUTH_MODE)} is not one of ${DFE_AUTH_MODES.join(', ')}. Unset it for stock HyperDX.`,
+  );
+}
 
 export const DFE_AUTH_HEADER_EMAIL =
   env.DFE_AUTH_HEADER_EMAIL || 'x-forwarded-email';
@@ -45,3 +49,20 @@ export const DFE_ENGINE_ISSUER = env.DFE_ENGINE_ISSUER as string | undefined;
 
 export const isDfeEnabled =
   DFE_AUTH_MODE === 'oidc-proxy' || DFE_AUTH_MODE === 'header-dev';
+
+// Without a JWKS URL every engine token fails verification, so the API would
+// start and answer 401 to everyone. header-dev trusts an unverified header.
+if (
+  DFE_AUTH_MODE === 'oidc-proxy' &&
+  !(DFE_ENGINE_JWKS_URL && URL.canParse(DFE_ENGINE_JWKS_URL))
+) {
+  throw new Error(
+    'DFE_AUTH_MODE=oidc-proxy needs DFE_ENGINE_JWKS_URL set to the engine JWKS URL.',
+  );
+}
+
+if (DFE_AUTH_MODE === 'header-dev' && env.NODE_ENV === 'production') {
+  throw new Error(
+    'DFE_AUTH_MODE=header-dev trusts unverified identity headers and cannot run with NODE_ENV=production.',
+  );
+}

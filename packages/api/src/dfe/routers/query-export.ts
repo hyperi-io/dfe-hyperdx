@@ -20,6 +20,7 @@ import { validateRequest } from 'zod-express-middleware';
 import { getConnectionById } from '@/controllers/connection';
 import { getSource } from '@/controllers/sources';
 import { engineOrigin } from '@/dfe/controllers/org-connection';
+import { requireNonSimpleRequest } from '@/dfe/middleware/cross-site';
 import { extractToken } from '@/dfe/middleware/jwt-verify';
 import { getNonNullUserWithTeam } from '@/middleware/auth';
 import { Api500Error } from '@/utils/errors';
@@ -196,6 +197,7 @@ router.post(
  */
 router.post(
   '/create-rule',
+  requireNonSimpleRequest,
   validateRequest({ body: createRuleBodySchema }),
   async (req, res, next) => {
     try {
