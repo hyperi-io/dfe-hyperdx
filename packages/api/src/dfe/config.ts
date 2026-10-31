@@ -16,13 +16,17 @@ const env = process.env;
 const DFE_AUTH_MODES = ['oidc-proxy', 'header-dev'] as const;
 export type DfeAuthMode = (typeof DFE_AUTH_MODES)[number];
 
-// Narrowed by CHECKING the value, not by asserting it. A cast told the compiler
-// this was one of the two modes without looking, so a typo (`oidc_proxy`) typed
-// as valid and then matched neither branch - disabling the PEP with no warning.
-// It still ends up disabled, but now that is a value we actually read as unset.
+// Narrowed by checking the value. A set value naming no mode throws below,
+// because read as unset it serves stock HyperDX auth.
 export const DFE_AUTH_MODE: DfeAuthMode | undefined = DFE_AUTH_MODES.find(
   mode => mode === env.DFE_AUTH_MODE,
 );
+
+if (env.DFE_AUTH_MODE && DFE_AUTH_MODE === undefined) {
+  throw new Error(
+    `DFE_AUTH_MODE=${JSON.stringify(env.DFE_AUTH_MODE)} is not one of ${DFE_AUTH_MODES.join(', ')}. Unset it for stock HyperDX.`,
+  );
+}
 
 export const DFE_AUTH_HEADER_EMAIL =
   env.DFE_AUTH_HEADER_EMAIL || 'x-forwarded-email';

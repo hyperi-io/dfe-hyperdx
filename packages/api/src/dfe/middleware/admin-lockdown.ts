@@ -174,8 +174,9 @@ export function blockClickhouseProxyTest(
   if (!isDfeEnabled) {
     return next();
   }
-  // req.path is relative to the /clickhouse-proxy mount.
-  if (req.path === '/test' && !req.dfeIsServicePrincipal) {
+  // req.path is relative to the /clickhouse-proxy mount. The router matches
+  // /test case-insensitively and with one trailing slash, so this does too.
+  if (/^\/test\/?$/i.test(req.path) && !req.dfeIsServicePrincipal) {
     return res.status(403).json(FORBIDDEN);
   }
   return next();

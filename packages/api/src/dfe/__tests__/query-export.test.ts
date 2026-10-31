@@ -69,6 +69,13 @@ app.use('/dfe', router);
 
 const RULE_BODY = { rawSql: 'SELECT 1', savedSearchName: 'noisy logins' };
 
+/** A create-rule POST shaped the way the console sends it. */
+function createRule() {
+  return request(app)
+    .post('/dfe/create-rule')
+    .set('X-Requested-With', 'dfe-console');
+}
+
 /** An engine reply with the given status and a JSON body. */
 function engineReplies(status: number, body: unknown) {
   global.fetch = jest.fn().mockResolvedValue({
@@ -84,10 +91,25 @@ beforeEach(() => {
 });
 
 describe('POST /dfe/create-rule status mapping', () => {
+  it.each([
+    ['a JSON post', (r: request.Test) => r.send(RULE_BODY)],
+    ['a form post', (r: request.Test) => r.type('form').send(RULE_BODY)],
+  ])(
+    'refuses %s a cross-site page could have produced, before the engine is asked',
+    async (_name, shape) => {
+      engineReplies(200, { id: 'rule-1' });
+
+      const res = await shape(request(app).post('/dfe/create-rule'));
+
+      expect(res.status).toBe(403);
+      expect(global.fetch).not.toHaveBeenCalled();
+    },
+  );
+
   it('answers 502, not 401, when the session carries no engine token', async () => {
     mockExtractToken.mockReturnValue(undefined);
 
-    const res = await request(app).post('/dfe/create-rule').send(RULE_BODY);
+    const res = await createRule().send(RULE_BODY);
 
     expect(res.status).toBe(502);
     expect(res.body.error).toMatch(/engine credential/i);
@@ -97,7 +119,7 @@ describe('POST /dfe/create-rule status mapping', () => {
   it('turns an engine 401 into a 502 that keeps the engine status', async () => {
     engineReplies(401, { detail: 'token expired' });
 
-    const res = await request(app).post('/dfe/create-rule').send(RULE_BODY);
+    const res = await createRule().send(RULE_BODY);
 
     expect(res.status).toBe(502);
     expect(res.body.engineStatus).toBe(401);
@@ -106,7 +128,7 @@ describe('POST /dfe/create-rule status mapping', () => {
   it('forwards a 403 verbatim so the permission message still fires', async () => {
     engineReplies(403, { detail: 'rule:write required' });
 
-    const res = await request(app).post('/dfe/create-rule').send(RULE_BODY);
+    const res = await createRule().send(RULE_BODY);
 
     expect(res.status).toBe(403);
     expect(res.body.detail).toBe('rule:write required');
@@ -115,7 +137,7 @@ describe('POST /dfe/create-rule status mapping', () => {
   it('forwards the created rule on success', async () => {
     engineReplies(200, { id: 'rule-1', display_name: 'noisy logins' });
 
-    const res = await request(app).post('/dfe/create-rule').send(RULE_BODY);
+    const res = await createRule().send(RULE_BODY);
 
     expect(res.status).toBe(200);
     expect(res.body.id).toBe('rule-1');
@@ -124,7 +146,7 @@ describe('POST /dfe/create-rule status mapping', () => {
   it('sends the expanded SQL to the engine as raw_sql', async () => {
     engineReplies(200, { id: 'rule-1', display_name: 'noisy logins' });
 
-    await request(app).post('/dfe/create-rule').send(RULE_BODY);
+    await createRule().send(RULE_BODY);
 
     const [, init] = jest.mocked(global.fetch).mock.calls[0];
     expect(JSON.parse(String(init?.body))).toMatchObject({

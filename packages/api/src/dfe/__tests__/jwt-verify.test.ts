@@ -533,6 +533,13 @@ describe('engineJwtMiddleware', () => {
       expectFellThrough(req, next);
     });
 
+    it('with a malformed percent-encoding in the dfe_token cookie', async () => {
+      const req = makeReq({ cookie: 'dfe_token=%E0%A4%A' });
+      const next = jest.fn();
+      await engineJwtMiddleware(req, res, next as NextFunction);
+      expectFellThrough(req, next);
+    });
+
     it('with a garbage token', async () => {
       const req = makeReq({ authorization: 'Bearer not-a-jwt' });
       const next = jest.fn();

@@ -77,7 +77,15 @@ export function extractToken(req: Request): string | undefined {
       const name = part.slice(0, eq).trim();
       if (name === 'dfe_token') {
         const value = part.slice(eq + 1).trim();
-        return value ? decodeURIComponent(value) : undefined;
+        if (!value) {
+          return undefined;
+        }
+        try {
+          return decodeURIComponent(value);
+        } catch {
+          // A malformed escape is no token. Throwing would leave the request unanswered.
+          return undefined;
+        }
       }
     }
   }

@@ -122,7 +122,7 @@ invite step in DFE mode.
 
 | Variable                 | Default              | Purpose                                                                                       |
 | ------------------------ | -------------------- | --------------------------------------------------------------------------------------------- |
-| `DFE_AUTH_MODE`          | unset                | `oidc-proxy`, `header-dev`, or unset for stock upstream                                       |
+| `DFE_AUTH_MODE`          | unset                | `oidc-proxy`, `header-dev`, or unset for stock upstream. Any other value stops the API        |
 | `DFE_ENGINE_JWKS_URL`    | -                    | engine JWKS; required in `oidc-proxy` mode                                                    |
 | `DFE_ENGINE_ISSUER`      | unset                | enforced as the `iss` claim when set                                                          |
 | `DFE_AUTH_HEADER_EMAIL`  | `x-forwarded-email`  | `header-dev` only                                                                             |
