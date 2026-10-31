@@ -144,6 +144,36 @@ describe('blockProvisionedWrites', () => {
     expect(next).toHaveBeenCalled();
   });
 
+  test.each(['PATCH', 'DELETE'])(
+    '%s on a percent-encoded id is looked up as the id the router will use',
+    async method => {
+      // Express decodes :id before the route runs, so '%31' reaches the
+      // handler as '1'. Looking up the raw segment casts to nothing and the
+      // lock never applies.
+      findsProvisioned(SHIPPED);
+      const { req, res, next } = call(method, '/507f1f77bcf86cd79943901%31');
+
+      await blockProvisionedWrites(req, res, next);
+
+      expect(mockFindOne).toHaveBeenCalledWith(
+        expect.objectContaining({ _id: '507f1f77bcf86cd799439011' }),
+        'name team',
+      );
+      if (method === 'PATCH') {
+        expect(res.status).toHaveBeenCalledWith(403);
+      }
+    },
+  );
+
+  test('a malformed percent-encoding is left to the route to refuse', async () => {
+    const { req, res, next } = call('PATCH', '/%E0%A4%A');
+
+    await blockProvisionedWrites(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(mockFindOne).not.toHaveBeenCalled();
+  });
+
   test('a user-owned dashboard is passed through', async () => {
     findsProvisioned(null);
     const { req, res, next } = call('PATCH', PROVISIONED);

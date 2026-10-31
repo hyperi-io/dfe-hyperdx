@@ -56,17 +56,22 @@ describe('requireServicePrincipal (DFE mode on)', () => {
 });
 
 describe('blockClickhouseProxyTest (DFE mode on)', () => {
-  test('403s POST /test for a non-service principal', () => {
-    const r = res();
-    const next = jest.fn();
-    blockClickhouseProxyTest(
-      makeRequest({ path: '/test', dfeIsServicePrincipal: false }),
-      r,
-      next,
-    );
-    expect(r.status).toHaveBeenCalledWith(403);
-    expect(next).not.toHaveBeenCalled();
-  });
+  // The proxy router matches /test case-insensitively and with one trailing
+  // slash, so a gate on the exact string is a bypass.
+  test.each(['/test', '/TEST', '/Test', '/test/'])(
+    '403s POST %s for a non-service principal',
+    path => {
+      const r = res();
+      const next = jest.fn();
+      blockClickhouseProxyTest(
+        makeRequest({ path, dfeIsServicePrincipal: false }),
+        r,
+        next,
+      );
+      expect(r.status).toHaveBeenCalledWith(403);
+      expect(next).not.toHaveBeenCalled();
+    },
+  );
 
   test('lets a normal query path through', () => {
     const r = res();

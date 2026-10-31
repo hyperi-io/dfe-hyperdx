@@ -45,8 +45,15 @@ export async function blockProvisionedWrites(
     return next();
   }
 
-  // The router mounts these as `/:id`, so the id is the first path segment.
-  const id = req.path.split('/').filter(Boolean)[0];
+  // The router mounts these as `/:id` and express decodes the param, so the id
+  // is the first path segment decoded. The router refuses a malformed escape itself.
+  const segment = req.path.split('/').filter(Boolean)[0];
+  let id: string | undefined;
+  try {
+    id = segment === undefined ? undefined : decodeURIComponent(segment);
+  } catch {
+    return next();
+  }
   // BSON drops an undefined team from the filter, which would then match every
   // team's dashboard.
   const callerTeam = req.user?.team;

@@ -77,6 +77,7 @@ export function CreateRuleFromSearch({
       // route forwards a 403 for org_viewer / missing permission.
       const rule = await hdxServer(`dfe/create-rule`, {
         method: 'POST',
+        headers: { 'X-Requested-With': 'dfe-console' },
         json: {
           rawSql,
           savedSearchName: savedSearchName ?? undefined,
