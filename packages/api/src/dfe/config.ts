@@ -49,3 +49,20 @@ export const DFE_ENGINE_ISSUER = env.DFE_ENGINE_ISSUER as string | undefined;
 
 export const isDfeEnabled =
   DFE_AUTH_MODE === 'oidc-proxy' || DFE_AUTH_MODE === 'header-dev';
+
+// Without a JWKS URL every engine token fails verification, so the API would
+// start and answer 401 to everyone. header-dev trusts an unverified header.
+if (
+  DFE_AUTH_MODE === 'oidc-proxy' &&
+  !(DFE_ENGINE_JWKS_URL && URL.canParse(DFE_ENGINE_JWKS_URL))
+) {
+  throw new Error(
+    'DFE_AUTH_MODE=oidc-proxy needs DFE_ENGINE_JWKS_URL set to the engine JWKS URL.',
+  );
+}
+
+if (DFE_AUTH_MODE === 'header-dev' && env.NODE_ENV === 'production') {
+  throw new Error(
+    'DFE_AUTH_MODE=header-dev trusts unverified identity headers and cannot run with NODE_ENV=production.',
+  );
+}

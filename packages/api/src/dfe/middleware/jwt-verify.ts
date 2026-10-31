@@ -294,5 +294,7 @@ export async function dfeIdentityMiddleware(
   if (dfeConfig.DFE_AUTH_MODE === 'header-dev') {
     return oidcIdentityMiddleware(req, res, identified);
   }
+  // A user passport restored from an old session is not an engine identity.
+  req.user = undefined;
   return engineJwtMiddleware(req, res, identified);
 }

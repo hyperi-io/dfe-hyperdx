@@ -19,7 +19,10 @@
  * packages/api/eslint.config.mjs, which is upstream's and stays untouched.
  */
 import type { NextFunction, Request, Response } from 'express';
+import express from 'express';
 import { importJWK, SignJWT } from 'jose';
+import passport from 'passport';
+import request from 'supertest';
 
 jest.mock('@/utils/logger', () => ({
   __esModule: true,
@@ -46,6 +49,11 @@ jest.mock('@/dfe/controllers/org-connection', () => ({
   engineOrigin: () => 'https://engine.example.test',
 }));
 
+jest.mock('@/controllers/user', () => ({
+  findUserByAccessKey: jest.fn(),
+  findUserById: jest.fn(),
+}));
+
 jest.mock('@/dfe/tasks/team-connection-repair', () => ({
   scheduleTeamConnectionRepair: jest.fn(),
 }));
@@ -65,14 +73,17 @@ jest.mock('jose', () => ({
   jwtVerify: (...args: unknown[]) => jwtVerifySpy(...args),
 }));
 
+import { findUserByAccessKey } from '@/controllers/user';
 import * as dfeConfig from '@/dfe/config';
 import { findOrCreateTeamByName } from '@/dfe/controllers/team-provisioning';
 import { findOrCreateUserFromOIDC } from '@/dfe/controllers/user-provisioning';
+import { requireServicePrincipal } from '@/dfe/middleware/admin-lockdown';
 import {
   dfeIdentityMiddleware,
   engineJwtMiddleware,
 } from '@/dfe/middleware/jwt-verify';
 import { oidcIdentityMiddleware } from '@/dfe/middleware/oidc-identity';
+import { isUserAuthenticated, validateUserAccessKey } from '@/middleware/auth';
 
 jest.mock('@/dfe/middleware/oidc-identity', () => ({
   oidcIdentityMiddleware: jest.fn((_req, _res, next) => next()),
@@ -827,5 +838,196 @@ describe('dfeIdentityMiddleware dispatch', () => {
     );
 
     expect(oidcIdentityMiddleware).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Every way a request is identified in oidc-proxy mode, through the stack
+ * api-app.ts builds: passport, then the identity middleware, then the route's own
+ * guard. `x-legacy-session` stands in for passport.session() restoring a user from
+ * a session written before DFE was enabled.
+ */
+describe('non-engine authentication in oidc-proxy mode', () => {
+  const LEGACY = { _id: 'legacy-oid', email: 'old@example.test', team: 't0' };
+  const KEY_USER = { _id: 'key-oid', email: 'key@example.test', team: 't1' };
+
+  const app = express();
+  app.use(passport.initialize());
+  app.use((req, _res, next) => {
+    if (req.headers['x-legacy-session']) {
+      req.user = LEGACY as unknown as Express.User;
+    }
+    next();
+  });
+  app.use(dfeIdentityMiddleware);
+  app.get('/health', (_req, res) => res.send('ok'));
+  app.get('/sources', isUserAuthenticated, (req, res) =>
+    res.json({ user: req.user?.email }),
+  );
+  app.get('/team', isUserAuthenticated, requireServicePrincipal, (req, res) =>
+    res.json({ user: req.user?.email }),
+  );
+  app.get('/api/v2', requireServicePrincipal, validateUserAccessKey, (_q, r) =>
+    r.send('ok'),
+  );
+  app.get('/key-only', validateUserAccessKey, (req, res) =>
+    res.json({ user: req.user?.email }),
+  );
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    config.DFE_AUTH_MODE = 'oidc-proxy';
+    config.isDfeEnabled = true;
+    config.DFE_ENGINE_JWKS_URL = `${ISSUER}/.well-known/jwks.json`;
+    config.DFE_ENGINE_ISSUER = ISSUER;
+    config.DFE_AUTH_DEFAULT_TEAM = 'dfe';
+    (findOrCreateTeamByName as jest.Mock).mockResolvedValue({ team: TEAM });
+    (findOrCreateUserFromOIDC as jest.Mock).mockResolvedValue({ user: USER });
+    ensureOrgConnection.mockResolvedValue('present');
+    (findUserByAccessKey as jest.Mock).mockResolvedValue(KEY_USER);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        user_id: USER.email,
+        groups: ['sre'],
+        hyperdx_identity: IDENTITY,
+      }),
+    });
+  });
+
+  const expired = () =>
+    new SignJWT({ sub: USER.email })
+      .setProtectedHeader({ alg: 'ES384' })
+      .setIssuer(ISSUER)
+      .setIssuedAt(Math.floor(Date.now() / 1000) - 7200)
+      .setExpirationTime(Math.floor(Date.now() / 1000) - 3600)
+      .sign(privateKey);
+
+  type Case = {
+    name: string;
+    path: string;
+    legacy: boolean;
+    auth?: () => Promise<{ bearer?: string; cookie?: string }>;
+    status: number;
+    user?: string;
+  };
+
+  const cases: Case[] = [
+    {
+      name: 'a persisted session alone is not an identity',
+      path: '/sources',
+      legacy: true,
+      status: 401,
+    },
+    {
+      name: 'a persisted session beside a malformed dfe_token cookie',
+      path: '/sources',
+      legacy: true,
+      auth: async () => ({ cookie: 'dfe_token=%E0%A4%A' }),
+      status: 401,
+    },
+    {
+      name: 'a persisted session beside an expired engine token',
+      path: '/sources',
+      legacy: true,
+      auth: async () => ({ bearer: await expired() }),
+      status: 401,
+    },
+    {
+      name: 'a persisted session beside a token signed by another key',
+      path: '/sources',
+      legacy: true,
+      auth: async () => {
+        const rogue = await actualJose.generateKeyPair('ES384');
+        return {
+          bearer: await sign({ sub: USER.email }, { key: rogue.privateKey }),
+        };
+      },
+      status: 401,
+    },
+    {
+      name: 'an engine user token wins over a persisted session',
+      path: '/sources',
+      legacy: true,
+      auth: async () => ({ bearer: await sign({ sub: USER.email }) }),
+      status: 200,
+      user: USER.email,
+    },
+    {
+      name: 'an engine user token in the dfe_token cookie',
+      path: '/sources',
+      legacy: false,
+      auth: async () => ({
+        cookie: `dfe_token=${await sign({ sub: USER.email })}`,
+      }),
+      status: 200,
+      user: USER.email,
+    },
+    {
+      name: 'the engine service token reaches the control surface',
+      path: '/team',
+      legacy: true,
+      auth: async () => ({
+        bearer: await sign({ sub: 'svc:dfe-engine', aud: 'dfe-hyperdx' }),
+      }),
+      status: 200,
+      user: USER.email,
+    },
+    {
+      name: 'a human engine token is refused the control surface',
+      path: '/team',
+      legacy: true,
+      auth: async () => ({ bearer: await sign({ sub: USER.email }) }),
+      status: 403,
+    },
+    {
+      name: 'an access key still authenticates on its own route',
+      path: '/key-only',
+      legacy: true,
+      auth: async () => ({ bearer: 'hdx-access-key' }),
+      status: 200,
+      user: KEY_USER.email,
+    },
+    {
+      name: 'an access key stays refused the engine-only /api/v2',
+      path: '/api/v2',
+      legacy: false,
+      auth: async () => ({ bearer: 'hdx-access-key' }),
+      status: 403,
+    },
+    {
+      name: 'a public route answers with a persisted session',
+      path: '/health',
+      legacy: true,
+      status: 200,
+    },
+    {
+      name: 'a public route answers with no credentials',
+      path: '/health',
+      legacy: false,
+      status: 200,
+    },
+  ];
+
+  it.each(cases)('$name', async ({ path, legacy, auth, status, user }) => {
+    const creds = auth ? await auth() : {};
+    let call = request(app).get(path);
+    if (legacy) {
+      call = call.set('x-legacy-session', '1');
+    }
+    if (creds.bearer) {
+      call = call.set('Authorization', `Bearer ${creds.bearer}`);
+    }
+    if (creds.cookie) {
+      call = call.set('Cookie', creds.cookie);
+    }
+
+    const reply = await call;
+
+    expect(reply.status).toBe(status);
+    if (user) {
+      expect(reply.body.user).toBe(user);
+    }
   });
 });
