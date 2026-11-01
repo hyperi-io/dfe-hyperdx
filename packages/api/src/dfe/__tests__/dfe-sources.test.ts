@@ -46,6 +46,7 @@ jest.mock('@/dfe/models/dfe-source', () => ({
   default: {
     find: jest.fn(),
     findOneAndUpdate: jest.fn(),
+    updateOne: jest.fn(),
     deleteOne: jest.fn(),
     exists: jest.fn(),
   },
@@ -66,6 +67,7 @@ import {
   listByTeam,
   removeEverywhere,
   seedDfeSources,
+  SEEDED_SOURCE_NAMES,
   upsertEverywhere,
 } from '@/dfe/controllers/dfe-sources';
 import DfeSource from '@/dfe/models/dfe-source';
@@ -76,6 +78,7 @@ const mockTeams = Team.find as unknown as jest.Mock;
 const mockManifest = DfeSource.find as unknown as jest.Mock;
 const mockManifestUpsert = DfeSource.findOneAndUpdate as unknown as jest.Mock;
 const mockManifestDelete = DfeSource.deleteOne as unknown as jest.Mock;
+const mockManifestMark = DfeSource.updateOne as unknown as jest.Mock;
 const mockManifestExists = DfeSource.exists as unknown as jest.Mock;
 const mockConns = getConnectionsByTeam as jest.Mock;
 const mockSources = getSources as jest.Mock;
@@ -120,8 +123,19 @@ beforeEach(() => {
   mockManifest.mockResolvedValue([]);
   mockManifestUpsert.mockResolvedValue({});
   mockManifestDelete.mockResolvedValue({});
+  mockManifestMark.mockResolvedValue({});
   mockManifestExists.mockResolvedValue(null);
 });
+
+// Every name ensureOrgConnection seeds, on every team or on the platform team.
+const SEEDED = [
+  'main',
+  'hunts',
+  'otel_logs',
+  'otel_traces',
+  'otel_metrics',
+  'clickhouse_system',
+];
 
 describe('upsertEverywhere', () => {
   test('writes the source to every team over that team own connection', async () => {
@@ -178,7 +192,7 @@ describe('upsertEverywhere', () => {
 
     expect(mockManifestUpsert).toHaveBeenCalledWith(
       { name: { $eq: 'filebeat' } },
-      { $set: { name: 'filebeat', spec: SPEC } },
+      { $set: { name: 'filebeat', spec: SPEC }, $unset: { deleting: '' } },
       expect.objectContaining({ upsert: true }),
     );
     expect(mockManifestUpsert.mock.invocationCallOrder[0]).toBeLessThan(
@@ -232,6 +246,53 @@ describe('removeEverywhere', () => {
     expect(result.removed).toEqual([]);
     expect(mockDeleteSource).not.toHaveBeenCalled();
   });
+
+  test('marks the registration deleting before it removes from any team', async () => {
+    mockSources.mockResolvedValue([{ _id: 'src-1', name: 'filebeat' }]);
+
+    await removeEverywhere('filebeat');
+
+    expect(mockManifestMark).toHaveBeenCalledWith(
+      { name: { $eq: 'filebeat' } },
+      { $set: { deleting: true } },
+    );
+    expect(mockManifestMark.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDeleteSource.mock.invocationCallOrder[0],
+    );
+  });
+
+  test('a team that fails is reported and the registration is kept for a retry', async () => {
+    mockSources.mockResolvedValue([{ _id: 'src-1', name: 'filebeat' }]);
+    mockDeleteSource.mockImplementation(async (team: string) => {
+      if (team === 'team-acme') {
+        throw new Error('mongo down');
+      }
+      return {};
+    });
+
+    const result = await removeEverywhere('filebeat');
+
+    expect(result).toEqual({
+      removed: ['dfe-admins', 'dfe'],
+      failed: ['customer-acme'],
+    });
+    expect(mockManifestDelete).not.toHaveBeenCalled();
+  });
+
+  test('a retry removes what is left and then drops the registration', async () => {
+    // The first attempt removed it from every team but acme.
+    mockSources.mockImplementation(async (team: string) =>
+      team === 'team-acme' ? [{ _id: 'src-2', name: 'filebeat' }] : [],
+    );
+
+    const result = await removeEverywhere('filebeat');
+
+    expect(result).toEqual({ removed: ['customer-acme'], failed: [] });
+    expect(mockDeleteSource).toHaveBeenCalledTimes(1);
+    expect(mockManifestDelete).toHaveBeenCalledWith({
+      name: { $eq: 'filebeat' },
+    });
+  });
 });
 
 describe('isOwnedName', () => {
@@ -252,6 +313,26 @@ describe('isOwnedName', () => {
 
   test('a name nothing holds yet is free', async () => {
     expect(await isOwnedName('filebeat')).toBe(true);
+  });
+
+  // Before the first human login no team holds a seeded source, and an engine
+  // PUT then must not claim the name the seed is about to create.
+  test.each(SEEDED)(
+    'the seeded name %s is refused before any team holds it',
+    async name => {
+      expect(await isOwnedName(name)).toBe(false);
+      expect(mockSources).not.toHaveBeenCalled();
+    },
+  );
+
+  test('a seeded name the manifest already claims is still refused', async () => {
+    mockManifestExists.mockResolvedValue({ _id: 'manifest-1' });
+
+    expect(await isOwnedName('main')).toBe(false);
+  });
+
+  test('the reserved set is exactly the seeded names', () => {
+    expect([...SEEDED_SOURCE_NAMES].sort()).toEqual([...SEEDED].sort());
   });
 });
 
@@ -283,9 +364,9 @@ describe('seedDfeSources', () => {
       { name: 'syslog', spec: SPEC },
     ]);
 
-    const seeded = await seedDfeSources('team-new', 'conn-new');
+    const result = await seedDfeSources('team-new', 'conn-new');
 
-    expect(seeded).toEqual(['filebeat', 'syslog']);
+    expect(result).toEqual({ seeded: ['filebeat', 'syslog'], failed: [] });
     expect(mockCreateSource).toHaveBeenCalledWith(
       'team-new',
       expect.objectContaining({ name: 'filebeat', connection: 'conn-new' }),
@@ -294,7 +375,7 @@ describe('seedDfeSources', () => {
     expect(mockConns).not.toHaveBeenCalledWith('team-new');
   });
 
-  test('one bad entry does not cost the team the rest', async () => {
+  test('one bad entry does not cost the team the rest, and is reported', async () => {
     mockManifest.mockResolvedValue([
       { name: 'filebeat', spec: SPEC },
       { name: 'syslog', spec: SPEC },
@@ -303,12 +384,46 @@ describe('seedDfeSources', () => {
       throw new Error('invalid source');
     });
 
-    expect(await seedDfeSources('team-new', 'conn-new')).toEqual(['syslog']);
+    expect(await seedDfeSources('team-new', 'conn-new')).toEqual({
+      seeded: ['syslog'],
+      failed: ['filebeat'],
+    });
   });
 
   test('an empty manifest seeds nothing', async () => {
-    expect(await seedDfeSources('team-new', 'conn-new')).toEqual([]);
+    expect(await seedDfeSources('team-new', 'conn-new')).toEqual({
+      seeded: [],
+      failed: [],
+    });
     expect(mockCreateSource).not.toHaveBeenCalled();
+  });
+
+  test('an entry under a seeded name never replaces the seeded source', async () => {
+    mockManifest.mockResolvedValue([
+      { name: 'main', spec: SPEC },
+      { name: 'filebeat', spec: SPEC },
+    ]);
+    mockSources.mockResolvedValue([{ _id: 'seeded-main', name: 'main' }]);
+
+    expect((await seedDfeSources('team-new', 'conn-new')).seeded).toEqual([
+      'filebeat',
+    ]);
+    expect(mockUpdateSource).not.toHaveBeenCalledWith(
+      'team-new',
+      'seeded-main',
+      expect.anything(),
+    );
+  });
+
+  test('an entry being deleted is not seeded onto a new team', async () => {
+    mockManifest.mockResolvedValue([
+      { name: 'filebeat', spec: SPEC, deleting: true },
+      { name: 'syslog', spec: SPEC },
+    ]);
+
+    expect((await seedDfeSources('team-new', 'conn-new')).seeded).toEqual([
+      'syslog',
+    ]);
   });
 
   test('a seed after the index was built at start does not build it again', async () => {
@@ -343,7 +458,7 @@ describe('seedDfeSources', () => {
     expect(createIndex).toHaveBeenCalledTimes(1);
 
     await expect(fresh.seedDfeSources('team-new', 'conn-new')).resolves.toEqual(
-      ['filebeat'],
+      { seeded: ['filebeat'], failed: [] },
     );
     expect(createIndex).toHaveBeenCalledTimes(1);
   });
@@ -373,6 +488,13 @@ describe('the /dfe/sources routes', () => {
     expect(res.status).toBe(409);
     expect(mockCreateSource).not.toHaveBeenCalled();
     expect(mockUpdateSource).not.toHaveBeenCalled();
+  });
+
+  test('PUT refuses a seeded name no team holds yet', async () => {
+    const res = await request(app).put('/dfe/sources/hunts').send(SPEC);
+
+    expect(res.status).toBe(409);
+    expect(mockManifestUpsert).not.toHaveBeenCalled();
   });
 
   test('PUT refuses a body with no table to read', async () => {
@@ -413,6 +535,26 @@ describe('the /dfe/sources routes', () => {
     expect(res.body.removed).toEqual(['dfe-admins', 'customer-acme', 'dfe']);
     expect(mockManifestDelete).toHaveBeenCalledWith({
       name: { $eq: 'filebeat' },
+    });
+  });
+
+  test('DELETE answers 503 with the teams it could not remove the source from', async () => {
+    mockManifestExists.mockResolvedValue({ _id: 'manifest-1' });
+    mockSources.mockResolvedValue([{ _id: 'src-1', name: 'filebeat' }]);
+    mockDeleteSource.mockImplementation(async (team: string) => {
+      if (team === 'team-acme') {
+        throw new Error('mongo down');
+      }
+      return {};
+    });
+
+    const res = await request(app).delete('/dfe/sources/filebeat');
+
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({
+      name: 'filebeat',
+      removed: ['dfe-admins', 'dfe'],
+      failed: ['customer-acme'],
     });
   });
 

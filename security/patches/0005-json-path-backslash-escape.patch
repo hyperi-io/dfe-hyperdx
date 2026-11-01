@@ -1,0 +1,27 @@
+# advisory: none - SQL injection through JSON key quoting, found in review
+# severity: high
+# vector:   a JSON key is telemetry, so whoever sends a log picks it, and every
+#           signed-in member renders keys they did not write. quoteJsonPathSegment
+#           doubled backticks but left backslashes, and ClickHouse reads `\` as
+#           an escape inside a backtick identifier. A key ending in `\`, or
+#           holding `\` then a backtick, closes the identifier early and the rest
+#           of the key becomes SQL in the facet and value queries
+#           (renderMetadataKeyExpression, getMapValues, which pass it as
+#           UNSAFE_RAW_SQL). `x\`) = '' OR 1=1 --` turned a predicate matching
+#           nothing into one matching every row against ClickHouse 26.8
+#           (dfe/__tests__/jsonPath.int.test.ts). The fix doubles the backslash
+#           before the backtick.
+# upstream: none - still present on hyperdxio/hyperdx main
+# added:    2026-11-02
+diff --git a/packages/common-utils/src/core/metadata.ts b/packages/common-utils/src/core/metadata.ts
+--- a/packages/common-utils/src/core/metadata.ts
++++ b/packages/common-utils/src/core/metadata.ts
+@@ -177,7 +177,7 @@ const partitionKeyCoversTimestamp = (
+ 
+ const quoteJsonPathSegment = (segment: string): string => {
+   const unquoted = unquoteIdentifier(segment);
+-  return `\`${unquoted.replace(/`/g, '``')}\``;
++  return `\`${unquoted.replace(/\\/g, '\\\\').replace(/`/g, '``')}\``;
+ };
+ 
+ /**

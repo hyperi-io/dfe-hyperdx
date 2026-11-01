@@ -26,6 +26,7 @@ import { findOrCreateTeamByName } from '@/dfe/controllers/team-provisioning';
 import DfeDashboardTombstone, {
   clearDashboardTombstones,
   recordDashboardTombstone,
+  removeDashboardTombstone,
   suppressedDashboardNames,
 } from '@/dfe/models/dashboard-tombstone';
 import DfeSource from '@/dfe/models/dfe-source';
@@ -109,6 +110,21 @@ describe('dfe store operations against a real store', () => {
     expect(await clearDashboardTombstones(teamA)).toBe(2);
     expect(await suppressedDashboardNames(teamA)).toEqual(new Set());
     expect(await suppressedDashboardNames(teamB)).toEqual(
+      new Set(['Overview']),
+    );
+  });
+
+  test('a tombstone says whether this call wrote it, and a remove takes back only its own', async () => {
+    const team = String(new mongoose.Types.ObjectId());
+    const other = String(new mongoose.Types.ObjectId());
+    await recordDashboardTombstone('Overview', other);
+
+    expect(await recordDashboardTombstone('Overview', team)).toBe(true);
+    expect(await recordDashboardTombstone('Overview', team)).toBe(false);
+
+    await removeDashboardTombstone('Overview', team);
+    expect(await suppressedDashboardNames(team)).toEqual(new Set());
+    expect(await suppressedDashboardNames(other)).toEqual(
       new Set(['Overview']),
     );
   });
@@ -222,7 +238,10 @@ describe('dfe store operations against a real store', () => {
       { team: String(team._id), teamName: 'acme', sources: [] },
     ]);
 
-    expect(await removeEverywhere('syslog')).toEqual({ removed: [] });
+    expect(await removeEverywhere('syslog')).toEqual({
+      removed: [],
+      failed: [],
+    });
     expect(await DfeSource.exists({ name: 'syslog' })).toBeNull();
   });
 });

@@ -16,6 +16,8 @@ export interface IDfeSource {
   name: string;
   // The fork SourceSchemaNoId body WITHOUT `connection`, which differs per team.
   spec: Record<string, unknown>;
+  // Set while a delete removes it from the teams, and kept until every team's copy is gone.
+  deleting?: boolean;
 }
 
 export type DfeSourceDocument = mongoose.HydratedDocument<IDfeSource>;
@@ -32,6 +34,9 @@ export default mongoose.model<IDfeSource>(
       spec: {
         type: Schema.Types.Mixed,
         required: true,
+      },
+      deleting: {
+        type: Boolean,
       },
     },
     { timestamps: true },

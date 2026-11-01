@@ -89,11 +89,12 @@ router.put(
 /**
  * DELETE /dfe/sources/:name
  *
- * Drop the source from the manifest and from every team holding it. A seeded
- * name the manifest never carried answers 409 and removes nothing, so a delete
- * can never take a seeded source with it.
+ * Drop the source from every team holding it, then from the manifest. A seeded
+ * name answers 409 and removes nothing, so a delete can never take a seeded
+ * source with it. A team that could not be reached answers 503 and keeps the
+ * manifest entry, so the same DELETE again removes the rest.
  *
- * Response: { name, removed: [team names] }
+ * Response: { name, removed: [team names], failed: [team names] }
  */
 router.delete(
   '/:name',
@@ -109,12 +110,19 @@ router.delete(
         });
       }
 
-      const { removed } = await removeEverywhere(name);
+      const { removed, failed } = await removeEverywhere(name);
+      if (failed.length > 0) {
+        logger.warn(
+          { source: name, removed: removed.length, failed },
+          'DFE: source not removed from every team',
+        );
+        return res.status(503).json({ name, removed, failed });
+      }
       logger.info(
         { source: name, removed: removed.length },
         'DFE: source removed from every team',
       );
-      return res.json({ name, removed });
+      return res.json({ name, removed, failed });
     } catch (err) {
       logger.error({ err }, 'DFE: source removal failed');
       next(err);

@@ -48,18 +48,32 @@ const DfeDashboardTombstone = mongoose.model<IDfeDashboardTombstone>(
 
 export default DfeDashboardTombstone;
 
-/** Remember that this team deleted the shipped dashboard called `name`. */
+/**
+ * Remember that this team deleted the shipped dashboard called `name`.
+ *
+ * @returns true when this call created the tombstone, false when one was
+ * already there.
+ */
 export async function recordDashboardTombstone(
   name: string,
   teamId: string,
-): Promise<void> {
-  await retryUpsertRace(async () =>
+): Promise<boolean> {
+  const before = await retryUpsertRace(async () =>
     DfeDashboardTombstone.findOneAndUpdate(
       { name, team: teamId },
       { $set: { deletedAt: new Date() } },
       { upsert: true },
     ),
   );
+  return before === null;
+}
+
+/** Forget one deletion, for a delete that did not go through. */
+export async function removeDashboardTombstone(
+  name: string,
+  teamId: string,
+): Promise<void> {
+  await DfeDashboardTombstone.deleteOne({ name, team: teamId });
 }
 
 /** The shipped dashboard names this team has deleted. */

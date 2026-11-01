@@ -29,7 +29,8 @@ jest.mock('@/models/dashboard', () => ({
 
 jest.mock('@/dfe/models/dashboard-tombstone', () => ({
   __esModule: true,
-  recordDashboardTombstone: jest.fn().mockResolvedValue(undefined),
+  recordDashboardTombstone: jest.fn().mockResolvedValue(true),
+  removeDashboardTombstone: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('@/dfe/config', () => ({
@@ -44,11 +45,15 @@ let mockDfeEnabled = true;
 import type { NextFunction, Request, Response } from 'express';
 
 import { blockProvisionedWrites } from '@/dfe/middleware/provisioned-lockdown';
-import { recordDashboardTombstone } from '@/dfe/models/dashboard-tombstone';
+import {
+  recordDashboardTombstone,
+  removeDashboardTombstone,
+} from '@/dfe/models/dashboard-tombstone';
 import Dashboard from '@/models/dashboard';
 
 const mockFindOne = Dashboard.findOne as unknown as jest.Mock;
 const mockRecordTombstone = recordDashboardTombstone as jest.Mock;
+const mockRemoveTombstone = removeDashboardTombstone as jest.Mock;
 
 /** What the middleware sees for a provisioned dashboard, or null for a user one. */
 function findsProvisioned(doc: { name: string; team: string } | null) {
@@ -105,7 +110,8 @@ const OTHER_TEAMS_SHIPPED = { name: 'DFE Overview', team: OTHER_TEAM };
 beforeEach(() => {
   jest.clearAllMocks();
   mockDfeEnabled = true;
-  mockRecordTombstone.mockResolvedValue(undefined);
+  mockRecordTombstone.mockResolvedValue(true);
+  mockRemoveTombstone.mockResolvedValue(undefined);
 });
 
 describe('blockProvisionedWrites', () => {
@@ -217,17 +223,36 @@ describe('blockProvisionedWrites', () => {
     expect(mockFindOne).not.toHaveBeenCalled();
   });
 
-  test('a lookup failure falls through rather than 500ing the request', async () => {
-    mockFindOne.mockReturnValue({
-      lean: jest.fn().mockRejectedValue(new Error('bad ObjectId')),
-    });
-    const { req, res, next } = call('PATCH', '/not-an-object-id');
+  test.each(['PATCH', 'DELETE'])(
+    '%s on an id that is no ObjectId is left to the route, which answers 400',
+    async method => {
+      const { req, res, next } = call(method, '/not-an-object-id');
 
-    await blockProvisionedWrites(req, res, next);
+      await blockProvisionedWrites(req, res, next);
 
-    expect(next).toHaveBeenCalled();
-    expect(res.status).not.toHaveBeenCalled();
-  });
+      expect(next).toHaveBeenCalled();
+      expect(mockFindOne).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each(['PATCH', 'PUT', 'DELETE'])(
+    '%s is refused when the store cannot say whether the dashboard is shipped',
+    async method => {
+      mockFindOne.mockReturnValue({
+        lean: jest.fn().mockRejectedValue(new Error('documentdb down')),
+      });
+      const { req, res, next, json } = call(method, PROVISIONED);
+
+      await blockProvisionedWrites(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(503);
+      expect(json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.any(String) }),
+      );
+      expect(next).not.toHaveBeenCalled();
+      expect(mockRecordTombstone).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('blockProvisionedWrites - delete and tombstone', () => {
@@ -241,29 +266,72 @@ describe('blockProvisionedWrites - delete and tombstone', () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
-  test('the tombstone is written once the delete has actually succeeded', async () => {
+  test('the tombstone is durable before the delete runs, so the answer never precedes it', async () => {
     findsProvisioned(SHIPPED);
-    const { req, res, next, finish } = call('DELETE', PROVISIONED);
+    let settle = (_created: boolean) => {};
+    mockRecordTombstone.mockReturnValue(
+      new Promise(resolve => {
+        settle = resolve;
+      }),
+    );
+    const { req, res, next } = call('DELETE', PROVISIONED);
 
-    await blockProvisionedWrites(req, res, next);
-    expect(mockRecordTombstone).not.toHaveBeenCalled();
-
-    finish(204);
-
+    const pending = blockProvisionedWrites(req, res, next);
+    await new Promise(resolve => setImmediate(resolve));
     expect(mockRecordTombstone).toHaveBeenCalledWith(
       'DFE Overview',
       '507f1f77bcf86cd799439099',
     );
+    expect(next).not.toHaveBeenCalled();
+
+    settle(true);
+    await pending;
+    expect(next).toHaveBeenCalled();
   });
 
-  test('a failed delete leaves no tombstone behind', async () => {
+  test('a tombstone that cannot be written refuses the delete', async () => {
+    findsProvisioned(SHIPPED);
+    mockRecordTombstone.mockRejectedValue(new Error('documentdb down'));
+    const { req, res, next } = call('DELETE', PROVISIONED);
+
+    await blockProvisionedWrites(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('a failed delete removes the tombstone it wrote', async () => {
     findsProvisioned(SHIPPED);
     const { req, res, next, finish } = call('DELETE', PROVISIONED);
 
     await blockProvisionedWrites(req, res, next);
     finish(500);
 
-    expect(mockRecordTombstone).not.toHaveBeenCalled();
+    expect(mockRemoveTombstone).toHaveBeenCalledWith(
+      'DFE Overview',
+      '507f1f77bcf86cd799439099',
+    );
+  });
+
+  test('a failed delete keeps a tombstone that was there before it', async () => {
+    findsProvisioned(SHIPPED);
+    mockRecordTombstone.mockResolvedValue(false);
+    const { req, res, next, finish } = call('DELETE', PROVISIONED);
+
+    await blockProvisionedWrites(req, res, next);
+    finish(500);
+
+    expect(mockRemoveTombstone).not.toHaveBeenCalled();
+  });
+
+  test('a delete that succeeds keeps its tombstone', async () => {
+    findsProvisioned(SHIPPED);
+    const { req, res, next, finish } = call('DELETE', PROVISIONED);
+
+    await blockProvisionedWrites(req, res, next);
+    finish(204);
+
+    expect(mockRemoveTombstone).not.toHaveBeenCalled();
   });
 
   test.each(['PATCH', 'PUT'])(

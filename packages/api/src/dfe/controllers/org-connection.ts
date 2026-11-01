@@ -23,7 +23,7 @@ import {
   getConnectionsByTeam,
   updateConnection,
 } from '@/controllers/connection';
-import { createSource, getSources } from '@/controllers/sources';
+import { createSource, getSources, updateSource } from '@/controllers/sources';
 import * as dfeConfig from '@/dfe/config';
 import { seedDfeSources } from '@/dfe/controllers/dfe-sources';
 import { isDuplicateKey } from '@/dfe/models/duplicate-key';
@@ -315,6 +315,88 @@ function clickhouseSystemSource(connectionId: string) {
 }
 
 /**
+ * The seed sources for a team holding `connectionId` as `username`.
+ *
+ * EVERY team gets `main` and `hunts` (both org-fenced by their tenant row
+ * policies). The platform/admin team ALSO gets the otel sources and ClickHouse's
+ * own system database. Tenant teams never do.
+ *
+ * This set is the deployment's fixed floor - the tables the engine bootstraps
+ * whether or not an operator ever defines a source. Everything an operator DOES
+ * define arrives through PUT /dfe/sources/:name and is seeded from the manifest,
+ * so it is not added here. Its names are dfe-sources' SEEDED_SOURCE_NAMES.
+ */
+function seedSourceSpecs(
+  connectionId: string,
+  username: string,
+): Record<string, unknown>[] {
+  const specs: Record<string, unknown>[] = [
+    defaultSource(connectionId),
+    huntsSource(connectionId),
+  ];
+  if (isPlatformReader(username)) {
+    specs.push(
+      otelLogsSource(connectionId),
+      otelTracesSource(connectionId),
+      otelMetricsSource(connectionId),
+      clickhouseSystemSource(connectionId),
+    );
+  }
+  return specs;
+}
+
+/**
+ * Put every seed source and every registered DFE source on the team, over
+ * `connectionId`. A seed source the team is missing is created, and one left on
+ * another connection - a connection deleted and seeded again - is repointed.
+ * Throws when any write fails, so the caller does not record the team as done.
+ *
+ * @returns whether a seed source was written.
+ */
+async function reconcileTeamSources(
+  teamId: string,
+  connectionId: string,
+  username: string,
+): Promise<boolean> {
+  const held = new Map(
+    (await getSources(teamId)).map(source => [source.name, source]),
+  );
+  let wrote = false;
+  for (const spec of seedSourceSpecs(connectionId, username)) {
+    const existing = held.get(spec.name as string);
+    if (existing && String(existing.connection) === connectionId) {
+      continue;
+    }
+    if (existing) {
+      await updateSource(
+        teamId,
+        String(existing._id),
+        spec as Parameters<typeof updateSource>[2],
+      );
+    } else {
+      try {
+        await createSource(teamId, spec as Parameters<typeof createSource>[1]);
+      } catch (err) {
+        // Another replica reconciling the same team created it first.
+        if (!isDuplicateKey(err)) {
+          throw err;
+        }
+      }
+    }
+    wrote = true;
+  }
+
+  // Sources the engine registered before this team existed, or before its
+  // connection did. The engine's PUT /dfe/sources/:name only reaches the teams
+  // that held a connection when it ran.
+  const { failed } = await seedDfeSources(teamId, connectionId);
+  if (failed.length > 0) {
+    throw new Error(`registered sources not seeded: ${failed.join(', ')}`);
+  }
+  return wrote;
+}
+
+/**
  * What ensureOrgConnection found or did.
  *
  * - `present`: the team already holds its own connection, and nothing else.
@@ -342,6 +424,9 @@ const nextSeedCheck = new Map<string, number>();
 // Teams this process has seen with no seed in flight, with the connection they held then.
 // A re-seed on another replica writes a new connection, so a different id is not settled.
 const seedSettled = new Map<string, string>();
+
+// Teams whose sources this process has reconciled, with the connection they now use.
+const sourcesReconciled = new Map<string, string>();
 
 /** Settle the team's claim, once more if the first write fails, so waiters are not left to the lease. */
 async function settleSeedClaim(teamId: string): Promise<void> {
@@ -423,9 +508,11 @@ export function recheckOnAuthFailure(res: Response, teamId: string): void {
  *
  * Reads the team's connections on every request. A team holding a connection as
  * anyone else answers `mismatch` and is never reused. A held connection ClickHouse
- * has refused is re-checked against the engine. A team holding none is
+ * has refused is re-checked against the engine, and its sources are reconciled
+ * by name and connection once per process. A team holding none is
  * seeded, whatever an earlier attempt did, so a first seed that failed or a
- * connection since deleted is restored. One claim per team (dfe/models/team-seed)
+ * connection since deleted is restored. A seed counts as `seeded` only once
+ * every source is in place. One claim per team (dfe/models/team-seed)
  * keeps that to a single attempt at a time across replicas, and a failed attempt
  * is retried once the claim lapses. A request that meets an attempt in flight
  * waits for it to settle, bounded by the lease, so it never answers for a team
@@ -450,13 +537,10 @@ export async function ensureOrgConnection(
       .map(connection => connection.username)
       .filter(username => username !== identity);
     if (foreign.length === 0) {
-      await waitForTeamSeed(teamId, String(held[0]._id));
-      await recheckRefusedConnection(
-        token,
-        teamId,
-        identity,
-        String(held[0]._id),
-      );
+      const connectionId = String(held[0]._id);
+      await waitForTeamSeed(teamId, connectionId);
+      await reconcileHeldConnection(teamId, identity, connectionId);
+      await recheckRefusedConnection(token, teamId, identity, connectionId);
       return 'present';
     }
     logger.error(
@@ -495,10 +579,40 @@ export async function ensureOrgConnection(
   return outcome;
 }
 
+/**
+ * Reconcile a held connection's sources once per process, so a seed that wrote
+ * the connection and not every source is finished by a later request. A pass
+ * that fails is tried again once the seed lease lapses. Never fails the request.
+ */
+async function reconcileHeldConnection(
+  teamId: string,
+  identity: string,
+  connectionId: string,
+): Promise<void> {
+  if (
+    sourcesReconciled.get(teamId) === connectionId ||
+    (nextSeedCheck.get(teamId) ?? 0) > Date.now()
+  ) {
+    return;
+  }
+  try {
+    await reconcileTeamSources(teamId, connectionId, identity);
+    sourcesReconciled.set(teamId, connectionId);
+    nextSeedCheck.delete(teamId);
+  } catch (err) {
+    logger.warn(
+      { err, teamId },
+      'DFE: team sources not reconciled, retried after the lease',
+    );
+    nextSeedCheck.set(teamId, Date.now() + SEED_LEASE_MS);
+  }
+}
+
 /** Forget every team this process is waiting to seed again or re-check. */
 export function clearTeamSeedCache(): void {
   nextSeedCheck.clear();
   seedSettled.clear();
+  sourcesReconciled.clear();
   refusedTeams.clear();
   lastRecheck.clear();
 }
@@ -607,51 +721,26 @@ async function seedTeam(
       }
       throw err;
     }
+
+    // Seeded only once every source is in place. Until then a later request
+    // reconciles the held connection.
+    const connectionId = String(conn._id);
+    const wrote = await reconcileTeamSources(
+      teamId,
+      connectionId,
+      material.username,
+    );
+    sourcesReconciled.set(teamId, connectionId);
     outcome = 'seeded';
 
-    const sources = await getSources(teamId);
-    if (sources.length === 0) {
-      const connectionId = String(conn._id);
-
-      // EVERY team gets `main` and `hunts` (both org-fenced by their tenant
-      // row policies). The platform/admin team ALSO gets the otel sources and
-      // ClickHouse's own system database; tenant teams never do.
-      //
-      // This set is the deployment's fixed floor - the tables the engine
-      // bootstraps whether or not an operator ever defines a source. Everything
-      // an operator DOES define arrives through PUT /dfe/sources/:name and is
-      // seeded below from the manifest, so it is not added to this array.
-      const sourceSpecs: Record<string, unknown>[] = [
-        defaultSource(connectionId),
-        huntsSource(connectionId),
-      ];
-      if (isPlatformReader(material.username)) {
-        sourceSpecs.push(
-          otelLogsSource(connectionId),
-          otelTracesSource(connectionId),
-          otelMetricsSource(connectionId),
-          clickhouseSystemSource(connectionId),
-        );
-      }
-
-      for (const spec of sourceSpecs) {
-        await createSource(teamId, spec as Parameters<typeof createSource>[1]);
-      }
-
-      // Sources the engine registered before this team existed. The engine's
-      // PUT /dfe/sources/:name only reaches the teams present when it ran, so a
-      // team created later picks the rest up here.
-      await seedDfeSources(teamId, connectionId);
-
-      // The cron would otherwise leave the new team's first page load empty.
-      const dashboardDir = process.env.DASHBOARD_PROVISIONER_DIR;
-      if (dashboardDir) {
-        await syncDashboards(
-          teamId,
-          dashboardDir,
-          process.env.DASHBOARD_PROVISIONER_REQUIRE_REFS === 'true',
-        );
-      }
+    // The cron would otherwise leave the new team's first page load empty.
+    const dashboardDir = process.env.DASHBOARD_PROVISIONER_DIR;
+    if (wrote && dashboardDir) {
+      await syncDashboards(
+        teamId,
+        dashboardDir,
+        process.env.DASHBOARD_PROVISIONER_REQUIRE_REFS === 'true',
+      );
     }
   } catch (err) {
     logger.warn(
