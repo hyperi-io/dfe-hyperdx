@@ -390,11 +390,16 @@ describe('dfeCoerceJsonPaths', () => {
     connectionId: 'conn',
   });
 
-  it('coerces a sub-path on a column the schema reports as JSON', async () => {
+  it.each([
+    'JSON',
+    'JSON(max_dynamic_paths=2048)',
+    'Nullable(JSON)',
+    'Nullable(JSON(max_dynamic_paths=2048))',
+  ])('coerces a sub-path on a column the schema reports as %s', async type => {
     await expect(
       dfeCoerceJsonPaths(
         'Body.user.name = 1',
-        args(reader([{ name: 'Body', type: 'JSON' }])),
+        args(reader([{ name: 'Body', type }])),
       ),
     ).resolves.toBe('toString(Body.`user`.`name`) = 1');
   });

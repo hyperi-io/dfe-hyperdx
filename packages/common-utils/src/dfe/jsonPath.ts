@@ -26,6 +26,7 @@
  * dropping the row stored as `Int64`. A wrong number on a chart is worse than
  * an error, because nobody investigates it.
  */
+import { convertCHDataTypeToJSType, JSDataType } from '@/clickhouse';
 import { findJsonExpressions } from '@/core/utils';
 
 /** `toString(...)`, the coercion every text-shaped use needs. */
@@ -352,7 +353,7 @@ export function dfeRangeField<
     : field;
 }
 
-/** Structural shape of the metadata reader, to keep this module cycle-free. */
+/** Structural shape of the metadata reader, so any reader with `getColumns` will do. */
 type ColumnReader = {
   getColumns(args: {
     databaseName: string;
@@ -445,7 +446,7 @@ export async function dfeCoerceJsonPaths(
       connectionId,
     });
     const jsonColumns = columns
-      .filter(c => c.type.startsWith('JSON'))
+      .filter(c => convertCHDataTypeToJSType(c.type) === JSDataType.JSON)
       .map(c => c.name);
     return coerceJsonPathsInSql(condition, jsonColumns);
   } catch {
