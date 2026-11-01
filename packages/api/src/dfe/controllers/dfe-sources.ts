@@ -244,15 +244,17 @@ export async function listByTeam(): Promise<TeamSources[]> {
 
 /**
  * Seed every registered DFE source onto a team created after the engine pushed
- * them. Called from the team-seed path with the connection it just created.
+ * them. Called from the team-seed path with the team's connection.
  *
- * Non-fatal per source: one bad manifest entry must not cost the team the rest.
+ * Non-fatal per source: one bad manifest entry must not cost the team the rest,
+ * and is reported in `failed` so the caller tries the team again.
  */
 export async function seedDfeSources(
   teamId: string,
   connectionId: string,
-): Promise<string[]> {
+): Promise<{ seeded: string[]; failed: string[] }> {
   const seeded: string[] = [];
+  const failed: string[] = [];
   for (const entry of await DfeSource.find({})) {
     if (SEEDED_SOURCE_NAMES.has(entry.name) || entry.deleting) {
       continue;
@@ -272,7 +274,8 @@ export async function seedDfeSources(
         { err, teamId, source: entry.name },
         'DFE: registered source not seeded onto the new team',
       );
+      failed.push(entry.name);
     }
   }
-  return seeded;
+  return { seeded, failed };
 }

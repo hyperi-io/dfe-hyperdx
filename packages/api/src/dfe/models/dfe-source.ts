@@ -16,7 +16,7 @@ export interface IDfeSource {
   name: string;
   // The fork SourceSchemaNoId body WITHOUT `connection`, which differs per team.
   spec: Record<string, unknown>;
-  // Set while a delete removes it from the teams; kept until every team's copy is gone.
+  // Set while a delete removes it from the teams, and kept until every team's copy is gone.
   deleting?: boolean;
 }
 

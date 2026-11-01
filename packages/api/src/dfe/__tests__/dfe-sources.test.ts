@@ -364,9 +364,9 @@ describe('seedDfeSources', () => {
       { name: 'syslog', spec: SPEC },
     ]);
 
-    const seeded = await seedDfeSources('team-new', 'conn-new');
+    const result = await seedDfeSources('team-new', 'conn-new');
 
-    expect(seeded).toEqual(['filebeat', 'syslog']);
+    expect(result).toEqual({ seeded: ['filebeat', 'syslog'], failed: [] });
     expect(mockCreateSource).toHaveBeenCalledWith(
       'team-new',
       expect.objectContaining({ name: 'filebeat', connection: 'conn-new' }),
@@ -375,7 +375,7 @@ describe('seedDfeSources', () => {
     expect(mockConns).not.toHaveBeenCalledWith('team-new');
   });
 
-  test('one bad entry does not cost the team the rest', async () => {
+  test('one bad entry does not cost the team the rest, and is reported', async () => {
     mockManifest.mockResolvedValue([
       { name: 'filebeat', spec: SPEC },
       { name: 'syslog', spec: SPEC },
@@ -384,11 +384,17 @@ describe('seedDfeSources', () => {
       throw new Error('invalid source');
     });
 
-    expect(await seedDfeSources('team-new', 'conn-new')).toEqual(['syslog']);
+    expect(await seedDfeSources('team-new', 'conn-new')).toEqual({
+      seeded: ['syslog'],
+      failed: ['filebeat'],
+    });
   });
 
   test('an empty manifest seeds nothing', async () => {
-    expect(await seedDfeSources('team-new', 'conn-new')).toEqual([]);
+    expect(await seedDfeSources('team-new', 'conn-new')).toEqual({
+      seeded: [],
+      failed: [],
+    });
     expect(mockCreateSource).not.toHaveBeenCalled();
   });
 
@@ -399,7 +405,9 @@ describe('seedDfeSources', () => {
     ]);
     mockSources.mockResolvedValue([{ _id: 'seeded-main', name: 'main' }]);
 
-    expect(await seedDfeSources('team-new', 'conn-new')).toEqual(['filebeat']);
+    expect((await seedDfeSources('team-new', 'conn-new')).seeded).toEqual([
+      'filebeat',
+    ]);
     expect(mockUpdateSource).not.toHaveBeenCalledWith(
       'team-new',
       'seeded-main',
@@ -413,7 +421,9 @@ describe('seedDfeSources', () => {
       { name: 'syslog', spec: SPEC },
     ]);
 
-    expect(await seedDfeSources('team-new', 'conn-new')).toEqual(['syslog']);
+    expect((await seedDfeSources('team-new', 'conn-new')).seeded).toEqual([
+      'syslog',
+    ]);
   });
 
   test('a seed after the index was built at start does not build it again', async () => {
@@ -448,7 +458,7 @@ describe('seedDfeSources', () => {
     expect(createIndex).toHaveBeenCalledTimes(1);
 
     await expect(fresh.seedDfeSources('team-new', 'conn-new')).resolves.toEqual(
-      ['filebeat'],
+      { seeded: ['filebeat'], failed: [] },
     );
     expect(createIndex).toHaveBeenCalledTimes(1);
   });
