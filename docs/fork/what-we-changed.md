@@ -666,7 +666,7 @@ header check is what holds when a deployment authenticates some other way.
   the merged tree.
 - `package.json` `resolutions` - three generated fork pins,
   `systeminformation ^5.33.16`, raising upstream's own `^5.24.0`, and
-  `follow-redirects ^1.16.1` and `body-parser ^1.20.9`, which upstream does not
+  `follow-redirects ^1.16.2` and `body-parser ^1.20.9`, which upstream does not
   pin. All three are generated from `security/overrides.yaml` by
   `scripts/security-override.py --apply`, so edit the register, never these
   lines. The vectors are in the register entries. `--check` judges the pin

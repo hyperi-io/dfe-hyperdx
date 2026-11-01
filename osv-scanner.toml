@@ -142,10 +142,6 @@ id = "GHSA-px8p-9vwx-vf98"
 reason = "fflate: only the session recorder pulls it, inlined into @hyperdx/browser's prebuilt bundle, which compresses and never calls unzipSync."
 
 [[IgnoredVulns]]
-id = "GHSA-mrwp-f3q8-3g9p"
-reason = "follow-redirects 1.16.1: the image reaches it only through @slack/webhook 7.0.7, whose axios client sets maxRedirects: 0 and sends only a User-Agent, so no redirect is followed and no credential rides one; nx's copy is a root devDependency."
-
-[[IgnoredVulns]]
 id = "GHSA-3g3m-2fjr-6pw4"
 reason = "glob: moderate, and the bypass needs a caller relying on an AbortSignal to bound a walk of a tree an attacker chose; every caller here (jest, rollup, rimraf, sucrase, swagger-jsdoc, the CLI) walks our own source or build tree."
 
