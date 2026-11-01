@@ -66,19 +66,21 @@ overrides:
     upstream: https://github.com/hyperdxio/hyperdx/issues/3306
     added: 2026-08-26
   - package: follow-redirects
-    range: '^1.16.1'
-    advisory: GHSA-q3jh-wrc6-jgq8
+    range: '^1.16.2'
+    advisory: GHSA-mrwp-f3q8-3g9p
     severity: high
     vector: >-
       No live vector. It is pinned because the vulnerable copy ships and the fix
       is one generated line. packages/api/package.json:32 declares
-      @slack/webhook, whose axios 1.20.0 resolves follow-redirects 1.16.0 into
-      the production focus. GHSA-q3jh-wrc6-jgq8 (array-form headers) and
-      GHSA-8r9p-f939-6h3c (sensitiveHeaders escaping) both need follow-redirects
+      @slack/webhook, whose axios 1.20.0 resolves follow-redirects into the
+      production focus. GHSA-mrwp-f3q8-3g9p (a cross-realm sensitiveHeaders
+      array is discarded), GHSA-q3jh-wrc6-jgq8 (array-form headers) and
+      GHSA-8r9p-f939-6h3c (sensitiveHeaders escaping) all need follow-redirects
       to follow a cross-origin redirect. @slack/webhook's IncomingWebhook.js:26
       sets maxRedirects to 0, so axios takes the native http transport
-      (lib/adapters/http.js:1051) and follow-redirects follows nothing. nx's
-      exact 1.16.0 pin, dev only, moves with it.
+      (lib/adapters/http.js:1051) and follow-redirects follows nothing. Nothing
+      in packages/*/src sets sensitiveHeaders. nx's exact 1.16.0 pin, dev only,
+      moves with it.
     upstream: none
     added: 2026-10-21
   - package: body-parser

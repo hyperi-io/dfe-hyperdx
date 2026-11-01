@@ -2077,3 +2077,51 @@ longer carries an affected version.
 | Run                        | main                                  | This change     |
 | -------------------------- | ------------------------------------- | --------------- |
 | osv-scanner on `yarn.lock` | 13 rows: undici x10, qs x2, deepmerge | no issues found |
+
+## 2026-11-02 - follow-redirects 1.16.2 pinned, glob and minimatch recorded
+
+Three alerts from advisories published 2026-10-27 to 2026-10-28.
+
+| Alert | Package          | Advisory            | Fixed in | Verdict                                       |
+| ----- | ---------------- | ------------------- | -------- | --------------------------------------------- |
+| #398  | follow-redirects | GHSA-mrwp-f3q8-3g9p | 1.16.2   | pinned `^1.16.2` in `security/overrides.yaml` |
+| #399  | glob             | GHSA-3g3m-2fjr-6pw4 | 14.0.2   | recorded in `osv-scanner.toml`, no pin        |
+| #400  | minimatch        | GHSA-g3hv-75wg-m249 | 11.0.1   | recorded in `osv-scanner.toml`, no pin        |
+
+### follow-redirects - in the image, following no redirect
+
+Same copy and same reasoning as 2026-10-21. `@slack/webhook` 7.0.7 pulls axios
+1.20.0, which resolves follow-redirects into the api focus, and
+`IncomingWebhook.js:26` sets `maxRedirects: 0`. The advisory needs a cross-realm
+`sensitiveHeaders` array, and nothing in `packages/*/src` sets
+`sensitiveHeaders`. The advisory also says axios normalises the array.
+
+Pinned anyway, because the entry is one generated line. The pin moves nx's copy
+too, and the `osv-scanner.toml` ignore for the advisory is deleted since the
+lockfile no longer carries 1.16.1. The lockfile diff is four lines out and four
+in.
+
+### glob and minimatch - build tooling, and a pin that breaks it
+
+A traversal of `yarn.lock` from the api's production `dependencies`, applying
+`resolutions` and each workspace's own `package.json`, reaches no copy of either
+package that the advisories match. The affected copies are glob 9.3.5, 10.5.0
+and 13.0.6 (the range starts at 9.0.0, so 7.x is clear), and every minimatch
+below 11.0.1. Their parents are jest, sucrase, rimraf, eslint, nodemon and the
+CLI. The traversal is not a `yarn workspaces focus` install and the Next trace
+was not rebuilt.
+
+Neither is pinned, for two reasons:
+
+- Both sit below the register's bar, which is high or critical with a live
+  vector. The glob flaw is an availability bug for a caller that relies on an
+  `AbortSignal` to bound a walk, and the minimatch one needs an attacker-written
+  pattern at `optimizationLevel` 2 or higher.
+- The fixed majors would break their parents. minimatch 11.0.1 is ESM-first with
+  named exports, while `eslint-plugin-react`, `-import` and `-n` call
+  `require('minimatch')` as a function (3.1.2). glob 14 is a week old and
+  jest-config 30.2.0 asks for `^10.3.10`.
+
+| Run                        | main                    | This change             |
+| -------------------------- | ----------------------- | ----------------------- |
+| osv-scanner on `yarn.lock` | 133 filtered, no issues | 132 filtered, no issues |

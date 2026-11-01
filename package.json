@@ -97,7 +97,7 @@
     "fast-xml-parser": "^4.5.6",
     "systeminformation": "^5.33.16",
     "@asyncapi/specs": "6.11.1",
-    "follow-redirects": "^1.16.1",
+    "follow-redirects": "^1.16.2",
     "body-parser": "^1.20.9"
   },
   "resolutionsNotes": {
