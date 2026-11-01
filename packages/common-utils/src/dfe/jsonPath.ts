@@ -41,16 +41,17 @@ const STRING_COERCION = 'toString';
 const NUMBER_COERCION = 'toFloat64OrNull';
 
 /**
- * Quote one path segment for ClickHouse. Backticks inside an identifier are
- * escaped by doubling, which is what `unquoteJsonSegment` reverses.
+ * Quote one path segment for ClickHouse. ClickHouse reads `\` as an escape
+ * inside a backtick identifier, so a backslash is doubled first and a backtick
+ * after it. Escaping only the backtick lets a key ending in `\` close the
+ * identifier early and carry SQL into the query.
  *
  * Mirrors `quoteJsonPathSegment` in core/metadata.ts, which is not exported.
- * Kept here rather than imported so this module stays free of a cycle, which
- * means the two agree by inspection only -- nothing asserts it.
+ * The two are held to the same output by dfe/__tests__/jsonPath.int.test.ts.
  */
 export function quoteJsonSegment(segment: string): string {
   const bare = stripBackticks(segment);
-  return `\`${bare.replace(/`/g, '``')}\``;
+  return `\`${bare.replace(/\\/g, '\\\\').replace(/`/g, '``')}\``;
 }
 
 /**
@@ -64,7 +65,9 @@ export function quoteJsonSegment(segment: string): string {
  * exceeded". The round trip is asserted in the tests.
  */
 export function unquoteJsonSegment(segment: string): string {
-  return stripBackticks(segment).replace(/``/g, '`');
+  return stripBackticks(segment).replace(/\\(.)|``/gs, (_, escaped) =>
+    escaped === undefined ? '`' : escaped,
+  );
 }
 
 function stripBackticks(segment: string): string {
@@ -114,7 +117,11 @@ export function splitJsonPath(expression: string): string[] | undefined {
     // charAt rather than [i] throughout: the index is a loop counter, and the
     // bracket form trips security/detect-object-injection on every read.
     const c = expression.charAt(i);
-    if (c === '`') {
+    if (c === '\\' && inBacktick) {
+      // ClickHouse's escape: the next character never ends the identifier.
+      current += c + expression.charAt(i + 1);
+      i++;
+    } else if (c === '`') {
       // A doubled backtick is an escaped one, not a delimiter.
       if (inBacktick && expression.charAt(i + 1) === '`') {
         current += '``';

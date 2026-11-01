@@ -22,6 +22,8 @@ describe('quoting round-trips', () => {
     'has`backtick',
     'has``doubled',
     'has\\backslash',
+    'ends\\',
+    'x\\`) OR 1=1 --',
     "has'quote",
     'has space',
     '1',
@@ -42,6 +44,19 @@ describe('quoting round-trips', () => {
 
   it('doubles a backtick when quoting', () => {
     expect(quoteJsonSegment('a`b')).toBe('`a``b`');
+  });
+
+  // ClickHouse reads `\` as an escape inside backticks, so an undoubled one
+  // lets a telemetry key close the identifier and carry SQL with it.
+  it.each([
+    ['ends\\', '`ends\\\\`'],
+    ['x\\`) OR 1=1 --', '`x\\\\``) OR 1=1 --`'],
+  ])('doubles a backslash before a backtick in %j', (segment, quoted) => {
+    expect(quoteJsonSegment(segment)).toBe(quoted);
+  });
+
+  it("reads ClickHouse's backslash-escaped backtick as a backtick", () => {
+    expect(unquoteJsonSegment('`a\\`b`')).toBe('a`b');
   });
 });
 
@@ -113,6 +128,11 @@ describe('splitJsonPath', () => {
     expect(splitJsonPath('Body.`unterminated')).toBeUndefined();
   });
 
+  it('reads a backslash-escaped backtick as part of the segment, as ClickHouse does', () => {
+    expect(splitJsonPath('Body.`a\\`.b`')).toEqual(['Body', '`a\\`.b`']);
+    expect(splitJsonPath('Body.`a\\`')).toBeUndefined();
+  });
+
   it('rejects an empty segment', () => {
     expect(splitJsonPath('Body..name')).toBeUndefined();
   });
@@ -177,6 +197,13 @@ describe('coerceJsonPathsInSql', () => {
   it('leaves a bare JSON column with no sub-path alone', () => {
     const sql = 'notEmpty(Body) = 1';
     expect(coerceJsonPathsInSql(sql, jsonColumns)).toBe(sql);
+  });
+
+  it('re-quotes a key holding a backslash and a backtick as the same key', () => {
+    const quoted = quoteJsonSegment('a\\`b\\');
+    expect(coerceJsonPathsInSql(`Body.${quoted} = 'v'`, jsonColumns)).toBe(
+      `toString(Body.${quoted}) = 'v'`,
+    );
   });
 
   it('is idempotent', () => {
