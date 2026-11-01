@@ -238,7 +238,10 @@ describe('dfe store operations against a real store', () => {
       { team: String(team._id), teamName: 'acme', sources: [] },
     ]);
 
-    expect(await removeEverywhere('syslog')).toEqual({ removed: [] });
+    expect(await removeEverywhere('syslog')).toEqual({
+      removed: [],
+      failed: [],
+    });
     expect(await DfeSource.exists({ name: 'syslog' })).toBeNull();
   });
 });

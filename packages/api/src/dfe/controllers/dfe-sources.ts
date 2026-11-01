@@ -7,9 +7,9 @@
 // that team's own connection - the rows stay fenced by the ClickHouse row
 // policies behind that connection, which is where DFE's tenant isolation lives.
 //
-// Ownership: the fork writes only sources the manifest claims. A name a team
-// already holds that the manifest does not claim was seeded by
-// ensureOrgConnection, and is left alone.
+// Ownership: the fork writes only sources the manifest claims, and the manifest
+// never claims a name ensureOrgConnection seeds. A name a team already holds
+// that the manifest does not claim is left alone too.
 //
 // This is a NEW file - it does not modify any upstream HyperDX files.
 /* eslint-disable @typescript-eslint/no-unsafe-type-assertion --
@@ -42,6 +42,21 @@ export type TeamSources = {
 };
 
 type SourceWrite = Parameters<typeof createSource>[1];
+
+/**
+ * The sources ensureOrgConnection seeds, on every team or on the platform team.
+ * Reserved whether or not a team holds one yet: before the first login no team
+ * does, and a manifest entry of one of these names would replace the seeded
+ * source on every team seeded after it.
+ */
+export const SEEDED_SOURCE_NAMES: ReadonlySet<string> = new Set([
+  'main',
+  'hunts',
+  'otel_logs',
+  'otel_traces',
+  'otel_metrics',
+  'clickhouse_system',
+]);
 
 function specForTeam(
   name: string,
@@ -80,12 +95,14 @@ async function connectionIdFor(teamId: string): Promise<string | undefined> {
 }
 
 /**
- * Is this name the fork's to write? False when a team already holds a source of
- * that name that the engine never pushed - that is one of the seeded sources
- * (`main`, `hunts`, the otel set), and replacing it would silently retarget the
- * landing view of every team.
+ * Is this name the fork's to write? False for a seeded name, and when a team
+ * already holds a source of that name that the engine never pushed - replacing
+ * either would silently retarget the landing view of every team.
  */
 export async function isOwnedName(name: string): Promise<boolean> {
+  if (SEEDED_SOURCE_NAMES.has(name)) {
+    return false;
+  }
   if (await DfeSource.exists({ name: { $eq: name } })) {
     return true;
   }
@@ -142,7 +159,7 @@ export async function upsertEverywhere(
   await retryUpsertRace(async () =>
     DfeSource.findOneAndUpdate(
       { name: { $eq: name } },
-      { $set: { name, spec } },
+      { $set: { name, spec }, $unset: { deleting: '' } },
       { upsert: true, new: true },
     ),
   );
@@ -164,13 +181,23 @@ export async function upsertEverywhere(
   return { written, skipped };
 }
 
-/** Drop the source from the manifest and from every team that holds it. */
+/**
+ * Drop the source from every team that holds it, then from the manifest.
+ *
+ * The entry is marked `deleting` first, so a team seeded meanwhile is not given
+ * the source, and is kept until every team's copy is gone. That keeps the name
+ * the engine's while a team still holds it, so a retry removes the rest.
+ */
 export async function removeEverywhere(
   name: string,
-): Promise<{ removed: string[] }> {
-  await DfeSource.deleteOne({ name: { $eq: name } });
+): Promise<{ removed: string[]; failed: string[] }> {
+  await DfeSource.updateOne(
+    { name: { $eq: name } },
+    { $set: { deleting: true } },
+  );
 
   const removed: string[] = [];
+  const failed: string[] = [];
   for (const team of await teamIds()) {
     try {
       const existing = await sourceNamed(team.id, name);
@@ -183,9 +210,13 @@ export async function removeEverywhere(
         { err, team: team.name, source: name },
         'DFE: source not removed from team',
       );
+      failed.push(team.name);
     }
   }
-  return { removed };
+  if (failed.length === 0) {
+    await DfeSource.deleteOne({ name: { $eq: name } });
+  }
+  return { removed, failed };
 }
 
 /** Every team, with the registered DFE sources it currently holds. */
@@ -223,6 +254,9 @@ export async function seedDfeSources(
 ): Promise<string[]> {
   const seeded: string[] = [];
   for (const entry of await DfeSource.find({})) {
+    if (SEEDED_SOURCE_NAMES.has(entry.name) || entry.deleting) {
+      continue;
+    }
     try {
       const sourceId = await upsertOnTeam(
         teamId,
