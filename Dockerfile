@@ -19,7 +19,7 @@
 
 # Tag and digest travel as one value, so a bump or a --build-arg override replaces both.
 # Debian trixie, not upstream's Alpine: on glibc the prebuilt native bindings load their -gnu builds with no compat shim.
-ARG NODE_IMAGE=node:24.22.1-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea
+ARG NODE_IMAGE=node:26.12.0-trixie-slim@sha256:e556a144463cc8dc53afe8de6d2fa0db5c132fd39ffa232c17641bd40df2bf11
 
 # base ############################################################################################
 # Install and build run on the build host's arch: their output is platform-independent JS, and an emulated Next build times out.
