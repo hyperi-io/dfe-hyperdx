@@ -92,3 +92,4 @@ describe('dfeApiErrorDetail', () => {
     expect(err.message).toBe('boom');
   });
 });
+
