@@ -1,6 +1,6 @@
 # Team identity
 
-**A HyperDX team is the ClickHouse user its members read as.**
+**A dfe-hyperdx team is the ClickHouse user its members read as.**
 
 The engine hands every session one ClickHouse identity: `dfe_query_reader` for a
 caller holding `query:execute` at system scope through a role other than
@@ -21,7 +21,7 @@ the same identity.
 - An engine that sends no `hyperdx_identity` is asked the connection read
   instead, and only its `username` is kept.
 - The answer is cached per token for 30 seconds, never past the token's `exp`. A
-  group change reaches HyperDX in that window.
+  group change reaches dfe-hyperdx in that window.
 - The dashboard role comes from the same answer: `hyperdx_role`, falling back to
   the token's `role` claim when the engine sends none. See
   [oidc-authentication.md](oidc-authentication.md).
@@ -113,7 +113,7 @@ INFO  DFE: team connection repair complete
 
 ## Evidence before the repair
 
-Run these in `mongosh` against the HyperDX database before deploying the release
+Run these in `mongosh` against the dfe-hyperdx database before deploying the release
 that carries the repair, and keep the output. They are read-only, and every
 projection is an inclusion list, so `password` and the team `apiKey` are never
 returned.
