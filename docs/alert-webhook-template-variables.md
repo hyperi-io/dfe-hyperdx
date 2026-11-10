@@ -2,13 +2,13 @@
 
 **Generic** and **incident.io** webhook bodies are Handlebars templates. These
 variables are available inside them, so a receiver can route, filter or dedupe
-a HyperDX alert without parsing the human-readable message body.
+a console alert without parsing the human-readable message body.
 
 | Variable | Type | Notes |
 | --- | --- | --- |
 | `{{title}}` | string | Alert title. |
 | `{{body}}` | string | Rendered message body (markdown). |
-| `{{link}}` | string | Deep link back into HyperDX. |
+| `{{link}}` | string | Deep link back into the console. |
 | `{{state}}` | string | Raw internal alert state. |
 | `{{eventId}}` | string | Unique id for this firing. |
 | `{{startTime}}` / `{{endTime}}` | number | Evaluation window, Unix ms. |
@@ -96,7 +96,7 @@ which is what the guard above is for.
 ## incident.io
 
 incident.io accepts only `firing` or `resolved` in `status`, so the default
-body maps HyperDX's state onto those two and carries `{{status}}` in
+body maps the console's state onto those two and carries `{{status}}` in
 `metadata.hyperdx_status`, alongside the alert id, condition, evaluation
 window and the alert's tags (comma-separated, in `metadata.tags`). Only a firing and a resolve are delivered today, so that key reads
 `firing` or `resolved` as well. `metadata` is free-form, but incident.io only

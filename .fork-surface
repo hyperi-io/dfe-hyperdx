@@ -48,6 +48,8 @@ LOCAL.md
 knip.json
 README.md
 agent_docs/tech_stack.md
+# Published on the DFE docs site, so its HyperDX mentions say the console - see docs/fork/what-we-changed.md.
+docs/alert-webhook-template-variables.md
 # Digest pins on the ClickHouse and MongoDB images the integration tests run
 # against; a ClickHouse version bump upstream conflicts on that line - see
 # docs/fork/what-we-changed.md.
