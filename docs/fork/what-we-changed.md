@@ -694,6 +694,10 @@ carry a catalogued delta, both are listed in `.fork-surface`.
   APPENDED at end of file, which is the cheapest placement we have: upstream's
   own README edits land above it, so an upstream change and ours rarely occupy
   the same hunk.
+- **`docs/alert-webhook-template-variables.md`** - an upstream page the DFE docs
+  site publishes to customers. Its three mentions of HyperDX say "the console"
+  instead, and nothing else on the page changes. It is listed in
+  `.fork-surface`.
 
 ---
 

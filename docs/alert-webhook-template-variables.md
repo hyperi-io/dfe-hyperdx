@@ -1,37 +1,37 @@
 # Alert webhook template variables
 
 **Generic** and **incident.io** webhook bodies are Handlebars templates. These
-variables are available inside them, so a receiver can route, filter or dedupe
-a HyperDX alert without parsing the human-readable message body.
+variables are available inside them, so a receiver can route, filter or dedupe a
+console alert without parsing the human-readable message body.
 
-| Variable | Type | Notes |
-| --- | --- | --- |
-| `{{title}}` | string | Alert title. |
-| `{{body}}` | string | Rendered message body (markdown). |
-| `{{link}}` | string | Deep link back into HyperDX. |
-| `{{state}}` | string | Raw internal alert state. |
-| `{{eventId}}` | string | Unique id for this firing. |
-| `{{startTime}}` / `{{endTime}}` | number | Evaluation window, Unix ms. |
-| `{{startTimeISO}}` / `{{endTimeISO}}` | string | The same window, ISO-8601. |
-| `{{alertId}}` | string | Stable id of the alert itself — the key to dedupe on. |
-| `{{status}}` | string | `firing`, `resolved`, `no_data`, `pending` or `error`. |
-| `{{alertType}}` | string | `search`, `dashboard_chart` or `inline_query`. |
-| `{{comparator}}` | string | `>=`, `>`, `<`, `<=`, `=`, `!=`, `between`, `outside`. |
-| `{{threshold}}` | number | The configured threshold. For `between`/`outside`, the lower bound. |
-| `{{thresholdMax}}` | number | Upper bound of a `between`/`outside` condition. Always unset for every other comparator, even if the alert was once a range, so guard it (see below). |
-| `{{value}}` | number | The value that triggered or resolved the alert. |
-| `{{groupKey}}` | string | The breaching group, for a grouped alert. |
-| `{{var}}` | object | The breaching group's values by group-by column or SQL alias. Use one value at a time, e.g. `{{var.customer_id}}`, or `{{var.[service.name]}}` for a name with dots. Empty when not grouped, and on the resolve of a group that has no rows left. |
-| `{{sourceQuery}}` | string | The condition behind the alert — search expression or SQL (see below). |
-| `{{teamId}}` | string | Team the alert belongs to. |
-| `{{note}}` | string | The alert's freeform note — commonly a runbook link. |
-| `{{tags}}` | list of strings | The alert's tags. `{{tags}}` renders them comma-separated (`team-payments,prod`); iterate with `{{#each tags}}` to emit a JSON array (see below). Empty when the alert has no tags. |
+| Variable                              | Type            | Notes                                                                                                                                                                                                                                             |
+| ------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{{title}}`                           | string          | Alert title.                                                                                                                                                                                                                                      |
+| `{{body}}`                            | string          | Rendered message body (markdown).                                                                                                                                                                                                                 |
+| `{{link}}`                            | string          | Deep link back into the console.                                                                                                                                                                                                                  |
+| `{{state}}`                           | string          | Raw internal alert state.                                                                                                                                                                                                                         |
+| `{{eventId}}`                         | string          | Unique id for this firing.                                                                                                                                                                                                                        |
+| `{{startTime}}` / `{{endTime}}`       | number          | Evaluation window, Unix ms.                                                                                                                                                                                                                       |
+| `{{startTimeISO}}` / `{{endTimeISO}}` | string          | The same window, ISO-8601.                                                                                                                                                                                                                        |
+| `{{alertId}}`                         | string          | Stable id of the alert itself — the key to dedupe on.                                                                                                                                                                                             |
+| `{{status}}`                          | string          | `firing`, `resolved`, `no_data`, `pending` or `error`.                                                                                                                                                                                            |
+| `{{alertType}}`                       | string          | `search`, `dashboard_chart` or `inline_query`.                                                                                                                                                                                                    |
+| `{{comparator}}`                      | string          | `>=`, `>`, `<`, `<=`, `=`, `!=`, `between`, `outside`.                                                                                                                                                                                            |
+| `{{threshold}}`                       | number          | The configured threshold. For `between`/`outside`, the lower bound.                                                                                                                                                                               |
+| `{{thresholdMax}}`                    | number          | Upper bound of a `between`/`outside` condition. Always unset for every other comparator, even if the alert was once a range, so guard it (see below).                                                                                             |
+| `{{value}}`                           | number          | The value that triggered or resolved the alert.                                                                                                                                                                                                   |
+| `{{groupKey}}`                        | string          | The breaching group, for a grouped alert.                                                                                                                                                                                                         |
+| `{{var}}`                             | object          | The breaching group's values by group-by column or SQL alias. Use one value at a time, e.g. `{{var.customer_id}}`, or `{{var.[service.name]}}` for a name with dots. Empty when not grouped, and on the resolve of a group that has no rows left. |
+| `{{sourceQuery}}`                     | string          | The condition behind the alert — search expression or SQL (see below).                                                                                                                                                                            |
+| `{{teamId}}`                          | string          | Team the alert belongs to.                                                                                                                                                                                                                        |
+| `{{note}}`                            | string          | The alert's freeform note — commonly a runbook link.                                                                                                                                                                                              |
+| `{{tags}}`                            | list of strings | The alert's tags. `{{tags}}` renders them comma-separated (`team-payments,prod`); iterate with `{{#each tags}}` to emit a JSON array (see below). Empty when the alert has no tags.                                                               |
 
-Strings are JSON-escaped, so they are safe to drop into a quoted slot.
-Numbers (`startTime`, `endTime`, `threshold`, `thresholdMax`, `value`) are
-emitted raw for unquoted slots. Every enriched variable is optional and renders
-as an empty string when the alert doesn't carry it — an alert with no group has
-an empty `{{groupKey}}`, for instance.
+Strings are JSON-escaped, so they are safe to drop into a quoted slot. Numbers
+(`startTime`, `endTime`, `threshold`, `thresholdMax`, `value`) are emitted raw
+for unquoted slots. Every enriched variable is optional and renders as an empty
+string when the alert doesn't carry it — an alert with no group has an empty
+`{{groupKey}}`, for instance.
 
 `{{sourceQuery}}` reads whichever fields the alert's condition lives in: a
 saved-search alert reports the search's, a dashboard-tile alert its tile's, and
@@ -55,9 +55,9 @@ builder condition can each be Lucene or SQL, so the joined string is not
 necessarily valid in either. It is truncated at 2000 characters. PromQL charts
 do not support alerts, so no webhook carries a PromQL expression.
 
-Tags let one shared webhook route alerts by owner: tag each alert with its
-team and read the tag in the receiver. To send them as a JSON array rather
-than one comma-separated string:
+Tags let one shared webhook route alerts by owner: tag each alert with its team
+and read the tag in the receiver. To send them as a JSON array rather than one
+comma-separated string:
 
 ```
 {
@@ -81,11 +81,11 @@ reads `}}}` as a triple-stache and fails to compile the template.
 
 The template is Handlebars, not JSON: it only has to be JSON once rendered.
 Write string arguments inside `{{ … }}` with plain or single quotes —
-`{{#if (eq state "ALERT")}}` or `{{#if (eq state 'ALERT')}}` — never JSON-escaped
-as `\"ALERT\"`, which Handlebars cannot parse. The webhook form shows where a
-body fails to compile. The API rejects a body that doesn't compile, or that
-calls a helper other than `eq` and the Handlebars built-ins, when a webhook is
-created, updated, or tested.
+`{{#if (eq state "ALERT")}}` or `{{#if (eq state 'ALERT')}}` — never
+JSON-escaped as `\"ALERT\"`, which Handlebars cannot parse. The webhook form
+shows where a body fails to compile. The API rejects a body that doesn't
+compile, or that calls a helper other than `eq` and the Handlebars built-ins,
+when a webhook is created, updated, or tested.
 
 The **Send test** button on the webhook form fills every variable with a sample
 value, so a template that uses them can be checked before an alert fires. The
@@ -95,12 +95,13 @@ which is what the guard above is for.
 
 ## incident.io
 
-incident.io accepts only `firing` or `resolved` in `status`, so the default
-body maps HyperDX's state onto those two and carries `{{status}}` in
-`metadata.hyperdx_status`, alongside the alert id, condition, evaluation
-window and the alert's tags (comma-separated, in `metadata.tags`). Only a firing and a resolve are delivered today, so that key reads
-`firing` or `resolved` as well. `metadata` is free-form, but incident.io only
-surfaces the keys its alert source is configured to parse.
+incident.io accepts only `firing` or `resolved` in `status`, so the default body
+maps the console's state onto those two and carries `{{status}}` in
+`metadata.hyperdx_status`, alongside the alert id, condition, evaluation window
+and the alert's tags (comma-separated, in `metadata.tags`). Only a firing and a
+resolve are delivered today, so that key reads `firing` or `resolved` as well.
+`metadata` is free-form, but incident.io only surfaces the keys its alert source
+is configured to parse.
 
 `deduplication_key` is `{{eventId}}`, which is stable per alert, group and
 channel across a firing and its resolve, so incident.io closes the alert it
