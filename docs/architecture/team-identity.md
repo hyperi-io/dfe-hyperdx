@@ -113,10 +113,10 @@ INFO  DFE: team connection repair complete
 
 ## Evidence before the repair
 
-Run these in `mongosh` against the dfe-hyperdx database before deploying the release
-that carries the repair, and keep the output. They are read-only, and every
-projection is an inclusion list, so `password` and the team `apiKey` are never
-returned.
+Run these in `mongosh` against the dfe-hyperdx database before deploying the
+release that carries the repair, and keep the output. They are read-only, and
+every projection is an inclusion list, so `password` and the team `apiKey` are
+never returned.
 
 Connections whose username is not their team's name, the set the repair deletes:
 

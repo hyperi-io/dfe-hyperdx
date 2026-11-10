@@ -3,9 +3,9 @@
 **The DFE engine is the single JWT issuer. dfe-hyperdx verifies its token rather
 than trusting a header.**
 
-Envoy terminates OIDC at the edge and verifies the engine's ES384 token. dfe-hyperdx
-verifies it _again_ against the engine's JWKS, because dfe-hyperdx is a policy
-enforcement point and an unauthenticated header is not an identity.
+Envoy terminates OIDC at the edge and verifies the engine's ES384 token.
+dfe-hyperdx verifies it _again_ against the engine's JWKS, because dfe-hyperdx
+is a policy enforcement point and an unauthenticated header is not an identity.
 
 None of this touches upstream's auth. It is one middleware registered ahead of
 Passport, and with `DFE_AUTH_MODE` unset it is never registered at all - the
@@ -115,7 +115,8 @@ token's `role` claim only when the engine sends none.
 The answer is cached per token for 30 seconds, never past the token's `exp`, at
 most 1000 entries, and concurrent requests for one token share one lookup. That
 30 seconds is how long a removed group, a changed role or a deleted account
-takes to reach dfe-hyperdx. A lookup the engine could not answer is never cached.
+takes to reach dfe-hyperdx. A lookup the engine could not answer is never
+cached.
 
 Both the user and the team are find-or-create, so there is no registration or
 invite step in DFE mode.
