@@ -62,7 +62,7 @@ describe('/readyz', () => {
 });
 
 describe('/metrics', () => {
-  test('serves Prometheus text with the process_, nodejs_ and info families', async () => {
+  test('serves Prometheus text with the process_, nodejs_, info and start time families', async () => {
     const app = appWith('/metrics', metricsHandler);
 
     const res = await request(app).get('/metrics');
@@ -70,9 +70,12 @@ describe('/metrics', () => {
     expect(res.headers['content-type']).toContain('text/plain');
 
     // Default collector families (cross-platform members of each), plus the
-    // hand-added info gauge that mirrors the Rust services' info{version,commit}.
+    // hand-added gauges that mirror the Rust services' info and start time.
     expect(res.text).toMatch(/process_cpu_seconds_total/);
     expect(res.text).toMatch(/nodejs_/);
     expect(res.text).toMatch(/^info\{/m);
+    const started = Number(res.text.match(/^start_time_seconds (\S+)$/m)?.[1]);
+    expect(started).toBeLessThanOrEqual(Date.now() / 1000);
+    expect(started).toBeGreaterThan(Date.now() / 1000 - process.uptime() - 5);
   });
 });

@@ -36,6 +36,13 @@ function buildRegistry(): Registry {
     1,
   );
 
+  // scalo's start time, which the DFE engine reads uptime from
+  new Gauge({
+    name: 'start_time_seconds',
+    help: 'Unix timestamp of process start',
+    registers: [reg],
+  }).set(Date.now() / 1000 - process.uptime());
+
   return reg;
 }
 
