@@ -7,11 +7,13 @@
 const KEYS: readonly string[] = [
   'DFE_AUTH_MODE',
   'DFE_ENGINE_JWKS_URL',
+  'DFE_ENGINE_TIMEOUT_MS',
   'NODE_ENV',
 ];
 type Env = {
   DFE_AUTH_MODE?: string;
   DFE_ENGINE_JWKS_URL?: string;
+  DFE_ENGINE_TIMEOUT_MS?: string;
   NODE_ENV?: string;
 };
 
@@ -106,4 +108,26 @@ describe('header-dev in production', () => {
       }),
     ).not.toThrow();
   });
+});
+
+describe('DFE_ENGINE_TIMEOUT_MS', () => {
+  test.each([
+    [undefined, 5000],
+    ['', 5000],
+    ['250', 250],
+    ['15000', 15000],
+  ])('%j reads as %d ms', (value, ms) => {
+    expect(
+      loadConfigWith({ DFE_ENGINE_TIMEOUT_MS: value })?.DFE_ENGINE_TIMEOUT_MS,
+    ).toBe(ms);
+  });
+
+  test.each(['0', '-5', '1.5', 'soon', '5s', ' '])(
+    'refuses to start on %j',
+    value => {
+      expect(() => loadConfigWith({ DFE_ENGINE_TIMEOUT_MS: value })).toThrow(
+        /DFE_ENGINE_TIMEOUT_MS/,
+      );
+    },
+  );
 });

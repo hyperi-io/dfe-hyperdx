@@ -15,10 +15,9 @@ import { createHash } from 'node:crypto';
 
 import { z } from 'zod';
 
+import { DFE_ENGINE_TIMEOUT_MS } from '@/dfe/config';
 import { engineOrigin } from '@/dfe/controllers/org-connection';
 import logger from '@/utils/logger';
-
-const ENGINE_TIMEOUT_MS = 5000;
 
 // A revoked group, a changed role or a deleted account reaches HyperDX within this window.
 const CACHE_TTL_MS = 30_000;
@@ -90,7 +89,7 @@ async function identityFromConnection(
 ): Promise<string | EngineAnswer> {
   const resp = await fetch(`${origin}/api/v1/hyperdx/connection`, {
     headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(ENGINE_TIMEOUT_MS),
+    signal: AbortSignal.timeout(DFE_ENGINE_TIMEOUT_MS),
   });
   if (resp.status === 401) {
     return refused(401, 'engine_refused');
@@ -122,7 +121,7 @@ async function askEngine(token: string): Promise<EngineAnswer> {
   try {
     const resp = await fetch(`${origin}/api/v1/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(ENGINE_TIMEOUT_MS),
+      signal: AbortSignal.timeout(DFE_ENGINE_TIMEOUT_MS),
     });
     if (resp.status === 401 || resp.status === 403) {
       return refused(resp.status === 401 ? 401 : 403, 'engine_refused');

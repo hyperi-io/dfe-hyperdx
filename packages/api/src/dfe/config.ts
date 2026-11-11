@@ -47,6 +47,26 @@ export const DFE_ENGINE_JWKS_URL = env.DFE_ENGINE_JWKS_URL as
 
 export const DFE_ENGINE_ISSUER = env.DFE_ENGINE_ISSUER as string | undefined;
 
+// How long a request to the engine may take before it is abandoned, so a slow
+// or unreachable control plane fails the request instead of hanging the client.
+// Every DFE call to the engine reads this one value.
+const DEFAULT_ENGINE_TIMEOUT_MS = 5000;
+
+function engineTimeoutMs(raw: string | undefined): number {
+  if (raw === undefined || raw === '') {
+    return DEFAULT_ENGINE_TIMEOUT_MS;
+  }
+  const ms = Number(raw);
+  if (!Number.isInteger(ms) || ms <= 0) {
+    throw new Error(
+      `DFE_ENGINE_TIMEOUT_MS=${JSON.stringify(raw)} is not a whole number of milliseconds above zero.`,
+    );
+  }
+  return ms;
+}
+
+export const DFE_ENGINE_TIMEOUT_MS = engineTimeoutMs(env.DFE_ENGINE_TIMEOUT_MS);
+
 export const isDfeEnabled =
   DFE_AUTH_MODE === 'oidc-proxy' || DFE_AUTH_MODE === 'header-dev';
 
