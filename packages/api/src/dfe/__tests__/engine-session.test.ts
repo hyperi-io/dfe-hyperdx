@@ -26,6 +26,7 @@ jest.mock('@/dfe/controllers/org-connection', () => ({
   engineOrigin: jest.fn(() => 'http://engine.test:8000'),
 }));
 
+import { DFE_ENGINE_TIMEOUT_MS } from '@/dfe/config';
 import {
   clearEngineSessionCache,
   resolveEngineSession,
@@ -82,6 +83,15 @@ describe('the decision', () => {
         signal: expect.any(AbortSignal),
       }),
     );
+  });
+
+  test('bounds the engine call by the configured timeout', async () => {
+    const timeout = jest.spyOn(AbortSignal, 'timeout');
+    grants(['sre']);
+
+    await resolveEngineSession('tok-a', FAR);
+
+    expect(timeout).toHaveBeenCalledWith(DFE_ENGINE_TIMEOUT_MS);
   });
 
   test('names the team after the ClickHouse identity the engine hands the caller', async () => {

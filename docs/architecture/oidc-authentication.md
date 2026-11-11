@@ -130,6 +130,7 @@ invite step in DFE mode.
 | `DFE_AUTH_MODE`          | unset                | `oidc-proxy`, `header-dev`, or unset for stock upstream. Any other value stops the API        |
 | `DFE_ENGINE_JWKS_URL`    | -                    | engine JWKS URL, and `oidc-proxy` mode will not start without it                              |
 | `DFE_ENGINE_ISSUER`      | unset                | enforced as the `iss` claim when set                                                          |
+| `DFE_ENGINE_TIMEOUT_MS`  | `5000`               | how long any request to the engine may take before it is abandoned                            |
 | `DFE_AUTH_HEADER_EMAIL`  | `x-forwarded-email`  | `header-dev` only, which will not start with `NODE_ENV=production`                            |
 | `DFE_AUTH_HEADER_GROUPS` | `x-forwarded-groups` | `header-dev` only                                                                             |
 | `DFE_AUTH_DEFAULT_TEAM`  | unset                | the engine service identity's team, and the `header-dev` team when no group header is present |

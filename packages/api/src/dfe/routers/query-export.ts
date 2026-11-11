@@ -19,6 +19,7 @@ import { validateRequest } from 'zod-express-middleware';
 
 import { getConnectionById } from '@/controllers/connection';
 import { getSource } from '@/controllers/sources';
+import { DFE_ENGINE_TIMEOUT_MS } from '@/dfe/config';
 import { engineOrigin } from '@/dfe/controllers/org-connection';
 import { requireNonSimpleRequest } from '@/dfe/middleware/cross-site';
 import { extractToken } from '@/dfe/middleware/jwt-verify';
@@ -47,10 +48,6 @@ const createRuleBodySchema = z.object({
   hunt_name: z.string().optional(),
   source: z.string().optional(),
 });
-
-// Bound the wait on the engine so a slow/unreachable control plane fails the
-// request instead of hanging the client. Matches org-connection's ceiling.
-const ENGINE_TIMEOUT_MS = 5000;
 
 // renderChartConfig's expression regexes run in time quadratic in their input
 // and the API accepts 32 MB bodies, so the export body is capped at a size whose
@@ -230,7 +227,7 @@ router.post(
           hunt_name,
           source,
         }),
-        signal: AbortSignal.timeout(ENGINE_TIMEOUT_MS),
+        signal: AbortSignal.timeout(DFE_ENGINE_TIMEOUT_MS),
       });
 
       // Forward the engine's status and JSON body verbatim so RBAC failures

@@ -68,8 +68,6 @@ const OrgConnectionSchema = z.object({
 
 type OrgConnection = z.infer<typeof OrgConnectionSchema>;
 
-const ENGINE_TIMEOUT_MS = 5000;
-
 // The engine API shares an origin with its JWKS endpoint, so we derive the base
 // URL from DFE_ENGINE_JWKS_URL rather than carrying a second env var.
 // Exported as the single definition of the engine origin so DFE routers reuse it
@@ -97,7 +95,7 @@ async function fetchOrgConnection(
   try {
     const resp = await fetch(`${origin}/api/v1/hyperdx/connection`, {
       headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(ENGINE_TIMEOUT_MS),
+      signal: AbortSignal.timeout(dfeConfig.DFE_ENGINE_TIMEOUT_MS),
     });
     if (resp.status === 401 || resp.status === 403) {
       logger.warn(

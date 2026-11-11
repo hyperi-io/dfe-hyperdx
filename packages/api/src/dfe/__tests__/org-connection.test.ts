@@ -37,7 +37,12 @@ jest.mock('@/controllers/sources', () => ({
 
 jest.mock('@/dfe/config', () => ({
   DFE_ENGINE_JWKS_URL: 'http://engine.test:8000/.well-known/jwks.json',
+  get DFE_ENGINE_TIMEOUT_MS() {
+    return mockEngineTimeoutMs;
+  },
 }));
+
+let mockEngineTimeoutMs = 5000;
 
 jest.mock('@/tasks/provisionDashboards', () => ({
   syncDashboards: jest.fn(),
@@ -261,6 +266,18 @@ describe('ensureOrgConnection - the team identity', () => {
       'refused',
     );
     expect(mockCreateConn).not.toHaveBeenCalled();
+  });
+
+  test('bounds the engine read by the configured timeout', async () => {
+    mockEngineTimeoutMs = 4321;
+    const timeout = jest.spyOn(AbortSignal, 'timeout');
+    mockConns.mockResolvedValue([]);
+    (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 403 });
+
+    await ensureOrgConnection('tok', 'team-1', ORG);
+
+    expect(timeout).toHaveBeenCalledWith(4321);
+    mockEngineTimeoutMs = 5000;
   });
 
   test.each([500, 502, 503])(

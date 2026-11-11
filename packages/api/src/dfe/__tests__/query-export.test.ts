@@ -53,6 +53,7 @@ import request from 'supertest';
 import { getConnectionById } from '@/controllers/connection';
 import { getSource } from '@/controllers/sources';
 import { makeDocument } from '@/dfe/__tests__/doubles';
+import { DFE_ENGINE_TIMEOUT_MS } from '@/dfe/config';
 import { extractToken } from '@/dfe/middleware/jwt-verify';
 import router, { MAX_EXPORT_SQL_BODY_CHARS } from '@/dfe/routers/query-export';
 import { getNonNullUserWithTeam } from '@/middleware/auth';
@@ -132,6 +133,15 @@ describe('POST /dfe/create-rule status mapping', () => {
 
     expect(res.status).toBe(403);
     expect(res.body.detail).toBe('rule:write required');
+  });
+
+  it('bounds the engine call by the configured timeout', async () => {
+    const timeout = jest.spyOn(AbortSignal, 'timeout');
+    engineReplies(200, { id: 'rule-1' });
+
+    await createRule().send(RULE_BODY);
+
+    expect(timeout).toHaveBeenCalledWith(DFE_ENGINE_TIMEOUT_MS);
   });
 
   it('forwards the created rule on success', async () => {
