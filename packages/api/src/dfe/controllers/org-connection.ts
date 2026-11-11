@@ -49,6 +49,21 @@ const OrgConnectionSchema = z.object({
   host: z.string().min(1),
   username: z.string().min(1),
   password: z.string(),
+  // The engine decides which seed set a team gets and where its tables live,
+  // so a deployment's own data database and catalogue reach every source.
+  platform: z.boolean(),
+  database: z.string().min(1),
+  tables: z.object({
+    'data.main': z.string().min(1),
+    'data.detection': z.string().min(1),
+    'data.otel_logs': z.string().min(1),
+    'data.otel_traces': z.string().min(1),
+    'data.otel_metrics_gauge': z.string().min(1),
+    'data.otel_metrics_sum': z.string().min(1),
+    'data.otel_metrics_histogram': z.string().min(1),
+    'data.otel_metrics_exponential_histogram': z.string().min(1),
+    'data.otel_metrics_summary': z.string().min(1),
+  }),
 });
 
 type OrgConnection = z.infer<typeof OrgConnectionSchema>;
@@ -144,37 +159,19 @@ export async function ensureOneConnectionPerTeam(): Promise<boolean> {
   return teamIndexEnsured;
 }
 
-// The engine returns this ClickHouse username for the PLATFORM/admin team - the
-// unrestricted reader that sees every org's rows. Any other username (the
-// per-org dfe_org_<org> readers) is a tenant, row-policy fenced to one org.
-const PLATFORM_READER_USERNAME = 'dfe_query_reader';
+// Every table name and the data database come from the engine's material, so a
+// deployment that sets DFE_ENGINE_CLICKHOUSE_DATA_DATABASE seeds sources there.
+// The platform flag is the engine's call too: a tenant gets ONLY `main` and
+// `hunts`, because otel is unfenced operator telemetry.
 
-// The engine's data database (DFE_CLICKHOUSE_DATA_DATABASE, default `dfe`).
-// Everything the engine writes lands in it - `main` and `detection` alike -
-// so both seeded DFE sources resolve from this one constant.
-const DATA_DATABASE = 'dfe';
-
-// The OTel database. Renamed from `default` to `dfe`, so every otel_* table is
-// dfe.otel_*. Kept as one constant so the rename lands in a single place.
-const OTEL_DATABASE = 'dfe';
-
-// A team is the platform/admin team iff its connection reads as the unrestricted
-// platform reader. Anything else (including the dfe_org_<org> tenant readers, or
-// an unrecognised username) is treated as a tenant and gets ONLY `main` and `hunts` - otel
-// is unfenced operator telemetry and must never reach an org_viewer.
-function isPlatformReader(username: string): boolean {
-  return username === PLATFORM_READER_USERNAME;
-}
-
-// One generic log source over dfe.main, the per-team equivalent of the
+// One generic log source over the landing table, the per-team equivalent of the
 // DEFAULT_SOURCES template. EVERY team gets this, platform and tenant alike.
-// Named for the table the engine bootstraps from `clickhouse.landing_table`.
-function defaultSource(connectionId: string) {
+function defaultSource(connectionId: string, m: OrgConnection) {
   return {
     name: 'main',
     kind: 'log',
     connection: connectionId,
-    from: { databaseName: DATA_DATABASE, tableName: 'main' },
+    from: { databaseName: m.database, tableName: m.tables['data.main'] },
     timestampValueExpression: '_timestamp',
     displayedTimestampValueExpression: '_timestamp',
     // DFE data lands in the structured `_json` column; `_raw` is the exception
@@ -186,17 +183,15 @@ function defaultSource(connectionId: string) {
   };
 }
 
-// The hunt-detection source over `detection` in the data database - the engine
-// builds that table alongside `main`, not in a hunts database of its own.
+// The hunt-detection source over the detection table in the data database.
 // Seeded on EVERY team, and org-fenced the same way: the tenant row policy
 // scopes a tenant to its own _org_id while the platform reader sees every org.
-// Interim hard-coding per the source-manifest TODO below.
-function huntsSource(connectionId: string) {
+function huntsSource(connectionId: string, m: OrgConnection) {
   return {
     name: 'hunts',
     kind: 'log',
     connection: connectionId,
-    from: { databaseName: DATA_DATABASE, tableName: 'detection' },
+    from: { databaseName: m.database, tableName: m.tables['data.detection'] },
     timestampValueExpression: '_timestamp',
     displayedTimestampValueExpression: '_timestamp',
     implicitColumnExpression: 'rule_name',
@@ -210,7 +205,7 @@ function huntsSource(connectionId: string) {
 
 // PLATFORM-ONLY otel sources. The three below (log/trace/metric) are seeded ONLY
 // on the platform/admin team - operator telemetry the standard OTel collector
-// schema writes into dfe.otel_*. Expressions match the columns upstream infers
+// schema writes into the data database. Expressions match the columns upstream infers
 // for an OTel schema (see app/src/source.ts getSourceConfig inference, and the
 // hdx-eval setup builders) so HyperDX's search/trace/metric UIs light up the
 // same as a native OTel deployment.
@@ -218,12 +213,12 @@ function huntsSource(connectionId: string) {
 // Column expressions are the standard OTel ClickHouse exporter columns:
 // Timestamp/Body/ServiceName/SeverityText for logs; Duration/SpanId/TraceId for
 // traces; TimeUnix/ServiceName plus the five metricTables for metrics.
-function otelLogsSource(connectionId: string) {
+function otelLogsSource(connectionId: string, m: OrgConnection) {
   return {
     name: 'otel_logs',
     kind: 'log',
     connection: connectionId,
-    from: { databaseName: OTEL_DATABASE, tableName: 'otel_logs' },
+    from: { databaseName: m.database, tableName: m.tables['data.otel_logs'] },
     timestampValueExpression: 'Timestamp',
     displayedTimestampValueExpression: 'Timestamp',
     defaultTableSelectExpression:
@@ -239,12 +234,12 @@ function otelLogsSource(connectionId: string) {
   };
 }
 
-function otelTracesSource(connectionId: string) {
+function otelTracesSource(connectionId: string, m: OrgConnection) {
   return {
     name: 'otel_traces',
     kind: 'trace',
     connection: connectionId,
-    from: { databaseName: OTEL_DATABASE, tableName: 'otel_traces' },
+    from: { databaseName: m.database, tableName: m.tables['data.otel_traces'] },
     timestampValueExpression: 'Timestamp',
     displayedTimestampValueExpression: 'Timestamp',
     defaultTableSelectExpression:
@@ -267,24 +262,25 @@ function otelTracesSource(connectionId: string) {
 
 // The Metric kind bundles all five OTel metric tables in one source: from carries
 // the database and the metricTables map carries the per-kind BARE table names
-// (renderChartConfig overrides from.tableName per kind), so from.databaseName=dfe
-// resolves each to dfe.otel_metrics_*. Keys are the MetricsDataType enum string
+// (renderChartConfig overrides from.tableName per kind), so from.databaseName
+// resolves each to <database>.<table>. Keys are the MetricsDataType enum string
 // values - note 'exponential histogram' has a space.
-function otelMetricsSource(connectionId: string) {
+function otelMetricsSource(connectionId: string, m: OrgConnection) {
   return {
     name: 'otel_metrics',
     kind: 'metric',
     connection: connectionId,
-    from: { databaseName: OTEL_DATABASE, tableName: '' },
+    from: { databaseName: m.database, tableName: '' },
     timestampValueExpression: 'TimeUnix',
     serviceNameExpression: 'ServiceName',
     resourceAttributesExpression: 'ResourceAttributes',
     metricTables: {
-      gauge: 'otel_metrics_gauge',
-      sum: 'otel_metrics_sum',
-      histogram: 'otel_metrics_histogram',
-      'exponential histogram': 'otel_metrics_exponential_histogram',
-      summary: 'otel_metrics_summary',
+      gauge: m.tables['data.otel_metrics_gauge'],
+      sum: m.tables['data.otel_metrics_sum'],
+      histogram: m.tables['data.otel_metrics_histogram'],
+      'exponential histogram':
+        m.tables['data.otel_metrics_exponential_histogram'],
+      summary: m.tables['data.otel_metrics_summary'],
     },
   };
 }
@@ -315,7 +311,7 @@ function clickhouseSystemSource(connectionId: string) {
 }
 
 /**
- * The seed sources for a team holding `connectionId` as `username`.
+ * The seed sources for a team holding `connectionId`, as the engine described it.
  *
  * EVERY team gets `main` and `hunts` (both org-fenced by their tenant row
  * policies). The platform/admin team ALSO gets the otel sources and ClickHouse's
@@ -328,17 +324,17 @@ function clickhouseSystemSource(connectionId: string) {
  */
 function seedSourceSpecs(
   connectionId: string,
-  username: string,
+  material: OrgConnection,
 ): Record<string, unknown>[] {
   const specs: Record<string, unknown>[] = [
-    defaultSource(connectionId),
-    huntsSource(connectionId),
+    defaultSource(connectionId, material),
+    huntsSource(connectionId, material),
   ];
-  if (isPlatformReader(username)) {
+  if (material.platform) {
     specs.push(
-      otelLogsSource(connectionId),
-      otelTracesSource(connectionId),
-      otelMetricsSource(connectionId),
+      otelLogsSource(connectionId, material),
+      otelTracesSource(connectionId, material),
+      otelMetricsSource(connectionId, material),
       clickhouseSystemSource(connectionId),
     );
   }
@@ -356,13 +352,13 @@ function seedSourceSpecs(
 async function reconcileTeamSources(
   teamId: string,
   connectionId: string,
-  username: string,
+  material: OrgConnection,
 ): Promise<boolean> {
   const held = new Map(
     (await getSources(teamId)).map(source => [source.name, source]),
   );
   let wrote = false;
-  for (const spec of seedSourceSpecs(connectionId, username)) {
+  for (const spec of seedSourceSpecs(connectionId, material)) {
     const existing = held.get(spec.name as string);
     if (existing && String(existing.connection) === connectionId) {
       continue;
@@ -539,7 +535,7 @@ export async function ensureOrgConnection(
     if (foreign.length === 0) {
       const connectionId = String(held[0]._id);
       await waitForTeamSeed(teamId, connectionId);
-      await reconcileHeldConnection(teamId, identity, connectionId);
+      await reconcileHeldConnection(token, teamId, identity, connectionId);
       await recheckRefusedConnection(token, teamId, identity, connectionId);
       return 'present';
     }
@@ -581,10 +577,13 @@ export async function ensureOrgConnection(
 
 /**
  * Reconcile a held connection's sources once per process, so a seed that wrote
- * the connection and not every source is finished by a later request. A pass
- * that fails is tried again once the seed lease lapses. Never fails the request.
+ * the connection and not every source is finished by a later request. The
+ * engine's material names the tables, so it is read once per team per process.
+ * A pass that fails, or that the engine cannot answer, is tried again once the
+ * seed lease lapses. Never fails the request.
  */
 async function reconcileHeldConnection(
+  token: string,
   teamId: string,
   identity: string,
   connectionId: string,
@@ -596,7 +595,16 @@ async function reconcileHeldConnection(
     return;
   }
   try {
-    await reconcileTeamSources(teamId, connectionId, identity);
+    const material = await fetchOrgConnection(token);
+    if (typeof material === 'string' || material.username !== identity) {
+      logger.warn(
+        { teamId, team: identity },
+        'DFE: no engine material for the team; sources not reconciled',
+      );
+      nextSeedCheck.set(teamId, Date.now() + SEED_LEASE_MS);
+      return;
+    }
+    await reconcileTeamSources(teamId, connectionId, material);
     sourcesReconciled.set(teamId, connectionId);
     nextSeedCheck.delete(teamId);
   } catch (err) {
@@ -725,11 +733,7 @@ async function seedTeam(
     // Seeded only once every source is in place. Until then a later request
     // reconciles the held connection.
     const connectionId = String(conn._id);
-    const wrote = await reconcileTeamSources(
-      teamId,
-      connectionId,
-      material.username,
-    );
+    const wrote = await reconcileTeamSources(teamId, connectionId, material);
     sourcesReconciled.set(teamId, connectionId);
     outcome = 'seeded';
 
