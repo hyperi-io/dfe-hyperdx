@@ -278,17 +278,24 @@ header check is what holds when a deployment authenticates some other way.
   charts and filters. A JSON sub-path is `Dynamic`, which ClickHouse refuses in
   `IN`, aggregates, `GROUP BY` and `ORDER BY`, so it needs an explicit coercion.
   All the logic is here; **`core/renderChartConfig.ts` (catalogued)** carries
-  three added calls and nothing else - one in `renderWhereExpressionStr`, the
+  four added calls and nothing else - one in `renderWhereExpressionStr`, the
   seam every SQL filter already passes through, one in `renderSelectList`'s
   raw-string early return, which `renderSelect` and `renderGroupBy` BOTH feed,
-  so the SELECT list and the GROUP BY key cannot disagree, and one wrapping the
-  `renderOrderBy` argument. Coercion is `toString()`, NOT the `.:String`
-  sub-column upstream #2549 proposes - see the module header for the measurement
-  that rules it out.
+  so the SELECT list and the GROUP BY key cannot disagree, one wrapping the
+  `renderOrderBy` argument, and `dfeJsonAggregates` after `renderSelectList`
+  builds each aggregate. Coercion is `toString()`, NOT the `.:String` sub-column
+  upstream #2549 proposes - see the module header for the measurement that rules
+  it out. A path compared with a number literal gets
+  `toFloat64OrNull(toString(...))` instead, since `String = 200` is
+  NO_COMMON_TYPE.
 
-  Aggregate arguments are left alone: `aggFnExpr` already emits
-  `toFloat64OrDefault(toString(expr))` around them, which our idempotence check
-  recognises.
+  Aggregate arguments: `aggFnExpr` emits `toFloat64OrDefault(toString(expr))`,
+  which counts every String, Array, Bool or missing row of a JSON path as 0.
+  `dfeJsonAggregates` swaps that cast to `toFloat64OrNull` for a JSON path only,
+  before the materialized-column pass re-prints the SQL. Editing the cast in
+  `aggFnExpr` itself was rejected: it has no column metadata, so the change
+  would hit every column and move about 170 upstream assertions and snapshots.
+  Pinned end to end by `dfe/__tests__/jsonAggregates.test.ts`.
 
   ORDER BY was left alone until 2026-08-26 and now coerces via
   `dfeCoerceOrderBy`, which walks both the string and the `valueExpression[]`

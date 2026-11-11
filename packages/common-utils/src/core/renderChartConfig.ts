@@ -25,7 +25,11 @@ import {
   resolvePercentileAggFn,
   splitAndTrimWithBracket,
 } from '@/core/utils';
-import { dfeCoerceJsonPaths, dfeCoerceOrderBy } from '@/dfe/jsonPath';
+import {
+  dfeCoerceJsonPaths,
+  dfeCoerceOrderBy,
+  dfeJsonAggregates,
+} from '@/dfe/jsonPath';
 import { isPromqlChartConfig, isRawSqlChartConfig } from '@/guards';
 import { replaceMacros } from '@/macros';
 import {
@@ -813,6 +817,8 @@ async function renderSelectList(
           sampleWeightExpression: chartConfig.sampleWeightExpression,
         });
       }
+      // DFE: a JSON path's non-numeric rows are skipped, not counted as 0.
+      expr.sql = await dfeJsonAggregates(expr.sql, chartConfig, metadata);
 
       const rawSQL = `SELECT ${expr.sql} FROM \`t\``;
       if (materializedFields) {

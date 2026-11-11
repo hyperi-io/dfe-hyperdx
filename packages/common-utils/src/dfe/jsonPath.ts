@@ -166,8 +166,8 @@ export function dfeJsonPathRoot(
 
 /**
  * Rewrite every native-JSON sub-path in a SQL fragment so it carries a
- * `toString()` coercion, or the numeric one where it is the operand of
- * upstream's numeric guard.
+ * `toString()` coercion, or the numeric one where it is compared with a number
+ * or is the operand of upstream's numeric guard.
  *
  * This is the single seam. It is called at query RENDER time rather than when
  * a filter key is built, so one call covers search, charts, dashboards and
@@ -326,17 +326,33 @@ function isAlreadyCoerced(sql: string, index: number): boolean {
   return /(?:toString|dynamicType|getSubcolumn)\($/.test(before);
 }
 
+// A comparison operator and a number literal, on either side of the path.
+const NUMBER_AFTER =
+  /^\s*(?:[!<>=]=|<>|[<>=])\s*-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?![\w.])/;
+const NUMBER_BEFORE =
+  /(?<![\w.])-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\s*(?:[!<>=]=|<>|[<>=])\s*$/;
+const BETWEEN_NUMBERS =
+  /^\s+(?:NOT\s+)?BETWEEN\s+-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\s+AND\s+-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?![\w.])/i;
+
 /**
- * True when the path at `index` is the operand of the numeric guard upstream's
- * Lucene serializer emits for `>`, `>=`, `<`, `<=` and ranges:
- * `dynamicType(P) in (...) and P`. A `toString()` there compares as text, so
- * `> '100'` matches 50 and a BETWEEN against numbers fails with NO_COMMON_TYPE.
+ * True when the path at `index` needs the numeric coercion: it is compared
+ * with, or bounded BETWEEN, number literals, or it is the operand of the
+ * numeric guard upstream's Lucene serializer emits for `>`, `>=`, `<`, `<=`
+ * and ranges (`dynamicType(P) in (...) and P`). ClickHouse refuses a `String`
+ * against a number with NO_COMMON_TYPE, and a quoted number compares as text,
+ * so `> '100'` matches 50. `IN` is left alone: ClickHouse converts the set to
+ * the `String` side.
  */
 function isNumericOperand(sql: string, index: number, expr: string): boolean {
-  const guard = /dynamicType\(([^()]*)\) in \([^()]*\) and $/.exec(
-    sql.slice(0, index),
+  const before = sql.slice(0, index);
+  const after = sql.slice(index + expr.length);
+  const guard = /dynamicType\(([^()]*)\) in \([^()]*\) and $/.exec(before);
+  return (
+    guard?.[1] === expr ||
+    NUMBER_AFTER.test(after) ||
+    BETWEEN_NUMBERS.test(after) ||
+    NUMBER_BEFORE.test(before)
   );
-  return guard?.[1] === expr;
 }
 
 /**
@@ -362,18 +378,6 @@ type ColumnReader = {
   }): Promise<{ name: string; type: string }[]>;
 };
 
-/**
- * Coerce every native-JSON sub-path in a rendered SQL fragment.
- *
- * The seam, called from two places every query already passes through:
- * `renderWhereExpressionStr` for filters (search, charts, dashboards, alerts)
- * and `renderSelectList`'s raw-string branch for GROUP BY keys. Failure to read
- * the schema leaves the fragment untouched rather than blocking the query.
- *
- * Aggregate ARGUMENTS need no pass here: upstream's `aggFnExpr` already emits
- * `toFloat64OrDefault(toString(expr))` around them, which `isAlreadyCoerced`
- * recognises and leaves alone.
- */
 /**
  * The same coercion, applied to a chart config's `orderBy` before it renders.
  *
@@ -423,6 +427,57 @@ export async function dfeCoerceOrderBy<
   return chartConfig;
 }
 
+/** Upstream `aggFnExpr`'s cast around every aggregate argument. */
+const AGGREGATE_CAST = /toFloat64OrDefault\(toString\(([^()]*)\)\)/g;
+
+/**
+ * Swap `aggFnExpr`'s `toFloat64OrDefault` for `toFloat64OrNull` where the
+ * argument is a native-JSON sub-path, called from `renderSelectList` before
+ * the select is assembled.
+ *
+ * `OrDefault` counts every String, Array, Bool and missing row of a JSON path
+ * as 0, which drags avg and min down: 7.75 against a true 23.25 on six mixed
+ * rows. `OrNull` drops those rows, and every aggregate skips a NULL. Other
+ * columns keep upstream's cast.
+ */
+export async function dfeJsonAggregates(
+  sql: string,
+  chartConfig: {
+    from?: { databaseName: string; tableName: string };
+    connection?: string;
+  },
+  metadata: ColumnReader,
+): Promise<string> {
+  const { from, connection } = chartConfig;
+  if (!from || !connection || !sql.includes('toFloat64OrDefault(toString('))
+    return sql;
+
+  const jsonColumns = await readJsonColumns(metadata, {
+    databaseName: from.databaseName,
+    tableName: from.tableName,
+    connectionId: connection,
+  });
+  if (!jsonColumns?.length) return sql;
+
+  return sql.replace(AGGREGATE_CAST, (cast, arg: string) =>
+    dfeJsonPathRoot(arg, jsonColumns)
+      ? `${NUMBER_COERCION}(${STRING_COERCION}(${arg}))`
+      : cast,
+  );
+}
+
+/**
+ * Coerce every native-JSON sub-path in a rendered SQL fragment.
+ *
+ * The seam, called from two places every query already passes through:
+ * `renderWhereExpressionStr` for filters (search, charts, dashboards, alerts)
+ * and `renderSelectList`'s raw-string branch for GROUP BY keys. Failure to read
+ * the schema leaves the fragment untouched rather than blocking the query.
+ *
+ * Aggregate arguments arrive already inside `aggFnExpr`'s
+ * `toFloat64OrDefault(toString(expr))`, which `isAlreadyCoerced` leaves alone.
+ * `dfeJsonAggregates` handles them.
+ */
 export async function dfeCoerceJsonPaths(
   condition: string,
   {
@@ -439,17 +494,26 @@ export async function dfeCoerceJsonPaths(
 ): Promise<string> {
   if (!condition || !databaseName || !tableName) return condition;
 
+  const jsonColumns = await readJsonColumns(metadata, {
+    databaseName,
+    tableName,
+    connectionId,
+  });
+  return jsonColumns ? coerceJsonPathsInSql(condition, jsonColumns) : condition;
+}
+
+/** The table's native `JSON` column names, or undefined when unreadable. */
+async function readJsonColumns(
+  metadata: ColumnReader,
+  table: { databaseName: string; tableName: string; connectionId: string },
+): Promise<string[] | undefined> {
+  if (!table.databaseName || !table.tableName) return undefined;
   try {
-    const columns = await metadata.getColumns({
-      databaseName,
-      tableName,
-      connectionId,
-    });
-    const jsonColumns = columns
+    const columns = await metadata.getColumns(table);
+    return columns
       .filter(c => convertCHDataTypeToJSType(c.type) === JSDataType.JSON)
       .map(c => c.name);
-    return coerceJsonPathsInSql(condition, jsonColumns);
   } catch {
-    return condition;
+    return undefined;
   }
 }
