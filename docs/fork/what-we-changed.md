@@ -227,6 +227,22 @@ HyperDX subdomain, and `Max-Age` from the token's own expiry. `SameSite=Lax`
 already keeps that cookie off a cross-site POST, so the exposure was thin; the
 header check is what holds when a deployment authenticates some other way.
 
+## Request validation
+
+**A handler gets the parsed request, not the raw one
+(`dfe/validated-request.ts`).** zod-express-middleware's `validateRequest` hands
+on the original request, so an undeclared key reached the mongoose write:
+`PATCH /dashboards/:id` with a `team` moved the dashboard to another team. The
+module swaps the library's `validateRequest` and `processRequest` exports for
+one that writes the parsed params, query and body back and deletes every
+`__proto__`, `constructor` and `prototype` key at any depth. Every router that
+imports the library is covered, ones upstream adds included. The delta in
+**`api-app.ts`** is one side-effect import above all the others, because the
+swap must land before a router calls `validateRequest` at load.
+`dfe/__tests__/validated-request.test.ts` pins it. Upstream's int test that
+expects undeclared static-filter keys to persist is skipped by name in
+`dfe-documentdb.yml`.
+
 ## DFE integration features
 
 - `packages/api/src/dfe/controllers/org-connection.ts` - a team holds ONLY one

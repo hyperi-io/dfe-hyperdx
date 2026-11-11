@@ -1,3 +1,5 @@
+import './dfe/validated-request';
+
 import compression from 'compression';
 import MongoStore from 'connect-mongo';
 import express from 'express';
