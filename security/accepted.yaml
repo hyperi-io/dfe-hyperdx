@@ -64,7 +64,7 @@ accepted:
     path: scripts/vendor-fonts.py
     reason: >-
       A developer-run script, never in the image. The dynamic URLs come from
-      Google's CSS, and fetch() exits before urllib sees any URL whose origin
-      is not https://fonts.googleapis.com or https://fonts.gstatic.com, so a
+      Google's CSS, and fetch() exits before urllib sees any URL whose origin is
+      not https://fonts.googleapis.com or https://fonts.gstatic.com, so a
       file:// or other-host URL cannot be opened. Pinned by
       scripts/__tests__/test_vendor_fonts.py.
