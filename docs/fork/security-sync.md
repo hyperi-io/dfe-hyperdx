@@ -2125,3 +2125,52 @@ Neither is pinned, for two reasons:
 | Run                        | main                    | This change             |
 | -------------------------- | ----------------------- | ----------------------- |
 | osv-scanner on `yarn.lock` | 133 filtered, no issues | 132 filtered, no issues |
+
+## 2026-11-11 - mongoose 6.13.12 pinned, fast-xml-parser recorded
+
+Six osv-scanner rows from advisories published 2026-11-10, on main at
+`51e85bdfa` (CI run 42944294409).
+
+| Advisory            | Package         | Severity | Fixed in | Verdict                                               |
+| ------------------- | --------------- | -------- | -------- | ----------------------------------------------------- |
+| GHSA-8332-j7wj-wjw4 | mongoose        | high     | 6.13.12  | REAL - pinned `^6.13.12` in `security/overrides.yaml` |
+| GHSA-pcrw-h46h-c93h | mongoose        | critical | 6.13.11  | no vector, cleared by the same pin                    |
+| GHSA-gg4r-jv3p-qx3c | mongoose        | high     | 6.13.12  | no vector, cleared by the same pin                    |
+| GHSA-6972-9mcm-vhwj | mongoose        | moderate | 6.13.12  | no vector, cleared by the same pin                    |
+| GHSA-wr5m-5jph-8m96 | mongoose        | moderate | 6.13.12  | no vector, cleared by the same pin                    |
+| GHSA-474x-hrwr-fgx4 | fast-xml-parser | low      | 5.12.0   | recorded in `osv-scanner.toml`, no pin                |
+
+### GHSA-8332 - one request stops every query
+
+`validateRequest` from zod-express-middleware 1.4.0 checks the body and leaves
+`req.body` as sent, and `DashboardSchema` and `SavedSearchSchema` are
+non-strict, so an unknown top-level key reaches mongoose. PATCH /dashboards/:id
+and PATCH /saved-search/:id pass it to `findOneAndUpdate`, whose `_mergeUpdate`
+calls `utils.mergeClone({}, update)`. In 6.13.10 a `toString` key resolves to
+the inherited `Object.prototype.toString`, and `{"toString":{"call":1}}` sets
+its `call` to 1. POST /dashboards reaches the dotted-path `$__set` the same way
+with `"savedDateRange.toString.call":1`, because `savedDateRange` is Mixed.
+After either, every cast throws
+`Object.prototype.toString.call is not a function` until the process restarts.
+
+Measured offline against the dashboard schema, with no database: 6.13.10 is
+polluted by the PATCH and the Mixed POST shapes, and 6.13.12 by neither.
+`dfe/__tests__/mongoose-inherited-keys.test.ts` runs the three shapes against
+the real models.
+
+Both routes take a console session, not the engine principal, and only the
+`viewer` role is refused writes. Every org shares the one API process.
+
+### The other five
+
+- GHSA-pcrw and GHSA-gg4r make `sanitizeFilter` work where it is set. Nothing in
+  `packages/` sets it, and `connectDB` passes only pool and heartbeat options.
+- GHSA-6972 needs an attacker-named `Schema.virtual()`. The one virtual is the
+  literal `hasPasswordAuth` in `models/user.ts`.
+- GHSA-wr5m needs an attacker-chosen discriminator value. The only discriminated
+  model is Source, keyed on `kind`, and its writes are engine-only.
+- GHSA-474x needs `stopNodes`. The only shipped parent, `@aws-sdk/client-sts`
+  3.279.0 under mongodb's optional AWS credential provider, sets none.
+
+The lockfile moves mongoose 6.13.10 to 6.13.12 and mquery 4.0.3 to 4.0.4. Both
+were published 2026-10-23, past `npmMinimalAgeGate`.

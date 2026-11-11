@@ -138,6 +138,10 @@ id = "GHSA-gh4j-gqv2-49f6"
 reason = "fast-xml-parser: the flaw is in XMLBuilder, and the only shipped parent, @aws-sdk/client-sts, uses the parser."
 
 [[IgnoredVulns]]
+id = "GHSA-474x-hrwr-fgx4"
+reason = "fast-xml-parser: low, and the quadratic scan needs stopNodes. The only shipped parent, @aws-sdk/client-sts 3.279.0, sets none (dist-cjs/protocols/Aws_query.js:1043), and it parses AWS STS responses only under MONGODB-AWS auth."
+
+[[IgnoredVulns]]
 id = "GHSA-px8p-9vwx-vf98"
 reason = "fflate: only the session recorder pulls it, inlined into @hyperdx/browser's prebuilt bundle, which compresses and never calls unzipSync."
 

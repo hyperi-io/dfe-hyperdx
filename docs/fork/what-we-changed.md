@@ -667,15 +667,15 @@ header check is what holds when a deployment authenticates some other way.
   touched the file four times, and the conflict is trivial either way: take
   ours, then re-run `yarn ratchet:update` after the sync so the numbers match
   the merged tree.
-- `package.json` `resolutions` - three generated fork pins,
+- `package.json` `resolutions` - four generated fork pins,
   `systeminformation ^5.33.16`, raising upstream's own `^5.24.0`, and
-  `follow-redirects ^1.16.2` and `body-parser ^1.20.9`, which upstream does not
-  pin. All three are generated from `security/overrides.yaml` by
-  `scripts/security-override.py --apply`, so edit the register, never these
-  lines. The vectors are in the register entries. `--check` judges the pin
-  against upstream's own lockfile at our merge base, never ours: the pin makes
-  our lockfile resolve above its own floor, so ours would call every live pin
-  redundant.
+  `follow-redirects ^1.16.2`, `body-parser ^1.20.9` and `mongoose ^6.13.12`,
+  which upstream does not pin. All four are generated from
+  `security/overrides.yaml` by `scripts/security-override.py --apply`, so edit
+  the register, never these lines. The vectors are in the register entries.
+  `--check` judges the pin against upstream's own lockfile at our merge base,
+  never ours: the pin makes our lockfile resolve above its own floor, so ours
+  would call every live pin redundant.
 
 ## Docs
 

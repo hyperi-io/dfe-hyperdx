@@ -101,6 +101,32 @@ overrides:
       stay inflating.
     upstream: none
     added: 2026-10-28
+  - package: mongoose
+    # 6.13.12 clears all five mongoose advisories osv-scanner reports, and
+    # stays on the 6.x line packages/api/package.json declares.
+    range: '^6.13.12'
+    advisory: GHSA-8332-j7wj-wjw4
+    severity: high
+    vector: >-
+      Any console user whose role is not viewer can stop every Mongo query in
+      the shared API process, for every org, until it restarts. PATCH
+      /dashboards/:id (routers/api/dashboards.ts:217) and PATCH
+      /saved-search/:id (routers/api/savedSearch.ts:84) pass req.body on to
+      findOneAndUpdate (controllers/dashboard.ts:248,
+      controllers/savedSearch.ts:63). zod-express-middleware's validateRequest
+      checks the body but does not replace it, and both schemas are non-strict
+      z.objects, so a top-level key such as `toString` arrives intact. Before
+      6.13.12, Query._mergeUpdate's utils.mergeClone recurses into the inherited
+      Object.prototype.toString, and a body of {"toString":{"call":1}} sets
+      Object.prototype.toString.call to 1. Every later cast then throws. POST
+      /dashboards does the same through the Mixed savedDateRange path with a
+      "savedDateRange.toString.call" key. Neither route needs the engine
+      principal, and a user may create the dashboard it then patches. The other
+      four advisories (GHSA-pcrw-h46h-c93h, GHSA-gg4r-jv3p-qx3c,
+      GHSA-6972-9mcm-vhwj, GHSA-wr5m-5jph-8m96) have no vector here and clear
+      with the same pin.
+    upstream: none
+    added: 2026-11-11
 # Example of the shape (keep commented - an empty register is the goal state):
 #
 #   - package: some-parser
