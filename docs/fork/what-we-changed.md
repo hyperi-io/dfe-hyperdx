@@ -541,6 +541,9 @@ header check is what holds when a deployment authenticates some other way.
   source picker's Add, Edit and Manage actions. **`DBSearchPage.tsx`** spreads
   it after the three upstream props, one added line, so none shows while `team`
   is disabled. The API refuses the writes either way.
+- **`DBSearchPage.tsx`** gives the live tail refresh interval select an
+  `aria-label` matching its tooltip, one added line, so screen readers and
+  Playwright can name it. `forkDeltas.test.ts` pins the line.
 
 ## Config and bootstrap
 
