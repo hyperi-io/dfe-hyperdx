@@ -41,16 +41,14 @@ const render = async (select: ChartConfigWithOptDateRange['select']) =>
 
 // The materialized-column pass re-prints the select (`AVG`, a quoted root), so
 // the shapes are matched loosely.
-const cast = (fn: string, arg: string) =>
-  new RegExp(`${fn}\\(toString\\(\`?_json\`?\\.${arg}\\)\\)`);
-
 describe('chart aggregates on a native-JSON path', () => {
   it('skip non-numeric rows instead of counting them as 0', async () => {
     const sql = await render([
       { aggFn: 'avg', valueExpression: '_json.latency', aggCondition: '' },
     ]);
-    expect(sql).toMatch(/AVG\(toFloat64OrNull\(/i);
-    expect(sql).toMatch(cast('toFloat64OrNull', 'latency'));
+    expect(sql).toMatch(
+      /AVG\(toFloat64OrNull\(toString\(`?_json`?\.latency\)\)\)/i,
+    );
     expect(sql).not.toContain('toFloat64OrDefault');
   });
 
@@ -65,7 +63,7 @@ describe('chart aggregates on a native-JSON path', () => {
     ]);
     expect(sql).toContain('maxIf(');
     expect(sql).toMatch(
-      new RegExp(`${cast('toFloat64OrNull', 'latency').source} IS NOT NULL`),
+      /toFloat64OrNull\(toString\(`?_json`?\.latency\)\) IS NOT NULL/,
     );
     expect(sql).not.toContain('toFloat64OrDefault');
   });
