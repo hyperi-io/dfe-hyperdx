@@ -178,6 +178,8 @@ def fetch(url: str) -> bytes:
     if origin.geturl() not in GOOGLE:
         sys.exit(f"refusing to fetch {url}: not a Google Fonts HTTPS URL")
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    # The origin allowlist above is checked before this call.
+    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
     with urllib.request.urlopen(request, timeout=30) as response:
         return response.read()
 

@@ -59,12 +59,3 @@ accepted:
       held back. Declaring it again here would fork the value and let the two
       drift. The Dependabot equivalent has no preset mechanism, so
       .github/dependabot.yml carries a real `cooldown` block instead.
-
-  - rule: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
-    path: scripts/vendor-fonts.py
-    reason: >-
-      A developer-run script, never in the image. The dynamic URLs come from
-      Google's CSS, and fetch() exits before urllib sees any URL whose origin is
-      not https://fonts.googleapis.com or https://fonts.gstatic.com, so a
-      file:// or other-host URL cannot be opened. Pinned by
-      scripts/__tests__/test_vendor_fonts.py.
