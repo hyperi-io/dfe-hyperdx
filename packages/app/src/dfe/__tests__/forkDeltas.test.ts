@@ -87,6 +87,16 @@ describe('_app.tsx - route guard and font pin', () => {
   });
 });
 
+describe('fonts.ts - vendored fonts, no Google fetch at build', () => {
+  const fonts = read('src/fonts.ts');
+
+  it('takes its loaders from the fork, which uses next/font/local', () => {
+    expect(fonts).toContain("from '@/dfe/fonts'");
+    expect(fonts).not.toContain('next/font/google');
+    expect(read('src/dfe/fonts.ts')).toContain("from 'next/font/local'");
+  });
+});
+
 describe('DBDashboardPage.tsx - shipped dashboards are read-only', () => {
   const page = read('src/DBDashboardPage.tsx');
 

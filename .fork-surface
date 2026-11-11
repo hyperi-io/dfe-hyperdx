@@ -103,6 +103,9 @@ packages/app/src/components/DBRowTable.tsx
 packages/app/src/components/OnboardingModal.tsx
 packages/app/src/components/SearchInput/SearchWhereInput.tsx
 packages/app/src/config.ts
+# One line: the four font loaders come from dfe/fonts.ts, vendored, not
+# next/font/google - see docs/fork/what-we-changed.md.
+packages/app/src/fonts.ts
 packages/app/src/hooks/useRowWhere.tsx
 packages/app/src/layout.tsx
 packages/app/src/theme/ThemeProvider.tsx
