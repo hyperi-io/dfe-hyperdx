@@ -67,4 +67,5 @@ accepted:
       Google's CSS, and fetch() exits before urllib sees any URL whose origin is
       not https://fonts.googleapis.com or https://fonts.gstatic.com, so a
       file:// or other-host URL cannot be opened. Pinned by
-      scripts/__tests__/test_vendor_fonts.py.
+      scripts/__tests__/test_vendor_fonts.py. The `# nosemgrep` line above the
+      call is for hyperi-ci's Quality scan, which does not read this file.

@@ -22,6 +22,7 @@ import mongoose from 'mongoose';
 
 import * as config from '@/config';
 import { getSources } from '@/controllers/sources';
+import { seedFields } from '@/dfe/__tests__/engineMaterial';
 import { upsertEverywhere } from '@/dfe/controllers/dfe-sources';
 import {
   clearTeamSeedCache,
@@ -44,6 +45,7 @@ const material = {
   host: 'http://ch:8123',
   username: ORG,
   password: 'pw',
+  ...seedFields(false),
 };
 
 // Slow enough that every request reaches the store while the first is still seeding.

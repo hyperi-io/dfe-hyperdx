@@ -21,6 +21,7 @@ import mongoose from 'mongoose';
 
 import * as config from '@/config';
 import { getSources } from '@/controllers/sources';
+import { seedFields } from '@/dfe/__tests__/engineMaterial';
 import {
   clearTeamSeedCache,
   ensureOrgConnection,
@@ -40,6 +41,7 @@ const material = (username: string) => ({
   host: 'http://ch:8123',
   username,
   password: 'pw',
+  ...seedFields(username === PLATFORM),
 });
 
 const engineHands = (username: string) =>

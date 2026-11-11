@@ -21,6 +21,7 @@ import mongoose from 'mongoose';
 import request from 'supertest';
 
 import * as config from '@/config';
+import { seedFields } from '@/dfe/__tests__/engineMaterial';
 import {
   clearTeamSeedCache,
   ensureOrgConnection,
@@ -121,6 +122,7 @@ describe('a team connection ClickHouse refuses, through the real proxy', () => {
         host: upstreamUrl,
         username: ORG,
         password: 'pw-new',
+        ...seedFields(false),
       }),
     });
     const app = appFor(String(team));
@@ -139,7 +141,8 @@ describe('a team connection ClickHouse refuses, through the real proxy', () => {
     expect(answered.status).toBe(200);
 
     expect(keys).toEqual(['pw-old', 'pw-new']);
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    // One read to reconcile the team's sources, one to re-check the refusal.
+    expect(global.fetch).toHaveBeenCalledTimes(2);
     const stored = await Connection.findById(connection._id).select(
       '+password',
     );
