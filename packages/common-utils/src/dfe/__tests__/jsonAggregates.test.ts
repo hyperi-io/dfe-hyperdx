@@ -5,7 +5,11 @@
 import { parameterizedQueryToSql } from '@/clickhouse';
 import { Metadata } from '@/core/metadata';
 import { renderChartConfig } from '@/core/renderChartConfig';
-import { ChartConfigWithOptDateRange, DisplayType } from '@/types';
+import {
+  BuilderChartConfig,
+  ChartConfigWithOptDateRange,
+  DisplayType,
+} from '@/types';
 
 const metadata = {
   getColumns: jest.fn().mockResolvedValue([
@@ -22,7 +26,7 @@ const metadata = {
 } as unknown as Metadata;
 
 const config = (
-  select: ChartConfigWithOptDateRange['select'],
+  select: BuilderChartConfig['select'],
 ): ChartConfigWithOptDateRange => ({
   displayType: DisplayType.Table,
   connection: 'conn',
@@ -34,7 +38,7 @@ const config = (
   dateRange: [new Date('2026-11-01'), new Date('2026-11-02')],
 });
 
-const render = async (select: ChartConfigWithOptDateRange['select']) =>
+const render = async (select: BuilderChartConfig['select']) =>
   parameterizedQueryToSql(
     await renderChartConfig(config(select), metadata, []),
   );
