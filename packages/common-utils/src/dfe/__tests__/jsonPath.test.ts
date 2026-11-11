@@ -2,6 +2,7 @@ import {
   coerceJsonPathsInSql,
   dfeCoerceJsonPaths,
   dfeCoerceOrderBy,
+  dfeJsonAggregates,
   dfeJsonPathRoot,
   quoteJsonSegment,
   renderJsonNumberExpression,
@@ -179,9 +180,46 @@ describe('coerceJsonPathsInSql', () => {
   });
 
   it('coerces an unquoted dot path too', () => {
-    expect(coerceJsonPathsInSql('Body.user.name = 1', jsonColumns)).toBe(
-      'toString(Body.`user`.`name`) = 1',
+    expect(coerceJsonPathsInSql("Body.user.name = 'a'", jsonColumns)).toBe(
+      "toString(Body.`user`.`name`) = 'a'",
     );
+  });
+
+  // `toString(P) = 200` is NO_COMMON_TYPE (code 386) on every path, whatever
+  // its row types. Verified against ClickHouse 26.3.42.3.
+  describe('beside a number literal', () => {
+    const NUMBER = 'toFloat64OrNull(toString(Body.`status`))';
+
+    it.each([
+      ['Body.status = 200', `${NUMBER} = 200`],
+      ['Body.status == 200', `${NUMBER} == 200`],
+      ['Body.status != 200', `${NUMBER} != 200`],
+      ['Body.status <> 200', `${NUMBER} <> 200`],
+      ['Body.status > 10 AND x = 1', `${NUMBER} > 10 AND x = 1`],
+      ['Body.status >= -1.5', `${NUMBER} >= -1.5`],
+      ['Body.status < 1e3', `${NUMBER} < 1e3`],
+      ['200 = Body.status', `200 = ${NUMBER}`],
+      ['10 <= Body.status', `10 <= ${NUMBER}`],
+      ['Body.status BETWEEN 100 AND 500', `${NUMBER} BETWEEN 100 AND 500`],
+      ['Body.status not between 1 and 2', `${NUMBER} not between 1 and 2`],
+      ['Body.status.:Int64 > 10', `${NUMBER} > 10`],
+    ])('renders %s numerically', (sql, expected) => {
+      expect(coerceJsonPathsInSql(sql, jsonColumns)).toBe(expected);
+    });
+
+    it.each([
+      ["Body.status = '200'", "toString(Body.`status`) = '200'"],
+      // ClickHouse converts the set to String, so IN already works as text.
+      ['Body.status IN (200, 404)', 'toString(Body.`status`) IN (200, 404)'],
+      [
+        'Body.status = Body.code',
+        'toString(Body.`status`) = toString(Body.`code`)',
+      ],
+      ['Body.status = 0x1F', 'toString(Body.`status`) = 0x1F'],
+      ['x.y = 1 AND Body.s = x', 'x.y = 1 AND toString(Body.`s`) = x'],
+    ])('keeps %s as text', (sql, expected) => {
+      expect(coerceJsonPathsInSql(sql, jsonColumns)).toBe(expected);
+    });
   });
 
   it('leaves a non-JSON column alone', () => {
@@ -227,7 +265,10 @@ describe('coerceJsonPathsInSql', () => {
         'Body.a = 1 AND ResourceAttributes.b = 2',
         jsonColumns,
       ),
-    ).toBe('toString(Body.`a`) = 1 AND toString(ResourceAttributes.`b`) = 2');
+    ).toBe(
+      'toFloat64OrNull(toString(Body.`a`)) = 1 AND ' +
+        'toFloat64OrNull(toString(ResourceAttributes.`b`)) = 2',
+    );
   });
 
   it('is a no-op when the table has no JSON columns', () => {
@@ -307,7 +348,7 @@ describe('coerceJsonPathsInSql', () => {
 
     it('still coerces the same predicate written with spaces', () => {
       expect(coerceJsonPathsInSql('Body.status = 200', jsonColumns)).toBe(
-        'toString(Body.`status`) = 200',
+        'toFloat64OrNull(toString(Body.`status`)) = 200',
       );
     });
 
@@ -336,16 +377,16 @@ describe('coerceJsonPathsInSql', () => {
     });
 
     it('survives an escaped quote inside the literal', () => {
-      const sql = "ServiceName = 'it\\'s Body.user.name ' AND Body.a = 1";
+      const sql = "ServiceName = 'it\\'s Body.user.name ' AND Body.a = 'b'";
       expect(coerceJsonPathsInSql(sql, jsonColumns)).toBe(
-        "ServiceName = 'it\\'s Body.user.name ' AND toString(Body.`a`) = 1",
+        "ServiceName = 'it\\'s Body.user.name ' AND toString(Body.`a`) = 'b'",
       );
     });
 
     it('survives a doubled quote inside the literal', () => {
-      const sql = "ServiceName = 'it''s Body.user.name ' AND Body.a = 1";
+      const sql = "ServiceName = 'it''s Body.user.name ' AND Body.a = 'b'";
       expect(coerceJsonPathsInSql(sql, jsonColumns)).toBe(
-        "ServiceName = 'it''s Body.user.name ' AND toString(Body.`a`) = 1",
+        "ServiceName = 'it''s Body.user.name ' AND toString(Body.`a`) = 'b'",
       );
     });
 
@@ -367,9 +408,8 @@ describe('coerceJsonPathsInSql', () => {
     ).toBe("toString(Body.`port`) = '8080'");
   });
 
-  // Aggregate arguments need no pass of ours: aggFnExpr in renderChartConfig
-  // already emits toFloat64OrDefault(toString(expr)) around them. Pinned so a
-  // second coercion is not reintroduced if that wrapper is ever read as absent.
+  // aggFnExpr already wraps an aggregate argument in toString, and
+  // dfeJsonAggregates owns the outer cast, so this pass must not nest another.
   it('leaves an aggregate argument upstream already coerced', () => {
     const sql = 'avg(toFloat64OrDefault(toString(Body.latency_ms)))';
     expect(coerceJsonPathsInSql(sql, jsonColumns)).toBe(sql);
@@ -398,10 +438,10 @@ describe('dfeCoerceJsonPaths', () => {
   ])('coerces a sub-path on a column the schema reports as %s', async type => {
     await expect(
       dfeCoerceJsonPaths(
-        'Body.user.name = 1',
+        "Body.user.name = 'a'",
         args(reader([{ name: 'Body', type }])),
       ),
-    ).resolves.toBe('toString(Body.`user`.`name`) = 1');
+    ).resolves.toBe("toString(Body.`user`.`name`) = 'a'");
   });
 
   it('leaves a String column holding JSON alone', async () => {
@@ -425,6 +465,64 @@ describe('dfeCoerceJsonPaths', () => {
       dfeCoerceJsonPaths('Body.a = 1', { ...args(metadata), tableName: '' }),
     ).resolves.toBe('Body.a = 1');
     expect(metadata.getColumns).not.toHaveBeenCalled();
+  });
+});
+
+// toFloat64OrDefault counts a String, Array, Bool or missing row as 0: avg 7.75
+// against a true 23.25 on six mixed rows, ClickHouse 26.3.42.3.
+describe('dfeJsonAggregates', () => {
+  const config = {
+    from: { databaseName: 'db', tableName: 't' },
+    connection: 'conn',
+  };
+  const reader = () => ({
+    getColumns: jest.fn().mockResolvedValue([
+      { name: '_json', type: 'JSON(max_dynamic_paths=2048)' },
+      { name: 'Duration', type: 'Float64' },
+    ]),
+  });
+
+  it.each([
+    [
+      'avg(toFloat64OrDefault(toString(_json.latency)))',
+      'avg(toFloat64OrNull(toString(_json.latency)))',
+    ],
+    [
+      'avgIf(toFloat64OrDefault(toString(_json.`a.b`)), x AND ' +
+        'toFloat64OrDefault(toString(_json.`a.b`)) IS NOT NULL)',
+      'avgIf(toFloat64OrNull(toString(_json.`a.b`)), x AND ' +
+        'toFloat64OrNull(toString(_json.`a.b`)) IS NOT NULL)',
+    ],
+    [
+      'avg(toFloat64OrDefault(toString(Duration)))',
+      'avg(toFloat64OrDefault(toString(Duration)))',
+    ],
+    [
+      'avg(toFloat64OrDefault(toString(_json)))',
+      'avg(toFloat64OrDefault(toString(_json)))',
+    ],
+    [
+      'quantile(0.5)(toFloat64OrDefault(toString(Other.x)))',
+      'quantile(0.5)(toFloat64OrDefault(toString(Other.x)))',
+    ],
+  ])('rewrites %s', async (sql, expected) => {
+    await expect(dfeJsonAggregates(sql, config, reader())).resolves.toBe(
+      expected,
+    );
+  });
+
+  it('does not read the schema when there is no cast to rewrite', async () => {
+    const metadata = reader();
+    await dfeJsonAggregates('count()', config, metadata);
+    expect(metadata.getColumns).not.toHaveBeenCalled();
+  });
+
+  it('degrades to upstream cast when the schema cannot be read', async () => {
+    const sql = 'avg(toFloat64OrDefault(toString(_json.latency)))';
+    const metadata = {
+      getColumns: jest.fn().mockRejectedValue(new Error('clickhouse down')),
+    };
+    await expect(dfeJsonAggregates(sql, config, metadata)).resolves.toBe(sql);
   });
 });
 
