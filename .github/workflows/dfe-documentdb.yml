@@ -83,12 +83,15 @@ jobs:
       # MongoDB too: our lockfile carries @modelcontextprotocol/sdk 1.32.1 where
       # upstream's has 1.29.0, and its validation message lacks the text they
       # assert. Drop the pattern when either side moves.
+      # One upstream dashboard assertion expects undeclared filter keys to
+      # persist, which dfe/validated-request.ts strips by design.
       - name: Run the api integration suite
         env:
           SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
           SKIP:
             '^(?!.*(rejects a delta on a non-gauge metric|validate the
-            displayType allowlist)).*$'
+            displayType allowlist|persists a query-expression field sent on a
+            static filter)).*$'
         run:
           yarn workspace @hyperdx/api ci:int --shard="$SHARD"
           --testNamePattern="$SKIP"
