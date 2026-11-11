@@ -69,6 +69,7 @@ import {
   updateConnection,
 } from '@/controllers/connection';
 import { createSource, getSources, updateSource } from '@/controllers/sources';
+import { seedFields } from '@/dfe/__tests__/engineMaterial';
 import { seedDfeSources } from '@/dfe/controllers/dfe-sources';
 import {
   clearTeamSeedCache,
@@ -101,32 +102,12 @@ const mockError = logger.error as jest.Mock;
 const ORG = 'dfe_org_acme';
 const PLATFORM = 'dfe_query_reader';
 
-/** Where the engine says the seed tables live: `<database>.<prefix><id name>`. */
-function seedTables(database: string, prefix = '') {
-  const ids = [
-    'main',
-    'detection',
-    'otel_logs',
-    'otel_traces',
-    'otel_metrics_gauge',
-    'otel_metrics_sum',
-    'otel_metrics_histogram',
-    'otel_metrics_exponential_histogram',
-    'otel_metrics_summary',
-  ];
-  return {
-    database,
-    tables: Object.fromEntries(ids.map(id => [`data.${id}`, `${prefix}${id}`])),
-  };
-}
-
 const ORG_CONN = {
   name: 'acme',
   host: 'http://ch:8123',
   username: ORG,
   password: 'pw',
-  platform: false,
-  ...seedTables('dfe'),
+  ...seedFields(false),
 };
 
 beforeEach(() => {
@@ -168,8 +149,7 @@ const PLATFORM_CONN = {
   host: 'http://ch:8123',
   username: PLATFORM,
   password: 'pw',
-  platform: true,
-  ...seedTables('dfe'),
+  ...seedFields(true),
 };
 
 describe('ensureOrgConnection - the team identity', () => {
@@ -447,11 +427,11 @@ describe('ensureOrgConnection', () => {
   // DFE_ENGINE_CLICKHOUSE_DATA_DATABASE moves every table, so the seed must
   // follow the engine rather than assume `dfe`.
   test.each([
-    ['tenant', ORG, { ...ORG_CONN, ...seedTables('acme_data', 'x_') }],
+    ['tenant', ORG, { ...ORG_CONN, ...seedFields(false, 'acme_data', 'x_') }],
     [
       'platform',
       PLATFORM,
-      { ...PLATFORM_CONN, ...seedTables('acme_data', 'x_') },
+      { ...PLATFORM_CONN, ...seedFields(true, 'acme_data', 'x_') },
     ],
   ])(
     'a %s team seeds from the database and tables the engine names',

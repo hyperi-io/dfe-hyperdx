@@ -31,6 +31,7 @@ import request from 'supertest';
 
 import app from '@/api-app';
 import * as config from '@/config';
+import { seedFields } from '@/dfe/__tests__/engineMaterial';
 import { clearEngineSessionCache } from '@/dfe/controllers/engine-session';
 import { clearTeamSeedCache } from '@/dfe/controllers/org-connection';
 import Dashboard from '@/models/dashboard';
@@ -87,6 +88,7 @@ function engineAnswers(roles: Record<string, string>) {
           host: 'http://ch:8123',
           username: ORG,
           password: 'pw',
+          ...seedFields(false),
         });
       }
       return answer({}, 404);
