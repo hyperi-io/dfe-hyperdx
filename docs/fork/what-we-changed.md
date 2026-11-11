@@ -599,12 +599,14 @@ header check is what holds when a deployment authenticates some other way.
   `scripts/merge-lockfile.sh`
 - `packages/app/src/dfe/fonts.ts` + `dfe/fonts/` - the four UI fonts vendored as
   woff2 and loaded with `next/font/local`, so `next build` fetches nothing from
-  Google Fonts. The delta in **`packages/app/src/fonts.ts`** is its import line:
-  the loaders come from `@/dfe/fonts` instead of `next/font/google`, and
-  upstream's four calls stay byte-identical. Those calls are checked at build
-  time, so a weight or CSS variable upstream adds that we do not vendor fails
-  the build instead of rendering a synthesised weight. Sources and licences:
-  `dfe/fonts/README.md`. Pinned by `dfe/__tests__/forkDeltas.test.ts`.
+  Google Fonts. Every subset Google serves is vendored with its unicode-range,
+  and `scripts/vendor-fonts.py` regenerates the files and `dfe/fonts.ts`. The
+  delta in **`packages/app/src/fonts.ts`** is its import line: the loaders come
+  from `@/dfe/fonts` instead of `next/font/google`, and upstream's four calls
+  stay byte-identical. Those calls are checked at build time, so a weight or CSS
+  variable upstream adds that we do not vendor fails the build instead of
+  rendering a synthesised weight. Sources and licences: `dfe/fonts/README.md`.
+  Pinned by `dfe/__tests__/forkDeltas.test.ts`.
 - `knip.json` - added ignores so the pre-commit hook can run. Two classes, and
   neither is ours to fix. Upstream page components orphaned because this fork
   removed their routes (`pages/{benchmark,clickhouse,join-team,kubernetes,`
