@@ -1,4 +1,4 @@
-import { IBM_Plex_Mono, Inter, Roboto, Roboto_Mono } from 'next/font/google';
+import { IBM_Plex_Mono, Inter, Roboto, Roboto_Mono } from '@/dfe/fonts';
 
 export const ibmPlexMono = IBM_Plex_Mono({
   weight: ['300', '400', '500', '600', '700'],
