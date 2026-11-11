@@ -22,6 +22,7 @@ Usage::
 
 import re
 import sys
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,6 +36,8 @@ USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36"
 )
+
+GOOGLE = {"https://fonts.googleapis.com", "https://fonts.gstatic.com"}
 
 FACE = re.compile(
     r"/\* (?P<subset>[\w-]+) \*/\s*@font-face \{[^}]*?font-weight: (?P<weight>\d+);"
@@ -169,6 +172,11 @@ def render(families: list[tuple[Family, list[Subset]]]) -> str:
 
 
 def fetch(url: str) -> bytes:
+    # The font URLs come out of Google's CSS, so refuse anything but Google's
+    # two HTTPS hosts before urllib sees it (it would also open file://).
+    origin = urllib.parse.urlsplit(url)._replace(path="", query="", fragment="")
+    if origin.geturl() not in GOOGLE:
+        sys.exit(f"refusing to fetch {url}: not a Google Fonts HTTPS URL")
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=30) as response:
         return response.read()

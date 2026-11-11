@@ -59,6 +59,18 @@ class ParseCss(unittest.TestCase):
                 self.assertIs(vf.is_variable(vf.parse_css(css)[0]), variable)
 
 
+class Fetch(unittest.TestCase):
+    def test_refuses_anything_but_google_https(self) -> None:
+        for url in (
+            "file:///etc/passwd",
+            "http://fonts.gstatic.com/s/x.woff2",
+            "https://fonts.gstatic.com.evil.test/x.woff2",
+            "https://user@fonts.gstatic.com/x.woff2",
+        ):
+            with self.subTest(url=url), self.assertRaises(SystemExit):
+                vf.fetch(url)
+
+
 class Render(unittest.TestCase):
     def test_only_latin_carries_the_variable_and_preloads(self) -> None:
         cyrillic, latin = vf.parse_css(STATIC)
