@@ -2610,6 +2610,7 @@ function DBSearchPageContent() {
                 <Box style={{ width: 80, minWidth: 80, flexShrink: 0 }}>
                   <Select
                     size="xs"
+                    aria-label="Live tail refresh interval"
                     w="100%"
                     data={LIVE_TAIL_REFRESH_FREQUENCY_OPTIONS}
                     value={String(refreshFrequency)}

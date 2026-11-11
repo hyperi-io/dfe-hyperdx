@@ -153,6 +153,15 @@ describe('api.ts - a 4xx carries the response body reason', () => {
   });
 });
 
+describe('DBSearchPage.tsx - the live tail interval select has a name', () => {
+  it('labels the select its tooltip only shows sighted mouse users', () => {
+    const page = read('src/DBSearchPage.tsx');
+    expect(page).toMatch(
+      /size="xs"\s+aria-label="Live tail refresh interval"\s+w="100%"\s+data=\{LIVE_TAIL_REFRESH_FREQUENCY_OPTIONS\}/,
+    );
+  });
+});
+
 describe('DBSearchPage.tsx - no source admin actions in the picker', () => {
   it('spreads the fork props after the upstream ones so they win', () => {
     const page = read('src/DBSearchPage.tsx');
