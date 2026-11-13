@@ -34,7 +34,7 @@ Every in-place edit to an upstream file is catalogued in `.fork-surface` before 
 - [docs/decisions/](docs/decisions/README.md): the decisions behind the shape.
 - [HyperDX official documentation](https://www.hyperdx.io/docs) and [upstream HyperDX](https://github.com/hyperdxio/hyperdx).
 
-The suite's published docs are at <https://dfe.docs.hyperi.io>.
+The suite's published docs are at <https://dfe.docs.hyperi.io>, and this repository's pages at <https://dfe.docs.hyperi.io/dfe-ui/dfe-hyperdx/>.
 
 ## Help and contributing
 
