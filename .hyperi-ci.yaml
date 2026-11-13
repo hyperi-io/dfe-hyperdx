@@ -66,6 +66,13 @@ quality:
           'Q239 A: stream-utils/pause at v0.0.1 carries the MIT text in its
           Readme.md and no license field in package.json; pulled in by passport
           0.6.0'
+      - name: '@h6s/calendar'
+        version: '2.2.0'
+        licence: MIT
+        reason:
+          'Q242 A: toss/h6s is one MIT LICENSE for the monorepo and
+          packages/calendar/package.json has no license field; pulled in by
+          @clickhouse/click-ui 0.12.0'
 test:
   enabled: true
   coverage: true
