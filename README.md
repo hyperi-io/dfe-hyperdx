@@ -7,7 +7,7 @@ The DFE fork of HyperDX, the search and visualisation layer dfe-ui embeds.
 - One clean hop off upstream [HyperDX](https://github.com/hyperdxio/hyperdx): every DFE customisation lives here, carried as merged history and replayed by `git rerere` on each upstream sync.
 - The DFE 2.1 Discovery UI ported and merged, the ClickHouse JSON type supported, and the console integration: dfe-ui embeds this app chromeless, drives its theme and deep-links searches by source name.
 - Alerting is off here, because the DFE rules engine owns detection. dfe-engine writes the dashboard content the provisioner reads and serves each team's ClickHouse connection.
-- Security fixes are declared in `security/` and generated into the tree, so they never become merge-conflict surface for something upstream fixes in a fortnight.
+- Security pins and patches are declared in `security/` and generated into the tree. The sync workflow strips them before merging upstream and puts them back after, so they never become merge-conflict surface.
 
 Upstream's own docs (`AGENTS.md`, `agent_docs/`, `MCP.md`, `LOCAL.md`, `DEPLOY.md`) are left as upstream ships them. Ours are under [docs/](docs/README.md).
 

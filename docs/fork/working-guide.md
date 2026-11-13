@@ -26,7 +26,7 @@ yarn typecheck
 yarn test
 ```
 
-`yarn lint` and `yarn format:check` compute their scope from the merge-base with upstream (`scripts/dfe-lint-ours.mjs`), so they need the `upstream` remote and they never report on an untouched upstream file. `yarn lint:all`, `yarn lint:fix` and `yarn format` do NOT respect that boundary: each rewrites upstream files, which breaks every recorded rerere resolution in them.
+`yarn lint` and `yarn format:check` compute their scope from the merge-base with upstream (`scripts/dfe-lint-ours.mjs`), so they need the `upstream` remote and they never report on an untouched upstream file. `yarn lint:all` checks every package, upstream's included, and `yarn lint:fix` and `yarn format` rewrite upstream files, which breaks every recorded rerere resolution in them.
 
 ### What tends to bite
 
