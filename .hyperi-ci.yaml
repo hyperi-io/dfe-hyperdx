@@ -56,6 +56,16 @@ quality:
       reason:
         'renovate.json takes minimumReleaseAge from its org preset, which the
         rule cannot follow'
+  # Packages whose registry metadata carries no licence field. Each is pinned to the version read, so a new version is asked again.
+  dep_licenses:
+    overrides:
+      - name: pause
+        version: '0.0.1'
+        licence: MIT
+        reason:
+          'Q239 A: stream-utils/pause at v0.0.1 carries the MIT text in its
+          Readme.md and no license field in package.json; pulled in by passport
+          0.6.0'
 test:
   enabled: true
   coverage: true
