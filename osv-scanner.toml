@@ -14,6 +14,14 @@ id = "GHSA-968p-4wvh-cqc8"
 reason = "@babel/runtime: the flaw is in the wrapRegExp helper, and no shipped package calls it."
 
 [[IgnoredVulns]]
+id = "GHSA-jpvv-r467-5p4w"
+reason = "@hono/node-server: pulled in by @modelcontextprotocol/sdk, which the api mounts under Express at engine-only /mcp. Nothing here starts a hono node server, so its request path parsing never runs. Medium, below the override bar."
+
+[[IgnoredVulns]]
+id = "GHSA-qv5m-9pm6-hqp3"
+reason = "@hono/node-server: the same unused server. Its WebSocket upgrade handler never runs, so the ECONNRESET crash has no path. Medium, below the override bar."
+
+[[IgnoredVulns]]
 id = "GHSA-p498-v437-472g"
 reason = "@humanfs/node: eslint's file layer, not in the image."
 
