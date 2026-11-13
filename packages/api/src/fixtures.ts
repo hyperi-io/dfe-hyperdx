@@ -141,6 +141,13 @@ export const closeDB = async () => {
   if (!config.IS_CI) {
     throw new Error('ONLY execute this in CI env 😈 !!!');
   }
+  // connect() starts every model's index builds without awaiting them, and a
+  // drop that overtakes one deadlocks on DocumentDB (MongoDB serialises it).
+  await Promise.all(
+    Object.values(mongoose.models).map(model =>
+      model.init().catch(() => undefined),
+    ),
+  );
   await mongooseConnection.dropDatabase();
   await mongoose.disconnect();
 };

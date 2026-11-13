@@ -67,6 +67,9 @@ packages/api/src/api-app.ts
 # runs one team per deployment and reads the first; DFE runs one per org - see
 # docs/fork/what-we-changed.md.
 packages/api/src/controllers/team.ts
+# One await in closeDB: the drop waits for the index builds connect() started,
+# which deadlock against it on DocumentDB - see docs/fork/what-we-changed.md.
+packages/api/src/fixtures.ts
 packages/api/src/tasks/provisionDashboards/index.ts
 packages/app/.env.development
 packages/app/.storybook/public/mockServiceWorker.js
