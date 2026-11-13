@@ -20,6 +20,7 @@ whoever runs one.
 | Understand how the fork is held together | [design.md](design.md) |
 | Run an upstream sync | [sync-cycle.md](sync-cycle.md) |
 | Know how this ends | [leaving-upstream.md](leaving-upstream.md) |
+| Make a change without adding conflict surface | [working-guide.md](working-guide.md) |
 
 ---
 

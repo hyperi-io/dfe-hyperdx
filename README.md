@@ -1,100 +1,47 @@
 # dfe-hyperdx
 
-This repository is the DFE fork of upstream
-[HyperDX](https://github.com/hyperdxio/hyperdx), embedded in the DFE platform as
-its visualisation and search layer. It is the ACTIVE fork - all DFE
-customisation lives here, one clean hop off upstream.
+The DFE fork of HyperDX, the search and visualisation layer dfe-ui embeds.
 
-Our documentation lives in [docs/](docs/README.md). Upstream's own docs
-(`AGENTS.md`, `agent_docs/`, `MCP.md`, `LOCAL.md`, `DEPLOY.md`) are left exactly
-as upstream ships them.
+## What it does
 
-## Quick Links
+- One clean hop off upstream [HyperDX](https://github.com/hyperdxio/hyperdx): every DFE customisation lives here, carried as merged history and replayed by `git rerere` on each upstream sync.
+- The DFE 2.1 Discovery UI ported and merged, the ClickHouse JSON type supported, and the console integration: dfe-ui embeds this app chromeless, drives its theme and deep-links searches by source name.
+- Alerting is off here, because the DFE rules engine owns detection. dfe-engine writes the dashboard content the provisioner reads and serves each team's ClickHouse connection.
+- Security pins and patches are declared in `security/` and generated into the tree. The sync workflow strips them before merging upstream and puts them back after, so they never become merge-conflict surface.
 
-- [docs/](docs/README.md) - our documentation
-- [docs/fork/](docs/fork/README.md) - what we changed, and how we keep it in sync
-- [docs/architecture/](docs/architecture/README.md) - how the embedded system fits together
-- [HyperDX Official Documentation](https://www.hyperdx.io/docs)
-- [Upstream HyperDX](https://github.com/hyperdxio/hyperdx)
+Upstream's own docs (`AGENTS.md`, `agent_docs/`, `MCP.md`, `LOCAL.md`, `DEPLOY.md`) are left as upstream ships them. Ours are under [docs/](docs/README.md).
 
-## Maintenance Workflow (upstream sync)
-
-This is the single active fork - there is no second repo to hop through.
+## Quick start
 
 ```sh
 ./scripts/fork-setup.sh   # once per clone: rerere, the guard, the merge driver
-```
-
-`.github/workflows/upstream-sync.yml` runs the sync weekly and opens a PR, so
-the usual answer is to review that PR rather than merge by hand. `main` is never
-merged into directly.
-
-The cycle in one line: strip our temporary security layer, merge upstream, put
-the layer back on the NEW upstream, then gate on build and test. Our features
-are carried as merged history and replayed by `git rerere`; our security fixes
-are DECLARED and generated into the tree, so they never become merge-conflict
-surface for something upstream will fix in a fortnight anyway.
-
-Step by step, including how to add a security pin or patch:
-[docs/fork/sync-cycle.md](docs/fork/sync-cycle.md).
-
-### Running the app for development
-
-```sh
-# From root
-yarn # only necessary the first time or if there have been an update to the dependencies
+yarn                      # the first time, or after a dependency change
 yarn dev:dfe
 ```
 
-- Frontend will be available on <http://localhost:8080/>
-- External API docs will be available on <http://localhost:8000/api/v2/docs/> (if
-  swagger is enabled in environment variables)
+The frontend answers on <http://localhost:8080/>, and the external API docs on <http://localhost:8000/api/v2/docs/> when swagger is enabled in the environment.
 
-## Context
+## Keeping up with upstream
 
-### What this is
+`.github/workflows/upstream-sync.yml` runs the sync weekly and opens a PR, so the usual answer is to review that PR rather than merge by hand. `main` is never merged into directly. The cycle in one line: strip our temporary security layer, merge upstream, put the layer back on the new upstream, then gate on build and test. Step by step, including how to add a security pin or patch: [docs/fork/sync-cycle.md](docs/fork/sync-cycle.md).
 
-A long-lived FORK of [hyperdxio/hyperdx](https://github.com/hyperdxio/hyperdx), embedded in the DFE platform as its search and visualisation layer. It is NOT a standalone HyperDX deployment, and NOT where detection happens -- alerting is disabled here because the DFE rules engine owns it. The boundary that catches people: this repo merges upstream forever, so every edit to a pristine upstream file is permanent merge-conflict surface and has to be catalogued in `.fork-surface` before it lands.
+Every in-place edit to an upstream file is catalogued in `.fork-surface` before it lands, and `.githooks/fork-surface-check.py` enforces it. New code goes under `packages/{api,app}/src/dfe/`, which does not exist upstream.
 
-### Where things live
+## Documentation
 
-| Path | Holds |
-| --- | --- |
-| `packages/{api,app}/src/dfe/**`, `packages/app/src/theme/themes/dfe/**` | Our code. Zero conflict risk -- these paths do not exist upstream |
-| everything else under `packages/` | Upstream's. Leave it alone unless the change cannot go under `dfe/` |
-| `.fork-surface` | Every sanctioned in-place edit to an upstream file |
-| `.upstream-version` | Which upstream release we are built on, verified against `git merge-base` |
-| `docs/` | Ours: [fork](docs/fork/README.md), [architecture](docs/architecture/README.md), [decisions](docs/decisions/README.md) |
-| `scripts/`, `security/`, `.githooks/` | The sync machinery, the guard, and the generated security layer |
+- [docs/fork/](docs/fork/README.md): what we changed, how we keep it in sync, and [the working guide](docs/fork/working-guide.md).
+- [docs/architecture/](docs/architecture/README.md): how the embedded system fits together.
+- [docs/decisions/](docs/decisions/README.md): the decisions behind the shape.
+- [HyperDX official documentation](https://www.hyperdx.io/docs) and [upstream HyperDX](https://github.com/hyperdxio/hyperdx).
 
-### Commands that prove a change
+The suite's published docs are at <https://dfe.docs.hyperi.io>.
 
-```sh
-./scripts/fork-setup.sh                              # once per clone: rerere, the hook, the merge driver
-.githooks/fork-surface-check.py --base origin/main   # the guard, as CI runs it
-.githooks/fork-surface-check.py --drift              # has upstream moved under one of our deltas?
-yarn lint                                            # eslint, our files only
-yarn typecheck
-yarn test
-```
+## Help and contributing
 
-`yarn lint` and `yarn format:check` compute their scope from the merge-base with upstream (`scripts/dfe-lint-ours.mjs`), so they need the `upstream` remote and they never report on an untouched upstream file. `yarn lint:all`, `yarn lint:fix` and `yarn format` do NOT respect that boundary: each rewrites upstream files, which breaks every recorded rerere resolution in them.
+How to work in the fork, the commands that prove a change and what tends to bite are in [docs/fork/working-guide.md](docs/fork/working-guide.md). Upstream's [CONTRIBUTING.md](CONTRIBUTING.md) is theirs. A question that is not a bug goes in a new issue.
 
-### What tends to bite
+Open bugs: [this repo](https://github.com/hyperi-io/dfe-hyperdx/issues?q=is%3Aopen+is%3Aissue+type%3ABug+-label%3Abacklog+-label%3Anext-minor) | [whole DFE suite](https://github.com/search?type=issues&q=is%3Aopen+is%3Aissue+type%3ABug+-label%3Abacklog+-label%3Anext-minor+repo%3Ahyperi-io%2Fdfe-infra+repo%3Ahyperi-io%2Fdfe-docker+repo%3Ahyperi-io%2Fdfe-deploy+repo%3Ahyperi-io%2Fdfe-engine+repo%3Ahyperi-io%2Fdfe-loader+repo%3Ahyperi-io%2Fdfe-receiver+repo%3Ahyperi-io%2Fdfe-fetcher+repo%3Ahyperi-io%2Fdfe-archiver+repo%3Ahyperi-io%2Fdfe-transform-vrl+repo%3Ahyperi-io%2Fdfe-transform-vector+repo%3Ahyperi-io%2Fdfe-transform-elastic+repo%3Ahyperi-io%2Fdfe-ui+repo%3Ahyperi-io%2Fdfe-hyperdx+repo%3Ahyperi-io%2Fscalo-rs+repo%3Ahyperi-io%2Fscalo-py+repo%3Ahyperi-io%2Flogreducer+repo%3Ahyperi-io%2Fdfe-schemas+repo%3Ahyperi-io%2Fvector-vrl+repo%3Ahyperi-io%2Fculvert+repo%3Ahyperi-io%2Fdfe-clickhouse-rs+repo%3Ahyperi-io%2Ffactbook-rs)
 
-| Don't | Do | Why |
-| --- | --- | --- |
-| Rewrite an upstream function body | Put the logic under `dfe/`, keep upstream's signature, swap the identifier at the call site | A one-token call-site change leaves a one-line conflict; a rewritten body is a hand-resolve every sync, forever |
-| Put our assertions in an upstream test file | Put them in a `dfe/__tests__/` directory | Upstream churns test files harder than almost anything, and has no stake in our tests |
-| Commit a security fix in place | Declare it in `security/overrides.yaml` or `security/patches/` | Upstream ships their own within weeks, so a committed fix is permanent surface for something we expect to delete |
-| Run a repo-wide formatter or `lint --fix` to clear a gate | Exclude the path from the tool (`.prettierignore`, eslint ignores) | It rewrites lines we do not own, so the conflict preimage stops matching and rerere replays nothing |
-| Merge upstream onto `main` by hand | Review the PR `.github/workflows/upstream-sync.yml` opens | The workflow strips the security layer, lets rerere replay, then gates on build and test |
+## License
 
-### Where this sits
-
-| Repo | Direction and mechanism |
-| --- | --- |
-| `hyperdxio/hyperdx` | We merge it, forever. `.upstream-version` records which release, checked against `git merge-base` on every PR |
-| `dfe-infra` | Pins the image this repo builds by tag and digest, and the `dfe-hyperdx` chart hyperi-ci publishes from `dfe/deploy/contract.json` by digest (`versions.yaml`). A release here is a pin bump there |
-| `dfe-engine` | Writes the dashboard content this repo's provisioner reads on a cron, serves each team's ClickHouse connection, and is the service principal the admin lockdown trusts |
-| `dfe-ui` | Embeds this app chromeless (`embed=1`), drives its theme, and deep-links searches by source name |
+MIT, upstream HyperDX's licence, see [LICENSE](LICENSE).
