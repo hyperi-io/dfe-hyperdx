@@ -158,6 +158,26 @@ id = "GHSA-3g3m-2fjr-6pw4"
 reason = "glob: moderate, and the bypass needs a caller relying on an AbortSignal to bound a walk of a tree an attacker chose; every caller here (jest, rollup, rimraf, sucrase, swagger-jsdoc, the CLI) walks our own source or build tree."
 
 [[IgnoredVulns]]
+id = "GHSA-3gg2-335m-rxc6"
+reason = "hono 4.13.13: a dependency of @modelcontextprotocol/sdk 1.32.2 that only its shipped example honoWebStandardStreamableHttp.js imports. The api uses the SDK's Express adapter (packages/api/src/mcp/app.ts), so no hono app or css helper is constructed. Low, below the override bar."
+
+[[IgnoredVulns]]
+id = "GHSA-46wx-v44x-9hh2"
+reason = "hono 4.13.13: the same unused dependency of @modelcontextprotocol/sdk 1.32.2. No hono app runs, so its csrf() middleware never sees a request. Medium, below the override bar."
+
+[[IgnoredVulns]]
+id = "GHSA-4h7h-rv7c-7m2v"
+reason = "hono 4.13.13: the same unused dependency of @modelcontextprotocol/sdk 1.32.2. No hono app runs, so its validator('form') never parses a body. Medium, below the override bar."
+
+[[IgnoredVulns]]
+id = "GHSA-4m76-xfj5-7975"
+reason = "hono 4.13.13: the same unused dependency of @modelcontextprotocol/sdk 1.32.2. No hono app runs, so mount() never forwards a path. Medium, below the override bar."
+
+[[IgnoredVulns]]
+id = "GHSA-h7mg-cq63-vhpq"
+reason = "hono 4.13.13: the same unused dependency of @modelcontextprotocol/sdk 1.32.2. No hono app runs, so its RegExpRouter routes nothing. Medium, below the override bar."
+
+[[IgnoredVulns]]
 id = "GHSA-2883-xcg3-v3hh"
 reason = "js-yaml: 4.1.1 ships only under swagger-jsdoc, which api-app.ts mounts outside NODE_ENV=production, and the image runs production; 3.15.0 is @changesets and jest tooling."
 
@@ -279,10 +299,6 @@ reason = "protobufjs 6.11.6: the session recorder's copy; @hyperdx/browser ships
 
 [[IgnoredVulns]]
 id = "GHSA-wcpc-wj8m-hjx6"
-reason = "protobufjs 6.11.6: the session recorder's copy; @hyperdx/browser ships a prebuilt bundle, so it is never bundled, and the shipped 7.x copy is 7.6.6."
-
-[[IgnoredVulns]]
-id = "GHSA-xq3m-2v4x-88gg"
 reason = "protobufjs 6.11.6: the session recorder's copy; @hyperdx/browser ships a prebuilt bundle, so it is never bundled, and the shipped 7.x copy is 7.6.6."
 
 [[IgnoredVulns]]
