@@ -1,6 +1,6 @@
 # Working in the fork
 
-### What this is
+## What this is
 
 A long-lived FORK of [hyperdxio/hyperdx](https://github.com/hyperdxio/hyperdx),
 embedded in the DFE platform as its search and visualisation layer. It is NOT a
@@ -10,7 +10,7 @@ people: this repo merges upstream forever, so every edit to a pristine upstream
 file is permanent merge-conflict surface and has to be catalogued in
 `.fork-surface` before it lands.
 
-### Where things live
+## Where things live
 
 | Path                                                                    | Holds                                                                                                   |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -21,7 +21,7 @@ file is permanent merge-conflict surface and has to be catalogued in
 | `docs/`                                                                 | Ours: [fork](README.md), [architecture](../architecture/README.md), [decisions](../decisions/README.md) |
 | `scripts/`, `security/`, `.githooks/`                                   | The sync machinery, the guard, and the generated security layer                                         |
 
-### Commands that prove a change
+## Commands that prove a change
 
 ```sh
 ./scripts/fork-setup.sh                              # once per clone: rerere, the hook, the merge driver
@@ -38,7 +38,7 @@ they never report on an untouched upstream file. `yarn lint:all` checks every
 package, upstream's included, and `yarn lint:fix` and `yarn format` rewrite
 upstream files, which breaks every recorded rerere resolution in them.
 
-### What tends to bite
+## What tends to bite
 
 | Don't                                                     | Do                                                                                          | Why                                                                                                                 |
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -48,7 +48,7 @@ upstream files, which breaks every recorded rerere resolution in them.
 | Run a repo-wide formatter or `lint --fix` to clear a gate | Exclude the path from the tool (`.prettierignore`, eslint ignores)                          | It rewrites lines we do not own, so the conflict preimage stops matching and rerere replays nothing                 |
 | Merge upstream onto `main` by hand                        | Review the PR `.github/workflows/upstream-sync.yml` opens                                   | The workflow strips the security layer, lets rerere replay, then gates on build and test                            |
 
-### Where this sits
+## Where this sits
 
 | Repo                | Direction and mechanism                                                                                                                                                                            |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
