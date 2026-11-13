@@ -616,10 +616,10 @@ expects undeclared static-filter keys to persist is skipped by name in
   `dropDatabase`: every registered model's `init()`, which is the promise of the
   index builds `mongoose.connect` starts and never awaits. MongoDB serialises a
   drop behind those builds. DocumentDB runs them as concurrent Postgres index
-  builds and the drop deadlocks against one (`Could not acquire lock for
-  operation due to deadlock`), which failed the one-test
-  `models/__tests__/index.int.test.ts` on `dfe-documentdb.yml` twice in 60 runs.
-  A build error is swallowed there so a drop still happens, as before.
+  builds and the drop deadlocks against one
+  (`Could not acquire lock for operation due to deadlock`), which failed the
+  one-test `models/__tests__/index.int.test.ts` on `dfe-documentdb.yml` twice in
+  60 runs. A build error is swallowed there so a drop still happens, as before.
 - `.upstream-version` + `scripts/upstream-pin.py` - the upstream pin, verified
   against `git merge-base` rather than trusted
 - `security/overrides.yaml`, `security/patches/`,
