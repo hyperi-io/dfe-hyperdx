@@ -168,8 +168,8 @@ calls `networkInterfaces()` at `network.js:1302` and `:1518`.
 Where it stops: the source is host-local, not remote. Both advisories need the
 attacker to already control host network config - a NetworkManager profile name,
 or a `source` directive in `/etc/network/interfaces`. In a container that is
-root-equivalent already. So it only escalates privilege, and it does not
-clear the bar outright.
+root-equivalent already. So it only escalates privilege, and it does not clear
+the bar outright.
 
 Pinned anyway at `^5.31.7`, because upstream already carries systeminformation
 in `resolutions`, so we raise an existing key instead of adding conflict
@@ -1764,8 +1764,8 @@ fits the declared range.
 
 The lockfile is untouched, so osv-scanner reads the same rows either side and
 body-parser 1.20.6 still appears. A scanner reading the lockfile cannot see a
-code patch, which is normal for the patch layer: the row clears when
-the pin lands on 2026-10-29.
+code patch, which is normal for the patch layer: the row clears when the pin
+lands on 2026-10-29.
 
 `yarn npm audit` does not report body-parser at all, at any severity, while
 osv-scanner does. Worth remembering when the gate looks quiet.
