@@ -60,4 +60,4 @@ docs/
 ```
 
 Everything here is plain CommonMark plus fenced mermaid, so it renders on GitHub
-today and drops into a docs generator later without a rewrite.
+and drops into a docs generator without a rewrite.
