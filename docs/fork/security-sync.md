@@ -168,8 +168,8 @@ calls `networkInterfaces()` at `network.js:1302` and `:1518`.
 Where it stops: the source is host-local, not remote. Both advisories need the
 attacker to already control host network config - a NetworkManager profile name,
 or a `source` directive in `/etc/network/interfaces`. In a container that is
-root-equivalent already. So it is privilege-escalation shaped, and it does not
-clear the bar outright.
+root-equivalent already. So it only escalates privilege, and it does not clear
+the bar outright.
 
 Pinned anyway at `^5.31.7`, because upstream already carries systeminformation
 in `resolutions`, so we raise an existing key instead of adding conflict
@@ -332,7 +332,7 @@ than a config-level mute:
 | CodeQL, once enabled          | `// codeql[<rule-id>] -- <reason>`                                                                  |
 
 The `.hyperi-ci.yaml` `quality.ignore` block does this for semgrep, with a
-written reason per entry. Follow that shape.
+written reason per entry. Follow that format.
 
 ### Tooling warts found on the way
 
@@ -453,7 +453,7 @@ type-checks the mock properly, which is the point, and that is exactly why it
 fails: `createConnection` resolves a full mongoose `Document` - 50-plus methods
 
 - so `mockResolvedValue({ _id: someObjectId })` is rejected. Minting real
-  ObjectIds does not help; the Document shape is the blocker, not the id type.
+  ObjectIds does not help; the Document type is the blocker, not the id type.
 
 17 tsc errors, and no honest way through short of building real Documents in
 every fixture. The loose `x as jest.Mock` cast exists for that reason and the
@@ -684,7 +684,7 @@ bump to 6.16.0 is not free - express and body-parser would each be off their
 declared range. If a HIGH lands against the same qs code path, it IS reachable
 and it WILL clear the bar, and the fix is upstream's to make.
 
-### The rest, and the shape they fall into
+### The rest, and what they have in common
 
 `dependency.scope` from Dependabot got two wrong again in the same direction the
 2026-08-26 pass warned about - it reads the lockfile, not the image.
@@ -1658,7 +1658,7 @@ thrown uncaught. The mounts in `api-app.ts` run before routing, before
 reaching them needs no account. That clears THE BAR.
 
 No DFE client sends a compressed request body, which is what makes
-`inflate: false` the right shape rather than a behaviour change:
+`inflate: false` the right setting rather than a behaviour change:
 
 - The browser app sends none. `CompressionStream`, `Content-Encoding` and a
   compression library appear nowhere in `packages/app/src`, `packages/app/pages`
@@ -1764,8 +1764,8 @@ fits the declared range.
 
 The lockfile is untouched, so osv-scanner reads the same rows either side and
 body-parser 1.20.6 still appears. A scanner reading the lockfile cannot see a
-code patch, which is the normal shape for the patch layer: the row clears when
-the pin lands on 2026-10-29.
+code patch, which is normal for the patch layer: the row clears when the pin
+lands on 2026-10-29.
 
 `yarn npm audit` does not report body-parser at all, at any severity, while
 osv-scanner does. Worth remembering when the gate looks quiet.
@@ -2154,8 +2154,8 @@ After either, every cast throws
 `Object.prototype.toString.call is not a function` until the process restarts.
 
 Measured offline against the dashboard schema, with no database: 6.13.10 is
-polluted by the PATCH and the Mixed POST shapes, and 6.13.12 by neither.
-`dfe/__tests__/mongoose-inherited-keys.test.ts` runs the three shapes against
+polluted by the PATCH and the Mixed POST payloads, and 6.13.12 by neither.
+`dfe/__tests__/mongoose-inherited-keys.test.ts` runs the three payloads against
 the real models.
 
 Both routes take a console session, not the engine principal, and only the

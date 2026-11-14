@@ -24,7 +24,7 @@ whoever runs one.
 
 ---
 
-## The shape of it, in one diagram
+## What we own, in one diagram
 
 ```mermaid
 flowchart TB

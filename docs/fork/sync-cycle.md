@@ -3,7 +3,7 @@
 **The runbook.** How to move this fork onto a newer upstream HyperDX and keep
 our security fixes correct while doing it.
 
-Why the fork is shaped this way is [design.md](design.md); the catalogue of what
+Why the fork is built this way is [design.md](design.md). The catalogue of what
 we changed is [what-we-changed.md](what-we-changed.md). This file is the
 procedure.
 
@@ -175,10 +175,10 @@ sync is the worst possible moment to discover it.
 
 "In one direction only" is not pedantry. `git apply` searches outward from the
 hunk header, so a patch whose post-image already sits elsewhere in the file -- a
-second call site upstream ships in the safe shape -- reverse-applies THERE while
-the real target sits untouched. Such a patch reads as applied while the fix is
+second call site upstream ships already safe -- reverse-applies THERE while the
+real target sits untouched. Such a patch reads as applied while the fix is
 absent, and stripping it before a merge rewrites upstream's correct code into
-the vulnerable shape. The tools call that `ambiguous` and refuse it; the fix is
+the vulnerable code. The tools call that `ambiguous` and refuse it; the fix is
 to re-derive the patch against the current tree so it names one site.
 
 The same workflow runs the tooling's own test suites before any of the above:
@@ -352,8 +352,8 @@ cache does not prime you. Each has to see the conflict once.
 Prime a clone by doing an upstream merge by hand on a `sync/<tag>` branch,
 resolving each conflict, and running `git rerere` (or committing, which records
 the same thing). CI persists its own cache via actions/cache, so the first
-scheduled run after a new conflict shape files a drift issue and the run after
-that replays.
+scheduled run after a new conflict files a drift issue and the run after that
+replays.
 
 Use MERGE, not rebase-onto-upstream. This is a shared repo, and rerere replays
 either way.
@@ -496,7 +496,7 @@ surface, so no), or accepting the red check on sync PRs. Currently the last.
 
 ## Related
 
-- [design.md](design.md) - why the fork is shaped this way
+- [design.md](design.md) - why the fork is built this way
 - [what-we-changed.md](what-we-changed.md) - the change catalogue
 - [leaving-upstream.md](leaving-upstream.md) - how this ends
 - [../../security/patches/README.md](../../security/patches/README.md) - the

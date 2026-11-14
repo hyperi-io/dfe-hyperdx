@@ -53,7 +53,7 @@ full observability platform. Taken as a decision, never slid into by neglect.
 
 | Signal                            | Where to get it                                                                     | Argues for                                             |
 | --------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Delta size and shape              | `.githooks/fork-surface-check.py --audit`, [what-we-changed.md](what-we-changed.md) | shrinking -> B; growing into upstream's hot files -> C |
+| Delta size and files touched      | `.githooks/fork-surface-check.py --audit`, [what-we-changed.md](what-we-changed.md) | shrinking -> B; growing into upstream's hot files -> C |
 | Sync cost over time               | the measurement table in [sync-cycle.md](sync-cycle.md)                             | rising despite the ladder -> C                         |
 | Upstream velocity                 | `--drift` and the release cadence                                                   | slowing -> C cheaper, B less urgent                    |
 | What we would lose                | the package table in [../architecture/README.md](../architecture/README.md)         | more we do not maintain -> A or B                      |

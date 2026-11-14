@@ -9,7 +9,7 @@ the source of truth where this prose disagrees:
 - `.fork-surface` - every sanctioned in-place edit to an upstream file
 - `.upstream-version` - which upstream release we are built on
 
-Why the fork is shaped this way is [design.md](design.md). How to move it to a
+Why the fork is built this way is [design.md](design.md). How to move it to a
 newer upstream is [sync-cycle.md](sync-cycle.md).
 
 ---
@@ -325,7 +325,7 @@ expects undeclared static-filter keys to persist is skipped by name in
   with max/min and facet values in the plan, since all three are the same
   question.
 
-  Two shapes the seam must handle, both found by e2e and pinned by tests. A
+  Two cases the seam must handle, both found by e2e and pinned by tests. A
   trailing `.:String` is a TYPE, not a path segment: quoting it as one reads a
   JSON key literally named `:String`, empty for every row. And
   `findJsonExpressions` returns the ENCLOSING call's closing paren attached when
@@ -353,7 +353,7 @@ expects undeclared static-filter keys to persist is skipped by name in
   is unaffected - the WHERE seam coerces with `toString()`, which matches a
   superset - so this costs completeness, never correctness. Changing it means
   editing upstream's own `metadata.test.ts` assertions, which is the most
-  expensive delta shape we have.
+  expensive kind of delta we have.
 
   Lucene `>`, `>=`, `<`, `<=` and ranges on a JSON path are numeric. Upstream's
   serializer guards them as `dynamicType(P) in (...) and P`, and the seam gives
@@ -364,7 +364,7 @@ expects undeclared static-filter keys to persist is skipped by name in
   rendered `( BETWEEN 100 AND 500)`. **`queryParser.ts` (catalogued)** wraps its
   `getColumnForField` call in `dfeRangeField`, which hands over the same numeric
   operand its comparison operators already use: one import and one wrapped call.
-  `dfe/__tests__/luceneJsonRange.test.ts` pins the rendered SQL, and each shape
+  `dfe/__tests__/luceneJsonRange.test.ts` pins the rendered SQL, and each case
   was run on ClickHouse 26.9 against Int64, Float64 and String rows under one
   path.
 
@@ -558,7 +558,7 @@ expects undeclared static-filter keys to persist is skipped by name in
   import and one entry in the `ky.create` hooks. **`DBSearchPage.tsx`
   (catalogued)** passes its two saved-search error toasts through upstream's own
   `getApiErrorMessage`, which keeps the existing copy as the fallback.
-  `dfe/__tests__/apiErrorDetail.test.ts` covers the shapes and
+  `dfe/__tests__/apiErrorDetail.test.ts` covers the response bodies and
   `forkDeltas.test.ts` pins the wiring.
 - `DFE_SOURCE_ADMIN_PROPS` in `packages/app/src/dfe/embedFeatures.ts` - the
   source picker's Add, Edit and Manage actions. **`DBSearchPage.tsx`** spreads
@@ -734,7 +734,7 @@ carry a catalogued delta, both are listed in `.fork-surface`.
 - **`README.md`** - rewritten to describe this fork rather than the upstream
   product, plus a `## Context` section carrying the working guide the HyperI doc
   standard specifies. Its five subheadings are fixed and checked by
-  `hyperi-ai docs context --check`, so the shape cannot drift. The section is
+  `hyperi-ai docs context --check`, so the section cannot drift. The section is
   APPENDED at end of file, which is the cheapest placement we have: upstream's
   own README edits land above it, so an upstream change and ours rarely occupy
   the same hunk.
@@ -769,7 +769,7 @@ built on" for any release we have cut.
 
 ## Related
 
-- [design.md](design.md) - why the fork is shaped this way
+- [design.md](design.md) - why the fork is built this way
 - [sync-cycle.md](sync-cycle.md) - how to move to a newer upstream
 - [security-sync.md](security-sync.md) - what we have learnt about the inherited
   dependency tree, one dated section per sync
