@@ -4,14 +4,19 @@ HyperDX is DFE's **visualisation and search layer**: engineers use it to search
 logs, view traces, build dashboards and replay sessions. Detection, alerting and
 response are the DFE platform's job, not HyperDX's.
 
-Three things make our deployment different from stock HyperDX, and everything
+Five things make our deployment different from stock HyperDX, and everything
 else follows from them:
 
-- **Authentication is external.** Envoy terminates OIDC and passes identity
-  headers; HyperDX never sees a password.
-- **Authorization is the DFE engine's.** It is the policy decision point, and
+- Authentication is external: Envoy terminates OIDC and passes identity
+  headers, and HyperDX never sees a password.
+- Authorization is the DFE engine's: it is the policy decision point, and
   ClickHouse GRANTs enforce data access.
-- **MongoDB is replaced** by FerretDB over PostgreSQL.
+- MongoDB is replaced by DocumentDB, PostgreSQL with the DocumentDB
+  extensions and its Mongo wire-protocol gateway in one container
+  ([ADR 0006](../decisions/0006-documentdb-replaces-ferretdb.md)).
+- The DFE 2.1 discovery tool's enhancements are ported in.
+- Rules are generated from the query you are iterating in front of you.
+- JSON is native throughout, the ClickHouse JSON type included.
 
 What we changed to achieve that, and how we keep it working across upstream
 releases, is [the fork documentation](../fork/README.md).
