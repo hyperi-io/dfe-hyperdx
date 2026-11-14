@@ -121,8 +121,8 @@ file references names nothing imports, or declares parameters nobody passes.
 2.33.0 did exactly this to `OnboardingModal.tsx` - our import block, upstream's
 body, seven type errors. It survived six green workflow runs, because the gate
 built common-utils and ran jest, and jest transpiles rather than typechecks. The
-gate runs `yarn lint` (per package: eslint + `tsc --noEmit`) BEFORE the
-tests, which is the check that was missing.
+gate runs `yarn lint` (per package: eslint + `tsc --noEmit`) BEFORE the tests,
+which is the check that was missing.
 
 The general form is worth keeping in mind, because it bit twice in one week: a
 gate that does not exercise the thing it claims to cover reports success from an
