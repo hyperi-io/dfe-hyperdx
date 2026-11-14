@@ -39,7 +39,7 @@ sequenceDiagram
 `packages/api/src/dfe/routers/query-export.ts`, mounted at `/dfe` behind
 upstream's `isUserAuthenticated`.
 
-**Request** - `chartConfig` (the same `SavedChartConfig` shape a dashboard tile
+**Request** - `chartConfig` (the same `SavedChartConfig` a dashboard tile
 uses), plus optional `startTime` / `endTime` in milliseconds.
 
 **Response** fields:
