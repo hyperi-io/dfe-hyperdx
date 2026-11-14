@@ -121,7 +121,7 @@ file references names nothing imports, or declares parameters nobody passes.
 2.33.0 did exactly this to `OnboardingModal.tsx` - our import block, upstream's
 body, seven type errors. It survived six green workflow runs, because the gate
 built common-utils and ran jest, and jest transpiles rather than typechecks. The
-gate now runs `yarn lint` (per package: eslint + `tsc --noEmit`) BEFORE the
+gate runs `yarn lint` (per package: eslint + `tsc --noEmit`) BEFORE the
 tests, which is the check that was missing.
 
 The general form is worth keeping in mind, because it bit twice in one week: a
@@ -490,7 +490,7 @@ hardware (12 cores, 540G free), the same commit produces a 2.62GB
 again rather than trusting this paragraph if the failure ever looks different.
 
 The standing options are a self-hosted runner, a disk-reclaim step (upstream
-surface, so no), or accepting the red check on sync PRs. Currently the last.
+surface, so no), or accepting the red check on sync PRs. We take the last.
 
 ---
 

@@ -99,7 +99,7 @@ incident.io accepts only `firing` or `resolved` in `status`, so the default body
 maps the console's state onto those two and carries `{{status}}` in
 `metadata.hyperdx_status`, alongside the alert id, condition, evaluation window
 and the alert's tags (comma-separated, in `metadata.tags`). Only a firing and a
-resolve are delivered today, so that key reads `firing` or `resolved` as well.
+resolve are delivered, so that key reads `firing` or `resolved` as well.
 `metadata` is free-form, but incident.io only surfaces the keys its alert source
 is configured to parse.
 
