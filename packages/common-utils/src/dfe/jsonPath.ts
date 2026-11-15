@@ -347,8 +347,9 @@ function isNumericOperand(sql: string, index: number, expr: string): boolean {
   const before = sql.slice(0, index);
   const after = sql.slice(index + expr.length);
   const guard = /dynamicType\(([^()]*)\) in \([^()]*\) and $/.exec(before);
+  // No `?.`: the minified app build emitted it as an undefined helper call.
   return (
-    guard?.[1] === expr ||
+    (guard !== null && guard[1] === expr) ||
     NUMBER_AFTER.test(after) ||
     BETWEEN_NUMBERS.test(after) ||
     NUMBER_BEFORE.test(before)
