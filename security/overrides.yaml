@@ -41,30 +41,6 @@
 #   run `yarn install` to re-resolve, done.
 
 overrides:
-  - package: systeminformation
-    # Narrowest range that clears every open advisory against this package.
-    # ^ rather than >= so a major bump cannot arrive silently.
-    range: '^5.33.16'
-    advisory: GHSA-5xpp-75jx-m839
-    severity: high
-    vector: >-
-      The API instantiates @opentelemetry/host-metrics in
-      packages/api/src/index.ts, which calls systeminformation's networkStats()
-      on the metrics interval, and networkStats() calls the vulnerable
-      networkInterfaces() (systeminformation/lib/network.js:1302,1518). That
-      function interpolates an interfaces(5) source-directive path
-      (GHSA-5xpp-75jx-m839) and a NetworkManager connection profile name
-      (GHSA-hvx9-hwr7-wjj9) into a shell command, so anyone who can write host
-      network configuration gets code execution inside the API process rather
-      than only on the host. The sink is provably live; the source is
-      host-local, not remote. It is the only pin we carry with a live sink. The
-      floor is 5.33.16 for GHSA-3f7j-7jwc-fxfj, a Windows-only PowerShell
-      injection in services(). host-metrics requires only
-      systeminformation/lib/network (build/src/stats/si.js:22), so services() is
-      never loaded, and the image runs Linux. No live vector, taken because the
-      vulnerable copy ships and the fix is one generated line.
-    upstream: https://github.com/hyperdxio/hyperdx/issues/3306
-    added: 2026-08-26
   - package: follow-redirects
     range: '^1.16.2'
     advisory: GHSA-mrwp-f3q8-3g9p
@@ -101,32 +77,6 @@ overrides:
       stay inflating.
     upstream: none
     added: 2026-10-28
-  - package: mongoose
-    # 6.13.12 clears all five mongoose advisories osv-scanner reports, and
-    # stays on the 6.x line packages/api/package.json declares.
-    range: '^6.13.12'
-    advisory: GHSA-8332-j7wj-wjw4
-    severity: high
-    vector: >-
-      Any console user whose role is not viewer can stop every Mongo query in
-      the shared API process, for every org, until it restarts. PATCH
-      /dashboards/:id (routers/api/dashboards.ts:217) and PATCH
-      /saved-search/:id (routers/api/savedSearch.ts:84) pass req.body on to
-      findOneAndUpdate (controllers/dashboard.ts:248,
-      controllers/savedSearch.ts:63). zod-express-middleware's validateRequest
-      checks the body but does not replace it, and both schemas are non-strict
-      z.objects, so a top-level key such as `toString` arrives intact. Before
-      6.13.12, Query._mergeUpdate's utils.mergeClone recurses into the inherited
-      Object.prototype.toString, and a body of {"toString":{"call":1}} sets
-      Object.prototype.toString.call to 1. Every later cast then throws. POST
-      /dashboards does the same through the Mixed savedDateRange path with a
-      "savedDateRange.toString.call" key. Neither route needs the engine
-      principal, and a user may create the dashboard it then patches. The other
-      four advisories (GHSA-pcrw-h46h-c93h, GHSA-gg4r-jv3p-qx3c,
-      GHSA-6972-9mcm-vhwj, GHSA-wr5m-5jph-8m96) have no vector here and clear
-      with the same pin.
-    upstream: none
-    added: 2026-11-11
 # Example of the shape (keep commented - an empty register is the goal state):
 #
 #   - package: some-parser
