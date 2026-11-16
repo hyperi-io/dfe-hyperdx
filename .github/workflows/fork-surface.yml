@@ -87,3 +87,11 @@ jobs:
       # "which upstream is this built on?" as guesswork.
       - name: Check the upstream pin matches the tree
         run: scripts/upstream-pin.py --verify
+
+      # The merge driver takes upstream's lockfile whole, and `yarn install`
+      # re-derives only what package.json asks for, so a sync silently undoes
+      # every fix main held in the lockfile alone. Compared against where this
+      # branch joins main, so a branch cut before main moved on is not held to
+      # versions it never saw.
+      - name: Check the lockfile holds main's versions
+        run: scripts/lockfile-floor.py
