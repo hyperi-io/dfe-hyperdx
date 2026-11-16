@@ -178,6 +178,10 @@ id = "GHSA-2v37-7h3g-55p8"
 reason = "nanoid: postcss calls nanoid(6) with a fixed size, and the loop needs a custom generator of size zero."
 
 [[IgnoredVulns]]
+id = "GHSA-mfr8-8qww-v76h"
+reason = "next 16.4.3: the leak needs a 'use cache' function called through unstable_cache(), and no workspace source uses either, nor enables cacheComponents or dynamicIO."
+
+[[IgnoredVulns]]
 id = "GHSA-hrvq-x7jp-36xv"
 reason = "nx: root devDependency, not in the image; nx migrate runs only when someone invokes it."
 
