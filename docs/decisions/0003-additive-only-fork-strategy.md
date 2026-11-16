@@ -5,15 +5,10 @@ difficult, and what the actual upstream merge cost looks like.
 
 ## Per-Work-Stream Breakdown
 
-### FerretDB: Fully Additive
+### DocumentDB: Fully Additive
 
 Zero upstream application files modified. The only changes are to Docker Compose
 (infrastructure we own) and the `MONGO_URI` environment variable value.
-
-Prior art:
-[FerretDB published a guide](https://blog.ferretdb.io/full-stack-observability-hyperdx-ferretdb/)
-in July 2025 confirming HyperDX works with FerretDB as a drop-in MongoDB
-replacement, with zero compatibility issues reported.
 
 **Upstream merge cost: zero.**
 
@@ -101,7 +96,7 @@ upstream conflicts are unlikely but possible.
 
 | Work Stream       | Files modified in upstream | Truly additive?          | Merge cost per release          |
 | ----------------- | -------------------------- | ------------------------ | ------------------------------- |
-| FerretDB          | 0                          | Yes                      | Zero                            |
+| DocumentDB        | 0                          | Yes                      | Zero                            |
 | OIDC middleware   | 1 (`api-app.ts`)           | Effectively yes          | Trivial (one delimited block)   |
 | Casbin RBAC       | 0                          | Yes                      | Zero (review new routes)        |
 | Multi-tenancy     | 0                          | Yes (with review caveat) | Zero (review `getTeam()` calls) |

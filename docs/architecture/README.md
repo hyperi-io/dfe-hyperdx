@@ -13,7 +13,7 @@ else follows from them:
   ClickHouse GRANTs enforce data access.
 - MongoDB is replaced by DocumentDB, PostgreSQL with the DocumentDB
   extensions and its Mongo wire-protocol gateway in one container
-  ([ADR 0006](../decisions/0006-documentdb-replaces-ferretdb.md)).
+  ([ADR 0006](../decisions/0006-documentdb-document-store.md)).
 - The DFE 2.1 discovery tool's enhancements are ported in.
 - Rules are generated from the query you are iterating in front of you.
 - JSON is native throughout, the ClickHouse JSON type included.
@@ -46,15 +46,13 @@ flowchart TB
         end
 
         ch[(ClickHouse<br/>telemetry)]
-        ferret["FerretDB<br/>MongoDB wire protocol"]
-        pg[(PostgreSQL<br/>+ DocumentDB extension)]
+        docdb[("DocumentDB<br/>on CloudNativePG")]
     end
 
     sdks -->|OTLP| otel
     otel -->|writes| ch
     api <-->|OpAMP| otel
-    api <-->|MongoDB protocol| ferret
-    ferret -->|SQL| pg
+    api <-->|MongoDB protocol| docdb
     api -->|proxies queries| ch
     rules -->|queries| ch
     browser -->|HTTPS| envoy
@@ -71,7 +69,7 @@ flowchart TB
     class browser,oidc,sdks external
     class envoy,ui,rules ours
     class otel,api,app upstream
-    class ch,ferret,pg store
+    class ch,docdb store
 ```
 
 Colour encodes ownership: blue is DFE's, green is upstream HyperDX, orange is a
@@ -122,7 +120,7 @@ so they cannot collide with upstream. Compose files and collector config are in
 | Who is allowed to see what | [authorization.md](authorization.md) |
 | Which team a user lands on, its connection, the startup repair | [team-identity.md](team-identity.md) |
 | Turning a saved search into a DFE rule | [query-to-rule-pipeline.md](query-to-rule-pipeline.md) |
-| FerretDB, PostgreSQL, service topology | [deployment.md](deployment.md) |
+| DocumentDB, service topology | [deployment.md](deployment.md) |
 | Why we chose what we chose | [../decisions/](../decisions/) |
 
 ---

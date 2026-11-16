@@ -36,7 +36,7 @@ services in different languages.
 - **Removed:** `dfe/middleware/casbin-authz.ts`, `dfe/bootstrap.ts`,
   `rbac_with_tenants_model.conf`, and the `casbin` and `casbin-pg-adapter`
   dependencies.
-- PostgreSQL still backs FerretDB, but no longer holds policy.
+- PostgreSQL still backs DocumentDB, but no longer holds policy.
 - Authorization decisions and their audit trail move to the DFE engine, which is
   where the rest of DFE's policy already lives.
 - Data-layer enforcement is now the backstop: a ClickHouse user per team, with

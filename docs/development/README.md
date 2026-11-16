@@ -5,7 +5,7 @@ Running the fork locally.
 | Task | Doc |
 | --- | --- |
 | First run, DFE stack | [getting-started.md](getting-started.md) |
-| Docker Compose details, FerretDB and PostgreSQL locally | [docker-local.md](docker-local.md) |
+| Docker Compose details, DocumentDB locally | [docker-local.md](docker-local.md) |
 
 **Upstream's own developer documentation still applies and is left where
 upstream put it** - [`AGENTS.md`](../../AGENTS.md) for the monorepo, package

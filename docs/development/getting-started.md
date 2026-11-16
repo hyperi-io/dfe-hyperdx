@@ -12,22 +12,21 @@ cp .env.dfe.example .env.dfe
 ```
 
 `.env.dfe` is gitignored and required -- `yarn dev:dfe` fails without it. The
-example carries working dev values; the FerretDB credentials are the only
+example carries working dev values; the DocumentDB credentials are the only
 required keys.
 
-## Local dev: `yarn dev:dfe` runs the app locally on FerretDB
+## Local dev: `yarn dev:dfe` runs the app locally on DocumentDB
 
 ```bash
 yarn dev:dfe
 ```
 
-This starts FerretDB + PostgreSQL in Docker (replacing upstream MongoDB) and
-runs the API and Next.js app as local processes. It does NOT start ClickHouse or
-the otel collectors -- the DFE override scales them to zero because ingest
-belongs to the DFE stack (dfe-docker or a local ClickHouse you point
-`DEFAULT_CONNECTIONS` at, in `.env.dfe`). The collectors are never built either:
-the override pins the prebuilt image, so there is no from-source collector
-compile.
+This starts DocumentDB in Docker (replacing upstream MongoDB) and runs the API
+and Next.js app as local processes. It does NOT start ClickHouse or the otel
+collectors -- the DFE override scales them to zero because ingest belongs to the
+DFE stack (dfe-docker or a local ClickHouse you point `DEFAULT_CONNECTIONS` at,
+in `.env.dfe`). The collectors are never built either: the override pins the
+prebuilt image, so there is no from-source collector compile.
 
 ```mermaid
 flowchart LR
@@ -35,14 +34,14 @@ flowchart LR
         app["Next.js app"] -->|api proxy| api["API"]
     end
     subgraph docker["docker"]
-        ferret["FerretDB"] --> pg["PostgreSQL"]
+        docdb["DocumentDB"]
     end
-    api --> ferret
+    api --> docdb
     api -->|JWKS trust| engine["dfe-engine :8003"]
     api -.->|DEFAULT_CONNECTIONS| ch[(ClickHouse)]
 ```
 
-Ports are FIXED under `dev:dfe`: API 8000, app 8080, FerretDB 27017 (published
+Ports are FIXED under `dev:dfe`: API 8000, app 8080, DocumentDB 27017 (published
 on all interfaces), from `.env` defaults -- the per-worktree port slots and the
 :9900 dev portal belong to upstream `yarn dev`, not this flow, so two `dev:dfe`
 checkouts collide. To retarget by hand: the API and the app BOTH read `PORT`, so
@@ -86,27 +85,29 @@ The `app` service `MONGO_URI` is automatically overridden in
 
 The fork's default branch is the DFE branch and releases are cut from it.
 Upstream syncs are covered in [docs/fork/sync-cycle.md](../fork/sync-cycle.md);
-the full design (FerretDB, OIDC, additive-only strategy) is in
+the full design (DocumentDB, OIDC, additive-only strategy) is in
 [the architecture docs](../architecture/README.md).
 
-## FerretDB serves the MongoDB wire protocol
+## DocumentDB serves the MongoDB wire protocol
 
 - The MongoDB DATA LAYER is unchanged: Mongoose, connect-mongo and
-  passport-local-mongoose all work through FerretDB (the fork's additions live
+  passport-local-mongoose all work through DocumentDB (the fork's additions live
   mainly under `packages/*/src/dfe/`, guarded by the conflict-surface check in
   `.github/workflows/fork-surface.yml`)
-- FerretDB translates the wire protocol to SQL via PostgreSQL + DocumentDB
-- Port 27017 matches upstream MongoDB, so the existing `MONGO_URI` in
-  `.env.development` works as-is
+- DocumentDB is PostgreSQL with the DocumentDB extensions and a Mongo
+  wire-protocol gateway in one container
+- Port 27017 matches upstream MongoDB. The gateway needs TLS and a SCRAM-SHA-256
+  login, so `MONGO_URI` follows the example at the top of
+  `docker-compose.dfe.dev.yml`
 - Images are pinned in `docker-compose.dfe.dev.yml`
 
 ## Where config lives
 
-| File                            | Purpose                                    |
-| ------------------------------- | ------------------------------------------ |
-| `.env`                          | Upstream defaults (image versions, ports)  |
-| `.env.dfe.example`              | Template for `.env.dfe` -- copy first      |
-| `.env.dfe`                      | DFE overrides (auth mode, engine, conns)   |
-| `packages/api/.env.development` | Local API dev config                       |
-| `docker-compose.dfe.dev.yml`    | DFE dev compose override (FerretDB, no CH) |
-| `docker-compose.dfe.yml`        | DFE production compose override            |
+| File                            | Purpose                                      |
+| ------------------------------- | -------------------------------------------- |
+| `.env`                          | Upstream defaults (image versions, ports)    |
+| `.env.dfe.example`              | Template for `.env.dfe` -- copy first        |
+| `.env.dfe`                      | DFE overrides (auth mode, engine, conns)     |
+| `packages/api/.env.development` | Local API dev config                         |
+| `docker-compose.dfe.dev.yml`    | DFE dev compose override (DocumentDB, no CH) |
+| `docker-compose.dfe.yml`        | DFE production compose override              |

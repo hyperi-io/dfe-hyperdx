@@ -14,13 +14,13 @@ compose defines.
 ### Dev (fast iteration - app local, infra in docker)
 
 ```sh
-# 1. infra for the UI (ClickHouse + PostgreSQL + FerretDB), capped. Name the 3
+# 1. infra for the UI (ClickHouse + DocumentDB), capped. Name the 2
 #    services so compose does NOT build otel-collector/prometheus (heavy build,
 #    not needed to iterate on look/feel; the app's self-telemetry is non-fatal):
 docker compose --env-file .env.dfe \
   -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml \
   -f docker-compose.caps.yml -f docker-compose.caps.dev.yml \
-  up -d ch-server postgres ferretdb
+  up -d ch-server documentdb
 
 # 2. app + api locally (hot reload):
 yarn app:dev:dfe
@@ -49,13 +49,13 @@ request).
 Layer this file LAST. `docker compose up` (v2) honours
 `deploy.resources.limits.memory` outside swarm. Current ceilings:
 
-| Service                     | limit | reservation | k8s note                         |
-| --------------------------- | ----- | ----------- | -------------------------------- |
-| ch-server (ClickHouse)      | 2g    | 512m        | dominant; drop to 1536m if tight |
-| postgres (FerretDB backend) | 512m  | 128m        | DocumentDB ext                   |
-| ferretdb                    | 256m  | 64m         | Mongo-wire shim                  |
-| otel-collector / -json      | 300m  | -           | one each                         |
-| prometheus                  | 300m  | -           | dev metrics                      |
+| Service                | limit | reservation | k8s note                         |
+| ---------------------- | ----- | ----------- | -------------------------------- |
+| ch-server (ClickHouse) | 2g    | 512m        | dominant; drop to 1536m if tight |
+| otel-collector / -json | 300m  | -           | one each                         |
+| prometheus             | 300m  | -           | dev metrics                      |
+
+The `documentdb` service has no cap in this file.
 
 `otel-collector-json` and `prometheus` are capped in
 `docker-compose.caps.dev.yml`, because the prod image stack defines neither.
@@ -74,10 +74,9 @@ deploy.resources.reservations.memory -> containers[].resources.requests.memory
 The fork keeps upstream HyperDX code pristine; DFE behaviour is additive
 (`packages/*/src/dfe/**`) and driven by env + compose overrides:
 
-- **MongoDB -> FerretDB + PostgreSQL/DocumentDB.** `docker-compose.dfe*.yml`
-  replaces `db` (mongo) with `postgres` + `ferretdb`; the app speaks Mongo-wire
-  to FerretDB unchanged. k8s: a PostgreSQL (DocumentDB ext) + FerretDB
-  deployment.
+- **DocumentDB as the document store.** `docker-compose.dfe*.yml` replaces `db`
+  (mongo) with `documentdb`; the app speaks Mongo-wire to its gateway unchanged.
+  k8s: a DocumentDB cluster on CloudNativePG.
 - **OIDC trusted-header auth** (`DFE_AUTH_MODE=oidc-proxy`): an OIDC proxy
   (Envoy in k8s / oauth2-proxy in docker) terminates auth and forwards
   `x-forwarded-email` / `x-forwarded-groups`. Empty `DFE_AUTH_MODE` = upstream

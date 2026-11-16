@@ -14,7 +14,7 @@ for why.
 flowchart LR
     user(["user"]) --> envoy["Envoy<br/>authenticates"]
     envoy -->|identity headers| api["HyperDX API<br/>trusts the edge"]
-    api -->|scopes every query by team| mongo["FerretDB"]
+    api -->|scopes every query by team| mongo["DocumentDB"]
     api -->|team connection credentials| ch[(ClickHouse<br/>GRANTs enforce)]
     engine["DFE engine<br/>policy decision point"] -.->|owns policy| ch
 

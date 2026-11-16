@@ -6,14 +6,14 @@ and use the DFE platform's own rules engine and hunt workflows instead.
 
 ## What Gets Disabled
 
-| HyperDX Component                                    | Status                                                       | Reason                                                  |
-| ---------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------- |
-| `checkAlerts` background task                        | **Disabled** - do not start this process                     | DFE rules engine replaces it                            |
-| Alert model + AlertHistory model                     | **Unused** - data stays in FerretDB but is never written to  | No cleanup needed                                       |
-| `/alerts` API routes                                 | **Blocked by Casbin** - deny `alerts` resource for all roles | Or leave accessible read-only for viewing legacy alerts |
-| `/webhooks` API routes                               | **Blocked by Casbin** - deny `webhooks` resource             | DFE handles notifications                               |
-| Alert UI in frontend                                 | **Left in place** - just inaccessible via RBAC               | No frontend code changes                                |
-| Silence alert endpoint (`/ext/silence-alert/:token`) | **Dead** - no alerts fire, so no tokens are generated        | No change needed                                        |
+| HyperDX Component                                    | Status                                                        | Reason                                                  |
+| ---------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------- |
+| `checkAlerts` background task                        | **Disabled** - do not start this process                      | DFE rules engine replaces it                            |
+| Alert model + AlertHistory model                     | **Unused** - data stays in DocumentDB but is never written to | No cleanup needed                                       |
+| `/alerts` API routes                                 | **Blocked by Casbin** - deny `alerts` resource for all roles  | Or leave accessible read-only for viewing legacy alerts |
+| `/webhooks` API routes                               | **Blocked by Casbin** - deny `webhooks` resource              | DFE handles notifications                               |
+| Alert UI in frontend                                 | **Left in place** - just inaccessible via RBAC                | No frontend code changes                                |
+| Silence alert endpoint (`/ext/silence-alert/:token`) | **Dead** - no alerts fire, so no tokens are generated         | No change needed                                        |
 
 ## How to Disable
 
