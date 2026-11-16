@@ -2163,3 +2163,50 @@ Both routes take a console session, not the engine principal, and only the
 
 The lockfile moves mongoose 6.13.10 to 6.13.12 and mquery 4.0.3 to 4.0.4. Both
 were published 2026-10-23, past `npmMinimalAgeGate`.
+
+## 2026-11-16 - the 2.45.0 sync, re-resolved
+
+43 open Dependabot alerts after the 2.45.0 merge (#226): 1 critical, 18 high, 22
+moderate, 2 low. osv-scanner on main reported 48 rows across 16 packages. Every
+one is a fix main already held in the lockfile alone, which the merge driver
+replaced with 2.45.0's lockfile. Step 5 of the cycle (`yarn up -R` on what main
+had moved past upstream) was not run on the sync.
+
+```sh
+yarn up -R node-gyp tar socks express-rate-limit ip-address browserslist \
+  baseline-browser-mapping caniuse-lite brace-expansion \
+  @modelcontextprotocol/sdk @hono/node-server protobufjs \
+  postcss-selector-parser fast-copy terser-webpack-plugin \
+  serialize-javascript '@storybook/*' @vitest/mocker
+yarn up -R storybook
+```
+
+No `package.json` moves, the register is unchanged, and all four patches apply.
+
+| Alerts                           | Package                                             | Was                  | Now           | In the api production focus |
+| -------------------------------- | --------------------------------------------------- | -------------------- | ------------- | --------------------------- |
+| 17-25, 52, 55, 185, 211-214, 240 | tar, via node-gyp                                   | 6.2.1                | 7.5.22        | no                          |
+| 49, 154, 377                     | serialize-javascript, via terser-webpack-plugin 5.3 | 6.0.2                | gone          | no                          |
+| 115, 248, 296, 364, 413, 414     | ip-address                                          | 9.0.5, 10.1.0        | 10.7.6        | yes                         |
+| 279, 280                         | browserslist                                        | 4.28.0, 4.28.1       | 4.29.5        | no                          |
+| 285                              | baseline-browser-mapping                            | 2.8.30, 2.10.x       | 2.11.35       | no                          |
+| 300, 303, 306, 307               | brace-expansion                                     | 1.1.17, 2.1.3, 2.1.4 | 1.1.21, 2.1.7 | yes, 2.1.7                  |
+| 345, 415-418, 420                | @modelcontextprotocol/sdk                           | 1.29.0               | 1.32.2        | yes                         |
+| 421, 422                         | @hono/node-server                                   | 1.19.17              | 2.1.6         | yes                         |
+| 201                              | protobufjs                                          | 7.6.2                | 7.6.6         | yes                         |
+| 270, 384, 419                    | postcss-selector-parser                             | 6.1.4, 7.1.1         | 6.1.6, 7.1.8  | no                          |
+| 326                              | fast-copy, via pino-pretty                          | 3.0.2                | 3.1.0         | no                          |
+| 284, 361                         | @vitest/mocker, via Storybook 10.1.4                | 3.2.4                | gone          | no                          |
+
+The critical, alert 213 (GHSA-23hp-3jrh-7fpw), is the 2026-10-01 verdict again:
+`node-gyp@npm:latest` was locked back at 10.2.0, and nothing installs through it
+on Linux. The MCP SDK is the one reachable from a request. `/mcp` is mounted
+behind `requireServicePrincipal` (`api-app.ts:153`), so only the engine or an
+admin-minted key gets to its body handling. brace-expansion 5.0.8 stays, nx's
+exact pin, recorded 2026-10-01.
+
+The 22 `osv-scanner.toml` ignores the scanner reported unused are deleted.
+
+| Run                        | main                                    | This change     |
+| -------------------------- | --------------------------------------- | --------------- |
+| osv-scanner on `yarn.lock` | 48 rows, 16 packages, 20 unused ignores | no issues found |
