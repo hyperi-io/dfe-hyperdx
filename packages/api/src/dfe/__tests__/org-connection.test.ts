@@ -426,7 +426,7 @@ describe('ensureOrgConnection', () => {
     expect(select).not.toContain('_org_id');
     // The cap's summary row renders as its counts, a match as its UUID.
     expect(select).toContain(
-      "if(matched_uuid = toUUID('00000000-0000-0000-0000-000000000000'), concat('capped: ', toString(_json.matched), ' matched, ', toString(_json.written), ' written'), toString(matched_uuid)) AS match",
+      "if(matched_uuid = toUUID('00000000-0000-0000-0000-000000000000'), concat('capped: ', toString(_json.written), ' of ', toString(_json.matched), ' kept'), toString(matched_uuid)) AS match",
     );
   });
 

@@ -206,7 +206,7 @@ function huntsSource(connectionId: string, m: OrgConnection) {
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 export const HUNT_MATCH_COLUMN =
   `if(matched_uuid = toUUID('${NIL_UUID}'), ` +
-  "concat('capped: ', toString(_json.matched), ' matched, ', toString(_json.written), ' written'), " +
+  "concat('capped: ', toString(_json.written), ' of ', toString(_json.matched), ' kept'), " +
   'toString(matched_uuid)) AS match';
 
 // PLATFORM-ONLY otel sources. The three below (log/trace/metric) are seeded ONLY
