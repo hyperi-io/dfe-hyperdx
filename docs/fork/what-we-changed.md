@@ -63,22 +63,17 @@ flowchart LR
 
 ---
 
-## Data layer: MongoDB to FerretDB and PostgreSQL
+## Data layer: DocumentDB
 
-FerretDB speaks the MongoDB wire protocol over PostgreSQL with the DocumentDB
-extension. **HyperDX application code is unchanged** - Mongoose, `connect-mongo`
-and `passport-local-mongoose` all talk to FerretDB unmodified.
+DocumentDB is PostgreSQL with the DocumentDB extensions and a Mongo wire-protocol
+gateway in one container. **HyperDX application code is unchanged** - Mongoose,
+`connect-mongo` and `passport-local-mongoose` all talk to the gateway unmodified.
 
 - `docker-compose.dfe.yml` - production override, replaces `db` with
-  `postgres` + `ferretdb` and repoints `MONGO_URI`
+  `documentdb` and repoints `MONGO_URI`
 - `docker-compose.dfe.dev.yml` - dev override
 
-The FerretDB and postgres-documentdb images are a matched pair and must be
-pinned together. FerretDB 2.x requires the DocumentDB extension and **cannot be
-upgraded in place from 1.x** - it needs a clean install plus dump and restore.
-
-Rationale:
-[../decisions/0001-ferretdb-over-direct-postgres.md](../decisions/0001-ferretdb-over-direct-postgres.md).
+Rationale: [../decisions/0006-documentdb-document-store.md](../decisions/0006-documentdb-document-store.md).
 
 ## External OIDC authentication
 

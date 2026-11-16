@@ -38,14 +38,14 @@ flowchart TB
     MW --> E1 & E2 & E3 & E4
 
     R7 -->|Reverse proxy| CH[(ClickHouse)]
-    R2 & R3 & R4 & R5 & R6 & R9 --> FERRET["FerretDB -> PostgreSQL"]
+    R2 & R3 & R4 & R5 & R6 & R9 --> DOCDB["DocumentDB"]
     OPAMP <-->|Protobuf| COLLECTOR["OTel Collector"]
 ```
 
 Authentication:
 
 - **Internal routes** use Passport.js session auth (`passport-local-mongoose`)
-  with sessions stored via `connect-mongo` (through FerretDB -> PostgreSQL in
+  with sessions stored via `connect-mongo` (through DocumentDB in
   production). In local mode (single user), authentication is bypassed entirely.
 - **External API** (`/api/v2/*`) uses Bearer token auth matching the user's
   `accessKey` field. Rate limited to 100 req/min.
@@ -100,7 +100,7 @@ class, correlated to logs and traces via `rum.sessionId`.
 
 ## Dashboards
 
-Stored as documents (via FerretDB -> PostgreSQL) as a set of **tiles**, each
+Stored as documents (in DocumentDB) as a set of **tiles**, each
 containing a `SavedChartConfig` (source, display type, select/where/groupBy).
 Dashboard-level filters apply across all tiles. Import/export is supported via
 versioned JSON templates.
@@ -108,7 +108,7 @@ versioned JSON templates.
 ## Saved Searches
 
 Persisted queries referencing a Source, with Lucene or SQL `where` clauses.
-Stored as documents via FerretDB -> PostgreSQL. Displayed in the sidebar
+Stored as documents in DocumentDB. Displayed in the sidebar
 navigation grouped by tags. Can have associated alerts.
 
 ## AI Assistant

@@ -11,7 +11,7 @@ SQL expressions.
 
 ```mermaid
 flowchart LR
-    subgraph Configuration_FerretDB_PostgreSQL["Configuration (FerretDB -> PostgreSQL)"]
+    subgraph Configuration_DocumentDB["Configuration (DocumentDB)"]
         CONN["Connection<br/>host, user, password"]
         SRC_LOG["Source (Log)<br/>from: default.otel_logs"]
         SRC_TRACE["Source (Trace)<br/>from: default.otel_traces"]

@@ -96,7 +96,7 @@ flowchart LR
         HIST["Write AlertHistory"]
     end
 
-    DB["FerretDB -> PostgreSQL"] --> LOAD
+    DB["DocumentDB"] --> LOAD
     LOAD --> BUILD --> QUERY
     CH[(ClickHouse)] <--> QUERY
     QUERY --> EVAL
