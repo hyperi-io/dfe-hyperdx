@@ -729,8 +729,9 @@ expects undeclared static-filter keys to persist is skipped by name in
   upstream's `main.yml` ever ran it, and we do not carry that workflow, so knip
   is correct that nothing uses it. Ignored rather than deleted, on the same
   reasoning as the orphaned upstream pages: removing an upstream file buys a
-  delete/modify conflict on every sync until its path is in `.fork-deleted`. **`scripts/ci/ratchet.mjs` itself is
-  therefore not wired into our CI either** - run it by hand, or give it a home.
+  delete/modify conflict on every sync until its path is in `.fork-deleted`.
+  **`scripts/ci/ratchet.mjs` itself is therefore not wired into our CI
+  either** - run it by hand, or give it a home.
 - `scripts/ci/ratchet-baseline.json` - upstream's escape-hatch ratchet, our
   numbers. The baseline is the floor for `as any` and `eslint-disable` counts
   per package, so every hatch we remove has to be locked in here or the ratchet
