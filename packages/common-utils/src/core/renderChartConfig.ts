@@ -2001,7 +2001,7 @@ async function getComputedMetricColumns(
   const referenced = new Set(
     (
       groupByText
-        .replace(/'(?:[^'\\]|\\.)*('?)/g, (m, close) => (close ? "''" : m))
+        .replace(/'(?:[^'\\]|\\.)*'/g, "''")
         .match(
           /`(?:[^`\\]|``|\\.)+`|"(?:[^"\\]|""|\\.)+"|[\p{L}\p{N}_$.]+/gu,
         ) ?? []
@@ -2709,7 +2709,7 @@ function parseSortSpecificationItems(
 ): ParsedSortItem[] {
   const parsePieces = (text: string): ParsedSortItem[] =>
     splitAndTrimWithBracket(text).map(piece => {
-      const match = piece.match(/^([\s\S]*\S)\s+(ASC|DESC)$/i);
+      const match = piece.match(/^([\s\S]*?)\s+(ASC|DESC)$/i);
       if (match) {
         return {
           raw: piece,
