@@ -35,8 +35,8 @@ flowchart LR
     class docdb,ch store
 ```
 
-<!-- prettier-ignore -->
-*Figure 1. L4 Detail -- Authorization layers. The dashed box is outside dfe-hyperdx.* Up: [L3 Components -- HyperDX API](backend.md#structure).
+_Figure 1. L4 Detail -- Authorization layers. The dashed box is outside
+dfe-hyperdx._ Up: [L3 Components -- HyperDX API](backend.md#structure).
 
 Three layers, each doing one thing:
 

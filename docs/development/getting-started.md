@@ -64,8 +64,8 @@ flowchart LR
     class local,docker group
 ```
 
-<!-- prettier-ignore -->
-*Figure 1. L4 Detail -- Local dev with dev:dfe. Dotted arrows depend on settings in .env.dfe.* Up: [Development](README.md).
+_Figure 1. L4 Detail -- Local dev with dev:dfe. Dotted arrows depend on settings
+in .env.dfe._ Up: [Development](README.md).
 
 Ports are FIXED under `dev:dfe`: API 8000, app 8080, DocumentDB 27017 (published
 on all interfaces), from `.env` defaults. The per-worktree port slots and the

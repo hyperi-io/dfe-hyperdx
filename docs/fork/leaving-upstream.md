@@ -36,8 +36,8 @@ flowchart LR
     class c,own error
 ```
 
-<!-- prettier-ignore -->
-*Figure 1. L4 Detail -- Three ways out of the fork. Orange is the expensive way out.* Up: [The fork](README.md).
+_Figure 1. L4 Detail -- Three ways out of the fork. Orange is the expensive way
+out._ Up: [The fork](README.md).
 
 **A. Stay forked (today's position).** Cheapest while upstream moves fast and
 our delta is small. The cost is a recurring sync, and the whole apparatus in

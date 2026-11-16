@@ -61,8 +61,8 @@ flowchart LR
     class a4 error
 ```
 
-<!-- prettier-ignore -->
-*Figure 1. L4 Detail -- The cheapest-edit ladder. Orange is the costliest rung.* Up: [The fork](README.md).
+_Figure 1. L4 Detail -- The cheapest-edit ladder. Orange is the costliest rung._
+Up: [The fork](README.md).
 
 Rule 2 is the one worth internalising. Give your function the SAME SIGNATURE as
 upstream's and swap the identifier at the call site: `foo(a, b, c)` becomes

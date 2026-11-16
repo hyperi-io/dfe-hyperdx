@@ -36,8 +36,8 @@ flowchart LR
     class app group
 ```
 
-<!-- prettier-ignore -->
-*Figure 1. L3 Components -- HyperDX UI.* Up: [L2 Services -- dfe-hyperdx](README.md#the-system).
+_Figure 1. L3 Components -- HyperDX UI._ Up:
+[L2 Services -- dfe-hyperdx](README.md#the-system).
 
 The DFE embed turns on four features, search, saved searches, the chart explorer
 and dashboards (`packages/app/src/dfe/embedFeatures.ts`). A direct visit to

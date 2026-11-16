@@ -32,8 +32,8 @@ flowchart LR
     class app group
 ```
 
-<!-- prettier-ignore -->
-*Figure 1. L4 Detail -- Document store.* Up: [L3 Components -- HyperDX API](backend.md#structure).
+_Figure 1. L4 Detail -- Document store._ Up:
+[L3 Components -- HyperDX API](backend.md#structure).
 
 The gateway speaks the MongoDB wire protocol, so standard drivers and tools
 (`mongosh`, Compass, `mongodump`) connect with an ordinary `mongodb://` string.
@@ -89,8 +89,8 @@ flowchart LR
     class ch,docdb store
 ```
 
-<!-- prettier-ignore -->
-*Figure 2. L4 Detail -- Compose services. Dashed boxes are external.* Up: [Architecture](README.md).
+_Figure 2. L4 Detail -- Compose services. Dashed boxes are external._ Up:
+[Architecture](README.md).
 
 The `app` container bundles the Next.js frontend and the Express API. The
 collector runs in **OpAMP supervisor mode**: it takes its pipeline from the
