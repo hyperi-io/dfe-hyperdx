@@ -16,19 +16,19 @@ newer upstream is [sync-cycle.md](sync-cycle.md).
 
 ## Upstream base
 
-- **Upstream:** <https://github.com/hyperdxio/hyperdx> (HyperDX v2)
-- **Synced to:** whatever `.upstream-version` records. It is verified against
+- Upstream: <https://github.com/hyperdxio/hyperdx> (HyperDX v2)
+- Synced to whatever `.upstream-version` records. It is verified against
   `git merge-base` on every PR, so it cannot quietly drift from the tree.
-- **Imported at:** commit `e58f01d` "Initial HyperDX commit", a FLATTENED copy
-  of upstream rather than a continuation of their history.
-  `scripts/fork-setup.sh` grafts it back on so blame and ancestry work - see
+- Imported at commit `e58f01d` "Initial HyperDX commit", a FLATTENED copy of
+  upstream rather than a continuation of their history. `scripts/fork-setup.sh`
+  grafts it back on so blame and ancestry work - see
   [design.md](design.md#the-squashed-import-and-the-graft-that-repairs-it).
-- **The `upstream` remote is required.** Without it the conflict-surface guard
+- The `upstream` remote is required. Without it the conflict-surface guard
   cannot tell our files from upstream's, and the verify checks decline to run
   rather than pass on nothing.
-- **Our changes live on `main`**, merged in as feature PRs, not as a curated
-  patch series rebased on a tracked upstream. That is why an upstream bump is a
-  merge with real conflict surface rather than a clean rebase.
+- Our changes live on `main`, merged in as feature PRs, not as a curated patch
+  series rebased on a tracked upstream. That is why an upstream bump is a merge
+  with real conflict surface rather than a clean rebase.
 
 **RETIRED - the `.dfe[CHG]` shadow-copy convention.** Modified copies of
 upstream files were once kept beside the originals with a `.dfe[CHG]` suffix. It
@@ -41,25 +41,37 @@ must be catalogued in `.fork-surface`.
 
 ## Where our code lives
 
+Additive paths cannot conflict, and every in-place edit is listed in
+`.fork-surface`.
+
 ```mermaid
 flowchart LR
-    subgraph additive["Additive - cannot conflict"]
-        api["packages/api/src/dfe/**"]
-        app["packages/app/src/dfe/**"]
-        theme["packages/app/src/theme/themes/dfe/**"]
-        tools["scripts/, security/, .githooks/"]
-        docs["docs/"]
+    accTitle: L4 Detail -- Where our code lives
+    accDescr: Additive paths, the api, app and common-utils dfe directories, the dfe theme, the security and githooks directories, and our docs and scripts, cannot conflict. In-place edits to upstream files conflict on a sync, and .fork-surface lists every one.
+
+    subgraph additive["Additive, cannot conflict"]
+        direction TB
+        dfedirs["packages/*/src/dfe/**"]
+        theme["packages/app/src/<br/>theme/themes/dfe/**"]
+        tools["security/, .githooks/,<br/>our docs and scripts"]
     end
 
-    subgraph inplace["In place - catalogued, conflicts on sync"]
+    subgraph inplace["In place, conflicts on sync"]
+        direction TB
         surface[".fork-surface<br/>lists every one"]
     end
 
-    classDef safe fill:#009E73,stroke:#005f45,color:#ffffff
-    classDef risk fill:#E69F00,stroke:#8a6100,color:#000000
-    class api,app,theme,tools,docs safe
-    class surface risk
+    additive ~~~ inplace
+
+    classDef default fill:#F8FAFC,stroke:#64748B,stroke-width:1px,color:#0F172A
+    classDef error fill:#FBE3D6,stroke:#C2410C,stroke-width:1px,color:#4A1A05
+    classDef group fill:none,stroke:#64748B,stroke-width:1px,stroke-dasharray:2 4
+    class surface error
+    class additive,inplace group
 ```
+
+<!-- prettier-ignore -->
+*Figure 1. L4 Detail -- Where our code lives. Orange is the conflict surface.* Up: [The fork](README.md).
 
 ---
 
@@ -77,17 +89,18 @@ to the gateway unmodified.
 Rationale:
 [../decisions/0006-documentdb-document-store.md](../decisions/0006-documentdb-document-store.md).
 
-## External OIDC authentication
+## Engine token authentication
 
-The auth boundary moves out of HyperDX. Envoy (Kubernetes) or oauth2-proxy
-(docker) runs the OIDC flow and forwards identity headers. HyperDX trusts
-`x-oidc-*` / `X-Forwarded-*`, find-or-creates the user, and names its team after
-the ClickHouse identity the engine hands it. It falls back to upstream session
-auth when the headers are absent.
+The engine signs users in, and the API verifies the engine's ES384 token from
+the `dfe_token` cookie or a Bearer header against the engine's JWKS. It
+find-or-creates the user, and names its team after the ClickHouse identity the
+engine hands it. A request with no valid token falls through to upstream's
+session auth, which the route guards then refuse.
 
-- `packages/api/src/dfe/middleware/oidc-identity.ts` - trusted-header identity
 - `packages/api/src/dfe/middleware/jwt-verify.ts` - ES384 verification against
-  the provider JWKS
+  the engine's JWKS, and the mode switch
+- `packages/api/src/dfe/middleware/oidc-identity.ts` - the dev-only `header-dev`
+  path, which trusts identity headers unverified
 - `packages/api/src/dfe/controllers/user-provisioning.ts` - JIT user creation
 - `packages/api/src/dfe/controllers/team-provisioning.ts` - find-or-create the
   team by name
@@ -95,7 +108,8 @@ auth when the headers are absent.
   a session: the team (its ClickHouse identity) and the dashboard role
 - `packages/api/src/dfe/middleware/legacy-auth-lockdown.ts` - 404s HyperDX's own
   password login, registration and invite-acceptance routes in OIDC mode
-- `packages/api/src/api-app.ts` - wires both middlewares behind `AUTH_MODE`
+- `packages/api/src/api-app.ts` - registers the identity middleware and the
+  legacy-auth lockdown in one block guarded by `isDfeEnabled` (`DFE_AUTH_MODE`)
 
 Detail:
 [../architecture/oidc-authentication.md](../architecture/oidc-authentication.md).
@@ -114,8 +128,8 @@ expression, `findOne({})` to `findOne({ _id: id })`.
 `dfe/__tests__/team-scope.int.test.ts` seeds two teams and fails without it.
 
 Authorization is owned by the DFE engine as the policy decision point, and
-enforced at the data layer by ClickHouse GRANTs. HyperDX trusts the identity
-injected at the edge.
+enforced at the data layer by ClickHouse GRANTs. HyperDX verifies the engine's
+token itself rather than trusting a header.
 
 Rationale:
 [../decisions/0004-casbin-removed.md](../decisions/0004-casbin-removed.md).
@@ -174,8 +188,8 @@ or team.
 
 **`requireDfeMode`** takes a DFE-only router out of the app when `DFE_AUTH_MODE`
 is unset - `next('router')`, so the request 404s as it would upstream.
-`dfe/routers/shipped-dashboards.ts` mounts it, inside our own router rather than
-at the `api-app.ts` mount, which keeps the gate off the upstream file.
+`dfe/routers/shipped-dashboards.ts` mounts it, inside our router rather than at
+the `api-app.ts` mount, which keeps the gate off the upstream file.
 
 **Only `admin` and `owner` change what the whole team sees
 (`dfe/middleware/role-claim.ts`).** Deleting or restoring a shipped dashboard
@@ -183,14 +197,14 @@ changes it for every member. `jwt-verify.ts` takes the role from the engine's
 `hyperdx_role` on `GET /api/v1/auth/me`, cached for 30 seconds, and falls back
 to the token's `role` claim for an engine that sends none. The check is gated on
 the role's PRESENCE, so a session with none keeps team membership as the whole
-authorisation; header-dev mode sets none, so local dev is unchanged.
+authorisation. header-dev mode sets none, so local dev is unchanged.
 
 **The engine's `viewer` role is read-only (`refuseReadOnlyWrites`).** A team is
 one ClickHouse identity, so a viewer shares its team with accounts that write,
 and HyperDX routes check team membership alone. `dfeIdentityMiddleware` runs the
 gate once the identity is known, so it covers every route, ones upstream adds
 included. A `viewer` gets 403 on any non-read request outside the query proxy,
-PromQL, the chart assistant, its own favourites and profile, and the
+PromQL, the chart assistant, its favourites and profile, and the
 engine-authorised SQL export and rule creation.
 
 **A read-only session is not offered Save, Update or Create Rule
@@ -217,12 +231,12 @@ allowed to set, so a hostile page could aim one at
 The console's button sends the header.
 
 It is the second layer, not the only one. dfe-ui plants the engine token in the
-`dfe_token` cookie from its own proxy (`apps/dfe-core-ui/src/proxy.ts`):
-`HttpOnly`, `Path=/`, `SameSite=Lax`, `Secure` whenever the UI is served over
-https, `Domain` set to `DFE_COOKIE_DOMAIN` so the cookie reaches the embedded
-HyperDX subdomain, and `Max-Age` from the token's own expiry. `SameSite=Lax`
-already keeps that cookie off a cross-site POST, so the exposure was thin; the
-header check is what holds when a deployment authenticates some other way.
+`dfe_token` cookie from its proxy (`apps/dfe-core-ui/src/proxy.ts`): `HttpOnly`,
+`Path=/`, `SameSite=Lax`, `Secure` whenever the UI is served over https,
+`Domain` set to `DFE_COOKIE_DOMAIN` so the cookie reaches the embedded HyperDX
+subdomain, and `Max-Age` from the token's expiry. `SameSite=Lax` already keeps
+that cookie off a cross-site POST, so the exposure was thin. The header check is
+what holds when a deployment authenticates some other way.
 
 ## Request validation
 
@@ -245,12 +259,12 @@ expects undeclared static-filter keys to persist is skipped by name in
 - `packages/api/src/dfe/controllers/org-connection.ts` - a team holds ONLY one
   connection, as the ClickHouse user it is named after, fetched from the engine
   and seeded on any request that finds none, plus its seed sources. `main` and
-  `hunts` for every team (org-fenced by their row policies); `otel_logs`,
+  `hunts` for every team (org-fenced by their row policies), and `otel_logs`,
   `otel_traces`, `otel_metrics` and `clickhouse_system` for the platform team
-  alone, since operator telemetry and ClickHouse's own `system` database must
-  never reach an org_viewer. That source set is also the RBAC fence for the
-  pre-canned dashboards - see the provisioner note below. Seeding a NEW team
-  also runs `syncDashboards` for it when `DASHBOARD_PROVISIONER_DIR` is set: the
+  alone, since operator telemetry and ClickHouse's `system` database must never
+  reach an org_viewer. That source set is also the RBAC fence for the pre-canned
+  dashboards - see the provisioner note below. Seeding a NEW team also runs
+  `syncDashboards` for it when `DASHBOARD_PROVISIONER_DIR` is set: the
   provisioner cron fires once a minute with no run at start, so the page's first
   `GET /dashboards`, a second after the team is created, saw `[]` and the SPA
   cached it until a reload. Every request reads the team's connections, so a
@@ -283,7 +297,7 @@ expects undeclared static-filter keys to persist is skipped by name in
   Keep our delta invisible to them.
 - `packages/app/src/dfe/clickhouseJsonPath.ts` - native ClickHouse JSON columns.
   `col['k']` on a JSON column is `arrayElement`, which ClickHouse rejects, so we
-  emit `JSONExtractString`; a JSON sub-path yields `Dynamic`, which
+  emit `JSONExtractString`. A JSON sub-path yields `Dynamic`, which
   `JSONExtract*` also rejects, so that ONE case is wrapped in `toString()`.
   Narrow by design - wrapping unconditionally changed the SQL for String and Map
   columns too.
@@ -296,11 +310,12 @@ expects undeclared static-filter keys to persist is skipped by name in
 - `packages/common-utils/src/dfe/jsonPath.ts` - native ClickHouse JSON for
   charts and filters. A JSON sub-path is `Dynamic`, which ClickHouse refuses in
   `IN`, aggregates, `GROUP BY` and `ORDER BY`, so it needs an explicit coercion.
-  All the logic is here; **`core/renderChartConfig.ts` (catalogued)** carries
-  four added calls and nothing else - one in `renderWhereExpressionStr`, the
-  seam every SQL filter already passes through, one in `renderSelectList`'s
-  raw-string early return, which `renderSelect` and `renderGroupBy` BOTH feed,
-  so the SELECT list and the GROUP BY key cannot disagree, one wrapping the
+  All the logic is here. **`core/renderChartConfig.ts` (catalogued)** has five
+  added calls and nothing else - one in `renderWhereExpressionStr`, the function
+  every SQL filter passes through, one in `renderSelectList`'s raw-string early
+  return, which `renderSelect` and `renderGroupBy` BOTH feed, so the SELECT list
+  and the GROUP BY key cannot disagree, one on the group-by columns in
+  `renderSeriesLimitCte`, so its tuple matches that GROUP BY, one wrapping the
   `renderOrderBy` argument, and `dfeJsonAggregates` after `renderSelectList`
   builds each aggregate. Coercion is `toString()`, NOT the `.:String` sub-column
   upstream #2549 proposes - see the module header for the measurement that rules
@@ -314,7 +329,7 @@ expects undeclared static-filter keys to persist is skipped by name in
   before the materialized-column pass re-prints the SQL. Editing the cast in
   `aggFnExpr` itself was rejected: it has no column metadata, so the change
   would hit every column and move about 170 upstream assertions and snapshots.
-  Pinned end to end by `dfe/__tests__/jsonAggregates.test.ts`.
+  Pinned from config to rendered SQL by `dfe/__tests__/jsonAggregates.test.ts`.
 
   ORDER BY was left alone until 2026-08-26 and now coerces via
   `dfeCoerceOrderBy`, which walks both the string and the `valueExpression[]`
@@ -324,13 +339,12 @@ expects undeclared static-filter keys to persist is skipped by name in
   It now sorts, but `toString` sorts lexically - "99.5" above "1000.25". Sorting
   a numeric JSON path correctly needs the path's concrete TYPE, and
   `getJSONKeys` keeps only `typeArr[0]`, which for a mixed-type path is whatever
-  ClickHouse happened to list first. That decision is still open and is tracked
-  with max/min and facet values in the plan, since all three are the same
-  question.
+  ClickHouse happened to list first. That decision is open, along with max/min
+  and facet values, since all three are the same question.
 
-  Two cases the seam must handle, both found by e2e and pinned by tests. A
-  trailing `.:String` is a TYPE, not a path segment: quoting it as one reads a
-  JSON key literally named `:String`, empty for every row. And
+  Two cases the WHERE coercion must handle, both found by e2e and pinned by
+  tests. A trailing `.:String` is a TYPE, not a path segment: quoting it as one
+  reads a JSON key literally named `:String`, empty for every row. And
   `findJsonExpressions` returns the ENCLOSING call's closing paren attached when
   a path ends in a type specifier, so consuming it unbalances the aggregate
   around it - a syntax error that fails the whole facet batch and empties every
@@ -353,17 +367,17 @@ expects undeclared static-filter keys to persist is skipped by name in
 
   Facet VALUES still render through upstream's `.:String`, so a path storing a
   non-String type in some rows lists an incomplete value set. Selecting a value
-  is unaffected - the WHERE seam coerces with `toString()`, which matches a
+  is unaffected - the WHERE coercion uses `toString()`, which matches a
   superset - so this costs completeness, never correctness. Changing it means
   editing upstream's own `metadata.test.ts` assertions, which is the most
   expensive kind of delta we have.
 
   Lucene `>`, `>=`, `<`, `<=` and ranges on a JSON path are numeric. Upstream's
-  serializer guards them as `dynamicType(P) in (...) and P`, and the seam gives
-  that operand `toFloat64OrNull(toString(P))` rather than `toString(P)`: a text
-  operand compares lexically, so `> '100'` matched 50 and 99, and a text BETWEEN
-  against numbers fails with NO_COMMON_TYPE. Upstream's `range()` also read
-  `column`, which is empty for a JSON path, so `_json.bytes:[100 TO 500]`
+  serializer guards them as `dynamicType(P) in (...) and P`, and our coercion
+  gives that operand `toFloat64OrNull(toString(P))` rather than `toString(P)`: a
+  text operand compares lexically, so `> '100'` matched 50 and 99, and a text
+  BETWEEN against numbers fails with NO_COMMON_TYPE. Upstream's `range()` also
+  read `column`, which is empty for a JSON path, so `_json.bytes:[100 TO 500]`
   rendered `( BETWEEN 100 AND 500)`. **`queryParser.ts` (catalogued)** wraps its
   `getColumnForField` call in `dfeRangeField`, which hands over the same numeric
   operand its comparison operators already use: one import and one wrapped call.
@@ -385,19 +399,19 @@ expects undeclared static-filter keys to persist is skipped by name in
   test files to accommodate the rebrand. Mirrors
   `packages/api/jest.dfe.config.js`. The setup file is loaded by the jest config
   rather than compiled, so no tsconfig project covers it and typed linting
-  cannot parse it; **`packages/app/eslint.config.mjs`** carries one added
-  `ignores` entry for it, beside upstream's own `global-setup.js` line. The env
-  pin reaches the CHART palette and `getTheme`'s fallback too, because both
-  resolve an unmatched brand to the configured `DEFAULT_THEME`:
-  `detectActiveTheme` in **`src/utils.ts`** for a document carrying no theme
-  class, and `getTheme` in **`src/theme/index.ts`** for an unknown name. A DFE
-  deployment, where `NEXT_PUBLIC_THEME` is unset or `dfe`, resolves both to
-  `dfe` as before, and upstream's three theme assertions pass unedited.
+  cannot parse it. **`packages/app/eslint.config.mjs`** has one added `ignores`
+  entry for it, beside upstream's own `global-setup.js` line. The env pin
+  reaches the CHART palette and `getTheme`'s fallback too, because both resolve
+  an unmatched brand to the configured `DEFAULT_THEME`: `detectActiveTheme` in
+  **`src/utils.ts`** for a document carrying no theme class, and `getTheme` in
+  **`src/theme/index.ts`** for an unknown name. A DFE deployment, where
+  `NEXT_PUBLIC_THEME` is unset or `dfe`, resolves both to `dfe` as before, and
+  upstream's three theme assertions pass unedited.
   `src/dfe/__tests__/themeFallback.test.ts` pins the DFE side.
 - `packages/app/src/dfe/defaultSource.ts` - which source `/search` opens on
   cold. The embed opens on `main`, the landing every record falls into, because
-  a first Observe load that shows an empty window reads as a broken deployment;
-  a standalone page opens on `hunts`, since an analyst working the console
+  a first Observe load that shows an empty window reads as a broken deployment.
+  A standalone page opens on `hunts`, since an analyst working the console
   directly is working detections. Both are matched by NAME, which is the
   contract - the console never sees a HyperDX id - and both are overridable per
   deployment (`NEXT_PUBLIC_DFE_EMBED_DEFAULT_SOURCE`,
@@ -422,7 +436,7 @@ expects undeclared static-filter keys to persist is skipped by name in
   Playwright 1.57.0 ships no bundled Chromium for Ubuntu 26.04 and
   `playwright install chromium` refuses for that platform, so a DFE dev host can
   never fetch the pinned revision. The config sets `channel: 'chrome'` per
-  project and raises the webServer budget (`E2E_APP_SERVER_TIMEOUT_MS`); the
+  project and raises the webServer budget (`E2E_APP_SERVER_TIMEOUT_MS`). The
   setup file exists because global setup calls `chromium.launch()` directly and
   so never sees the project config, and Playwright 1.57 honours no environment
   override for that call.
@@ -451,7 +465,7 @@ expects undeclared static-filter keys to persist is skipped by name in
   `pages/_document.tsx` carries one added inline head script
   (`EMBED_INIT_SCRIPT`, alongside upstream's own `THEME_INIT_SCRIPT`) that sets
   `html.dfe-embed` from the `embed=1` URL param / persisted flag before
-  hydration; `styles/globals.css` hides `.dfe-appnav-slot` (the layout.tsx
+  hydration, and `styles/globals.css` hides `.dfe-appnav-slot` (the layout.tsx
   wrapper) under that class, so the full chrome sidebar never flashes before
   React removes it.
 - `packages/app/src/dfe/embedCsp.ts` + **`packages/app/proxy.ts`** - who may put
@@ -481,9 +495,11 @@ expects undeclared static-filter keys to persist is skipped by name in
   each would buy two more conflict points for images nobody here builds. An
   image built from either sends no framing header.
 
-- **Alerting is disabled, not removed.** HyperDX's alert checker is not started
-  and its routes are hidden by the embed nav gating. Detection is the DFE rules
-  engine's job. Rationale:
+- **Alerting is disabled, not removed.** HyperDX's alert checker still starts
+  with the image, but nobody can create an alert for it. `/alerts` and
+  `/webhooks` refuse every human session, the engine's service token reaches
+  team, source and connection routes alone, and the embed sends `/alerts` back
+  to `/search`. Detection is the DFE rules engine's job. Rationale:
   [../decisions/0002-alerting-disabled-for-dfe-rules.md](../decisions/0002-alerting-disabled-for-dfe-rules.md).
 - `packages/api/src/dfe/middleware/provisioned-lockdown.ts` - 403 on PATCH and
   PUT against a dashboard the provisioner owns. Not polish: the provisioner runs
@@ -500,9 +516,9 @@ expects undeclared static-filter keys to persist is skipped by name in
   item that POSTs a team-owned copy through the existing create call.
 - **Delete is allowed, and tombstoned.** `blockProvisionedWrites` lets DELETE
   through and records `{name, team, deletedAt}` in
-  `dfe/models/dashboard-tombstone.ts` once the route has actually deleted the
-  row; `syncDashboards` skips a tombstoned name, so the delete survives the next
-  cron tick AND an upgrade that ships a newer version of that dashboard.
+  `dfe/models/dashboard-tombstone.ts` once the route has deleted the row.
+  `syncDashboards` skips a tombstoned name, so the delete survives the next cron
+  tick AND an upgrade that ships a newer version of that dashboard.
   `dfe/routers/shipped-dashboards.ts` (`POST /dfe/dashboards/restore-shipped`)
   is the way back - it clears the team's tombstones and reprovisions inside the
   request, driven from `app/src/dfe/components/RestoreShippedDashboards/`. Team
@@ -511,11 +527,11 @@ expects undeclared static-filter keys to persist is skipped by name in
 - **`packages/api/src/tasks/provisionDashboards/index.ts` - an edit to a
   pristine upstream file** (catalogued in `.fork-surface`). `syncDashboards`
   wrote tiles verbatim, so a file naming a source by name stored a name where an
-  ObjectId belongs and the tile rendered dead; upstream's own
-  `AUTO_PROVISION.md` example has the same bug. `resolveDashboardRefs` matches
-  source and connection names case-insensitively, as `DBDashboardImportPage`
-  does interactively. Unresolvable references pass through unchanged by default,
-  so upstream's behaviour and its dangling-source fixture still hold;
+  ObjectId belongs and the tile rendered dead. Upstream's `AUTO_PROVISION.md`
+  example has the same bug. `resolveDashboardRefs` matches source and connection
+  names case-insensitively, as `DBDashboardImportPage` does interactively.
+  Unresolvable references pass through unchanged by default, so upstream's
+  behaviour and its dangling-source fixture still hold, and
   `DASHBOARD_PROVISIONER_REQUIRE_REFS=true` skips the dashboard instead. That
   flag is the RBAC mechanism for the DFE set: a tenant team holds no otel
   source, so the platform dashboards never resolve for it. Content is
@@ -557,9 +573,9 @@ expects undeclared static-filter keys to persist is skipped by name in
   failed request "Request failed with status code 400 Bad Request", and the
   reason sits in the response body, so every toast built from `error.message`
   hid it. A 4xx error now carries the body's `message`, a schema rejection's
-  issues, or the fork's own `{ error }`. **`api.ts` (catalogued)** gains one
-  import and one entry in the `ky.create` hooks. **`DBSearchPage.tsx`
-  (catalogued)** passes its two saved-search error toasts through upstream's own
+  issues, or the fork's `{ error }`. **`api.ts` (catalogued)** gains one import
+  and one entry in the `ky.create` hooks. **`DBSearchPage.tsx` (catalogued)**
+  passes its two saved-search error toasts through upstream's own
   `getApiErrorMessage`, which keeps the existing copy as the fallback.
   `dfe/__tests__/apiErrorDetail.test.ts` covers the response bodies and
   `forkDeltas.test.ts` pins the wiring.
@@ -574,20 +590,20 @@ expects undeclared static-filter keys to persist is skipped by name in
 ## Config and bootstrap
 
 - `packages/api/src/dfe/config.ts` - auth mode, header names, default team
-- `.env.dfe-example` - DFE env template
+- `.env.dfe.example` - DFE env template
 
 ## Branding and frontend
 
 - `packages/app/src/theme/themes/dfe/**` - tokens, Mantine theme, logomark and
   wordmark assets. Typography is Inter + IBM Plex Mono - see ADR
   [0005](../decisions/0005-console-typography.md).
-- `packages/app/src/dfe/components/**` - AppNav, SidebarMenu, ThemeToggle,
-  UserActionsButton, LandingPage
+- `packages/app/src/dfe/components/**` - LandingPage, CreateRuleFromSearch and
+  RestoreShippedDashboards
 - Search language defaults to SQL, not upstream's Lucene (an explicit user
-  selection still wins). One seam: `getStoredLanguage()` in
+  selection still wins). One function: `getStoredLanguage()` in
   `components/SearchInput/SearchWhereInput.tsx` returns `'sql'` instead of null
-  when nothing is stored, which flips every `?? 'lucene'` fallback at once; the
-  three sites that bypassed the seam (`DBSearchPage.tsx` saved-search default,
+  when nothing is stored, which flips every `?? 'lucene'` fallback at once. The
+  three sites that bypassed it (`DBSearchPage.tsx` saved-search default,
   `DBDashboardPage.tsx` URL-parser default, `ContextSidePanel.tsx` destructure
   default) now consult it. Callers' dead `?? 'lucene'` tails are deliberately
   left to minimise the upstream diff. Pinned by
@@ -597,14 +613,15 @@ expects undeclared static-filter keys to persist is skipped by name in
 
 - `.hyperi-ci.yaml`, `.github/workflows/ci.yml` - migrated to hyperi-ci
 - `.github/workflows/{upstream-sync,upstream-drift,fork-surface,fork-security}.yml`
-  - the fork machinery
+  - the fork machinery, and `dfe-documentdb.yml`, which runs the api integration
+    suite on DocumentDB
 - `.gitleaks.toml`, `scripts/audit.sh`
 - `packages/api/jest.dfe.config.js` - upstream's unit config plus one transform:
   `jose` is ESM-only and Jest's CJS loader cannot load it, so the tests exercise
   real ES384 verification rather than a crypto double. It deliberately does NOT
-  narrow `testMatch` - it used to, back when upstream's api package had no unit
-  target, and 2.33.0 added one. A scoped config would run our handful of tests
-  while silently skipping upstream's several hundred.
+  narrow `testMatch`: upstream's api package has a unit target since 2.33.0, and
+  a scoped config would run our handful of tests while skipping upstream's
+  several hundred.
 - `packages/api/jest.dfe.int.config.js` - upstream's integration config with
   `jose` added to its transform list, derived from upstream's list so packages
   they add keep loading. `api-app.ts` reaches `jose` through the DFE routers, so
@@ -631,16 +648,16 @@ expects undeclared static-filter keys to persist is skipped by name in
   is the guard patch 0004 mounts, and goes when that patch does.
 - `.gitattributes` - ONE added line routing `yarn.lock` to
   `scripts/merge-lockfile.sh`
-- `packages/app/src/dfe/fonts.ts` + `dfe/fonts/` - the four UI fonts vendored as
-  woff2 and loaded with `next/font/local`, so `next build` fetches nothing from
-  Google Fonts. Every subset Google serves is vendored with its unicode-range,
-  and `scripts/vendor-fonts.py` regenerates the files and `dfe/fonts.ts`. The
-  delta in **`packages/app/src/fonts.ts`** is its import line: the loaders come
-  from `@/dfe/fonts` instead of `next/font/google`, and upstream's four calls
-  stay byte-identical. Those calls are checked at build time, so a weight or CSS
-  variable upstream adds that we do not vendor fails the build instead of
-  rendering a synthesised weight. Sources and licences: `dfe/fonts/README.md`.
-  Pinned by `dfe/__tests__/forkDeltas.test.ts`.
+- `packages/app/src/dfe/fonts.ts` + `dfe/fonts/` - the four UI fonts copied in
+  as woff2 and loaded with `next/font/local`, so `next build` fetches nothing
+  from Google Fonts. Every subset Google serves is copied in with its
+  unicode-range, and `scripts/vendor-fonts.py` regenerates the files and
+  `dfe/fonts.ts`. The delta in **`packages/app/src/fonts.ts`** is its import
+  line: the loaders come from `@/dfe/fonts` instead of `next/font/google`, and
+  upstream's four calls stay byte-identical. Those calls are checked at build
+  time, so a weight or CSS variable upstream adds that we do not copy in fails
+  the build instead of rendering a synthesised weight. Sources and licences:
+  `dfe/fonts/README.md`. Pinned by `dfe/__tests__/forkDeltas.test.ts`.
 - `knip.json` - added ignores so the pre-commit hook can run. Two classes, and
   neither is ours to fix. Upstream page components orphaned because this fork
   removed their routes (`pages/{benchmark,clickhouse,join-team,kubernetes,`
@@ -656,9 +673,7 @@ expects undeclared static-filter keys to persist is skipped by name in
   by advisory id, never by package name - `npmAuditExcludePackages` would mute
   the next advisory against the same package too. Each id carries its reason and
   the traces are in [security-sync.md](security-sync.md). Upstream churns this
-  file rarely, so the conflict is small. `npmPreapprovedPackages` also carries a
-  temporary `body-parser` line that admits 1.20.9 past `npmMinimalAgeGate`, and
-  it goes on 2026-10-29.
+  file rarely, so the conflict is small.
 
 - `.github/workflows/docker-build.yml` - three deltas. The first two are for the
   same failure (#51). A `Free disk space` step calling
@@ -679,10 +694,10 @@ expects undeclared static-filter keys to persist is skipped by name in
   describes ARC NODES for the ClickHouse build and does not apply to this pod.
 
   So the script keeps a lever for each and the assert covers both. A hosted
-  runner has ~8 GB of toolchains for languages we never build; a shared daemon
-  has a buildkit cache instead. It measures the filesystem holding docker's
-  data-root rather than `/`, since those are not always the same mount. Gated
-  exactly like the steps around it, so a skipped run pays nothing.
+  runner has ~8 GB of toolchains for languages we never build, and a shared
+  daemon has a buildkit cache instead. It measures the filesystem holding
+  docker's data-root rather than `/`, since those are not always the same mount.
+  Gated exactly like the steps around it, so a skipped run pays nothing.
 
   The third delta pins the seven `uses:` lines by commit SHA: three of
   `docker/setup-buildx-action` at v4.4.1 (2026-09-16) and four of
@@ -697,7 +712,7 @@ expects undeclared static-filter keys to persist is skipped by name in
   the 16 upstream workflows we do not carry. `.fork-surface` cannot cover a
   deletion: it reads `--diff-filter=ACMR` against the merge base, where a file
   we removed is unchanged and therefore invisible, so a sync reinstates it in
-  silence. The check simply fails when a listed path exists.
+  silence. The check fails when a listed path exists.
 - `scripts/ci/__tests__/**` in `knip.json` - upstream's ratchet test. Only
   upstream's `main.yml` ever ran it, and we do not carry that workflow, so knip
   is correct that nothing uses it. Ignored rather than deleted, on the same
@@ -724,27 +739,27 @@ expects undeclared static-filter keys to persist is skipped by name in
 ## Docs
 
 Our documentation lives under [docs/](../README.md) and follows HyperI
-standards. Upstream's docs - `AGENTS.md`, `agent_docs/`, `MCP.md`, `LOCAL.md`,
-`DEPLOY.md`, `CONTRIBUTING.md` - are left exactly as upstream ships them.
-
-`CLAUDE.md` and `README.md` are the two shared files - both exist upstream, both
-carry a catalogued delta, both are listed in `.fork-surface`.
+standards. Upstream's docs, `AGENTS.md`, `agent_docs/`, `MCP.md`, `LOCAL.md`,
+`DEPLOY.md` and `CONTRIBUTING.md`, are upstream's, and the files below are the
+ones that carry a delta, each listed in `.fork-surface`.
 
 - **`CLAUDE.md`** - upstream ships a one-line file, and we prepend the fork's
   governing rule above it so it is unmissable at the top of every agent session.
   Upstream rarely touches that line, so the conflict is small and rerere replays
   it.
-- **`README.md`** - rewritten to describe this fork rather than the upstream
-  product, plus a `## Context` section carrying the working guide the HyperI doc
-  standard specifies. Its five subheadings are fixed and checked by
-  `hyperi-ai docs context --check`, so the section cannot drift. The section is
-  APPENDED at end of file, which is the cheapest placement we have: upstream's
-  own README edits land above it, so an upstream change and ours rarely occupy
-  the same hunk.
+- **`README.md`** - rewritten whole to describe this fork rather than the
+  upstream product. The working guide that once sat at its end is
+  [working-guide.md](working-guide.md). Any upstream edit to the README
+  conflicts with it.
 - **`docs/alert-webhook-template-variables.md`** - an upstream page the DFE docs
-  site publishes to customers. Its three mentions of HyperDX say "the console"
-  instead, and nothing else on the page changes. It is listed in
-  `.fork-surface`.
+  site publishes to customers. Three of its mentions of HyperDX say "the
+  console" instead, and one "today" is gone. The whole file is also
+  prettier-formatted, so every line upstream touches conflicts.
+- `LOCAL.md`, `agent_docs/tech_stack.md`, `docker/nginx/README.md`,
+  `docker/otel-collector/schema/README.md`, `packages/app/tests/e2e/README.md`
+  and `packages/common-utils/README.md` differ from the merge base by prettier
+  formatting alone. Formatting is no reason to hold a delta, so each is a
+  candidate to put back to upstream's text and take off `.fork-surface`.
 
 ---
 
@@ -777,5 +792,3 @@ built on" for any release we have cut.
 - [security-sync.md](security-sync.md) - what we have learnt about the inherited
   dependency tree, one dated section per sync
 - [leaving-upstream.md](leaving-upstream.md) - how this ends
-- The `x-oidc-*` contract is the universal seam shared with the rest of DFE -
-  see the dfe-engine OIDC dual-mode design

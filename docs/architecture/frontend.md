@@ -1,63 +1,56 @@
 # Frontend
 
-> **Scope.** This describes UPSTREAM HyperDX's architecture, which we do not
-> modify. It is here so the fork's own docs are readable on their own;
-> upstream's [`agent_docs/`](../../agent_docs/) is the authority, and anything
-> specific to DFE is called out as such.
+> **Scope.** This describes UPSTREAM HyperDX's frontend, which we do not modify,
+> as the DFE console frames it. It is here so the fork's own docs are readable
+> on their own. Upstream's [`agent_docs/`](../../agent_docs/) is the authority,
+> and anything specific to DFE is called out as such.
+
+## Structure
+
+Charts build their SQL in the browser and send it through the API's ClickHouse
+proxy, and everything else goes through the API's REST routes.
 
 ```mermaid
-flowchart TB
-    subgraph Next_js_Pages_Router["Next.js (Pages Router)"]
-        SEARCH["Search Page<br/>Log/Trace search"]
-        DASH["Dashboard Page<br/>Chart tiles"]
-        ALERTS["Alerts Page<br/>Alert management"]
-        SESSIONS["Sessions Page<br/>Session replay"]
-        SERVICES["Services Page<br/>APM overview"]
-        SVCMAP["Service Map<br/>Trace topology"]
-        CHART["Chart Explorer<br/>Ad-hoc charting"]
-        CHSQL["SQL Page<br/>Direct ClickHouse SQL"]
+flowchart LR
+    accTitle: L3 Components -- HyperDX UI
+    accDescr: The DFE console frames the UI pages. Pages render charts through the browser ClickHouse client, which builds SQL with renderChartConfig, and load everything else through the API hooks. Both reach the HyperDX API.
+
+    console["DFE console<br/>dfe-ui"]
+
+    subgraph app["HyperDX UI"]
+        pages["Pages<br/>search, dashboards"]
+        chc["ClickHouse client<br/>renderChartConfig"]
+        hooks["API hooks<br/>ky, TanStack Query"]
     end
 
-    subgraph Core_Components["Core Components"]
-        NAV["AppNav<br/>Sidebar navigation"]
-        TIMECHART["DBTimeChart<br/>Time-series visualization"]
-        TABLE["DBTableChart<br/>Tabular data"]
-        SIDEPANEL["DBRowSidePanel<br/>Log/trace detail"]
-        WATERFALL["DBTraceWaterfallChart<br/>Span waterfall"]
-        PLAYER["DOMPlayer<br/>rrweb session replay"]
-        SQLEDITOR["SQLEditor<br/>CodeMirror SQL input"]
-        SEARCHINPUT["SearchInputV2<br/>Lucene/SQL autocomplete"]
-    end
+    api[["HyperDX API<br/>Express"]]
 
-    subgraph State_Data["State & Data"]
-        URL["URL Params<br/>(nuqs)"]
-        TQ["TanStack Query<br/>(server state)"]
-        CHC["ClickhouseClient<br/>(browser)"]
-        API_HOOKS["API Hooks<br/>(ky + /api/*)"]
-    end
+    console -->|frames| pages
+    pages --> chc
+    pages --> hooks
+    chc --> api
+    hooks --> api
 
-    SEARCH & DASH & ALERTS & SESSIONS --> NAV
-    SEARCH --> SEARCHINPUT & TABLE & SIDEPANEL
-    DASH --> TIMECHART & TABLE
-    SESSIONS --> PLAYER
-    SERVICES --> TIMECHART
-    SVCMAP --> WATERFALL
-
-    TIMECHART & TABLE --> CHC
-    CHC -->|common-utils<br/>renderChartConfig| CHC
-    CHC -->|/api/clickhouse-proxy| API_HOOKS
-    ALERTS --> API_HOOKS
-    API_HOOKS --> TQ
-    SEARCH & DASH --> URL
+    classDef default fill:#F8FAFC,stroke:#64748B,stroke-width:1px,color:#0F172A
+    classDef group fill:none,stroke:#64748B,stroke-width:1px,stroke-dasharray:2 4
+    class app group
 ```
+
+<!-- prettier-ignore -->
+*Figure 1. L3 Components -- HyperDX UI.* Up: [L2 Services -- dfe-hyperdx](README.md#the-system).
+
+The DFE embed turns on four features, search, saved searches, the chart explorer
+and dashboards (`packages/app/src/dfe/embedFeatures.ts`). A direct visit to
+`/alerts`, `/sessions`, `/service-map` or `/team` is sent back to `/search`.
 
 Key patterns:
 
-- **URL-driven state**: All search filters, time ranges, and dashboard contexts
-  are encoded in URL parameters (via `nuqs`), making every view deep-linkable
-- **Server state**: TanStack Query manages all API data with custom hooks in
-  `api.ts`, `dashboard.ts`, `savedSearch.ts`, `source.ts`, `sessions.ts`
-- **Query engine in browser**: `renderChartConfig()` from `common-utils` runs
-  client-side, generating parameterized SQL sent through the ClickHouse proxy
-- **UI library**: Mantine components throughout, with Recharts and uPlot for
-  charts, CodeMirror for SQL editing, and rrweb for session replay
+- URL-driven state. Search filters, time ranges and dashboard contexts are
+  encoded in URL parameters (`nuqs`), so every view is deep-linkable.
+- Server state. TanStack Query manages API data, with hooks in `api.ts`,
+  `dashboard.ts`, `savedSearch.ts`, `source.ts` and `sessions.ts`.
+- Query engine in the browser. `renderChartConfig()` from `common-utils` runs
+  client-side and generates parameterised SQL, sent through
+  `/api/clickhouse-proxy`.
+- UI library. Mantine components throughout, with Recharts and uPlot for charts,
+  CodeMirror for SQL editing, and rrweb for session replay.

@@ -1,6 +1,8 @@
 # 0004 - Casbin RBAC removed as redundant
 
-**Status:** accepted
+**Status:** accepted. One line below has since changed: HyperDX does not take an
+identity injected at the edge. It verifies the engine's token itself, see
+[../architecture/oidc-authentication.md](../architecture/oidc-authentication.md).
 
 ## Context
 
@@ -46,11 +48,11 @@ services in different languages.
 
 **Keep Casbin as defence in depth.** Rejected: it was not defending anything the
 query scoping did not already cover, and a second authorization layer that is
-never the one that fires is a liability rather than a safety net - it invites
-the assumption that it is load-bearing.
+never the one that fires is a liability rather than a safety net. It invites the
+assumption that something depends on it.
 
-**Move Casbin into the DFE engine only.** This is effectively what happened. The
-engine owns policy; what was removed is the HyperDX-side enforcement copy.
+**Move Casbin into the DFE engine only.** This is what happened. The engine owns
+policy, and what was removed is the HyperDX-side enforcement copy.
 
 ## Notes
 

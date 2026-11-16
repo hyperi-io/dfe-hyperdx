@@ -27,8 +27,9 @@ so it stops being re-litigated.
 ## How it is wired (do not bypass)
 
 - `src/config/fonts.ts` - `MANTINE_FONT_MAP['Inter']` resolves to
-  `var(--font-inter), sans-serif`; the variables come from next/font in
-  `pages/_document.tsx` / `pages/_app.tsx`.
+  `var(--font-inter), sans-serif`. The variables come from `src/fonts.ts`, which
+  loads the copied-in font files through `next/font/local` (`src/dfe/fonts.ts`),
+  and `pages/_document.tsx` and `pages/_app.tsx` apply them.
 - `pages/_app.tsx` pins the DFE theme to Inter regardless of user font
   preference (upstream's font picker only applies to the hyperdx theme).
 - Mono surfaces use `var(--font-ibm-plex-mono)` (LogTable, HyperJson, SQL/Lucene
@@ -38,9 +39,9 @@ so it stops being re-litigated.
 
 ## Consequences
 
-- New surfaces take Inter by default (Mantine theme cascade); reach for
+- New surfaces take Inter by default (Mantine theme cascade). Reach for
   `var(--font-ibm-plex-mono)` only when rendering query text, code, or raw data
   values.
-- Never hardcode a family name; always the next/font variables, or the font
-  falls back to whatever the viewer's OS ships and the "old hyperdx fonts"
-  report comes back.
+- Never hardcode a family name. Use the next/font variables, or the font falls
+  back to whatever the viewer's OS ships and the "old hyperdx fonts" report
+  comes back.

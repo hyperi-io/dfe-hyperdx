@@ -13,29 +13,42 @@ procedure.
 
 The fork holds two kinds of content, and they need opposite treatment.
 
+Our permanent changes ride merged history for rerere to replay, and the
+temporary security layer is declared and generated, so rerere never sees it.
+
 ```mermaid
-flowchart TB
-    subgraph permanent["PERMANENT -- must survive every update"]
-        feat["DFE features<br/>embed, OIDC, theme, authz"]
-        dfedir["packages/**/dfe/**<br/>cannot conflict"]
-        inplace["catalogued in-place edits<br/>.fork-surface"]
+flowchart LR
+    accTitle: L4 Detail -- Permanent and temporary content
+    accDescr: Permanent content, the DFE features, the dfe directories and the catalogued in-place edits, is carried as merged history and git rerere replays its resolutions. Temporary content, the dependency pins and code patches, is declared, stripped before a merge and rebuilt after.
+
+    subgraph permanent["PERMANENT, survives every update"]
+        direction LR
+        feat["DFE features"]
+        dfedir["packages/**/dfe/**"]
+        inplace["In-place edits<br/>.fork-surface"]
+        feat ~~~ dfedir ~~~ inplace
     end
 
-    subgraph temporary["TEMPORARY -- upstream will fix these"]
-        pins["dependency pins<br/>security/overrides.yaml"]
-        patches["code fixes<br/>security/patches/*.patch"]
+    subgraph temporary["TEMPORARY, upstream will fix"]
+        direction LR
+        pins["Dependency pins<br/>security/overrides.yaml"]
+        patches["Code fixes<br/>security/patches/"]
+        pins ~~~ patches
     end
 
-    permanent -->|carried as MERGED HISTORY| rerere["git rerere<br/>replays our resolutions"]
-    temporary -->|declared, then generated| gen["strip before merge,<br/>rebuild after"]
+    rerere["git rerere replays<br/>our resolutions"]
+    gen["Strip before merge,<br/>rebuild after"]
 
-    classDef keep fill:#009E73,stroke:#005f45,color:#ffffff
-    classDef temp fill:#E69F00,stroke:#8a6100,color:#000000
-    classDef mech fill:#0072B2,stroke:#00456b,color:#ffffff
-    class feat,dfedir,inplace keep
-    class pins,patches temp
-    class rerere,gen mech
+    permanent -->|merged history| rerere
+    temporary -->|declared| gen
+
+    classDef default fill:#F8FAFC,stroke:#64748B,stroke-width:1px,color:#0F172A
+    classDef group fill:none,stroke:#64748B,stroke-width:1px,stroke-dasharray:2 4
+    class permanent,temporary group
 ```
+
+<!-- prettier-ignore -->
+*Figure 1. L4 Detail -- Permanent and temporary content.* Up: [The fork](README.md).
 
 Our features are permanent, so they belong in merged history where rerere can
 replay their conflict resolutions. Security fixes are temporary by design:
@@ -50,7 +63,7 @@ never matches twice. A lockfile has no meaningful "replay these hunks" answer at
 all.
 
 So the temporary layer is GENERATED. `security/overrides.yaml` and
-`security/patches/` are the source; the tree is derived from them.
+`security/patches/` are the source, and the tree is derived from them.
 
 ---
 
@@ -59,23 +72,31 @@ So the temporary layer is GENERATED. `security/overrides.yaml` and
 `.github/workflows/upstream-sync.yml` runs this weekly and on demand, and opens
 a PR. Run it by hand when you want to drive a specific upstream tag.
 
-```mermaid
-flowchart LR
-    strip["1. --unapply<br/>strip the layer"] --> merge["2. git merge<br/>rerere replays"]
-    merge --> apply["3. --apply<br/>rebuild the layer"]
-    apply --> pin["4. --set<br/>move the pin"]
-    pin --> install["5. yarn install<br/>re-derive the lock"]
-    install --> verify["6. --verify<br/>the invariants"]
-    verify --> gate["7. build + test<br/>THE GUARANTEE"]
-    gate --> triage["8. triage<br/>drafted for a human"]
+The cycle strips and rebuilds the security layer around the merge, then proves
+the result.
 
-    classDef layer fill:#E69F00,stroke:#8a6100,color:#000000
-    classDef git fill:#0072B2,stroke:#00456b,color:#ffffff
-    classDef check fill:#009E73,stroke:#005f45,color:#ffffff
-    class strip,apply,pin layer
-    class merge,install git
-    class verify,gate,triage check
+```mermaid
+flowchart TB
+    accTitle: L4 Detail -- The sync cycle
+    accDescr: Merge runs four steps, unapply the security layer, git merge with rerere replaying, apply the layer and set the pin. Prove runs four more, yarn install to re-derive the lock, verify the invariants, build and test, and triage for a human.
+
+    subgraph merge["1 Merge"]
+        direction LR
+        strip["1. --unapply"] --> gitmerge["2. git merge"] --> apply["3. --apply"] --> pin["4. --set pin"]
+    end
+    subgraph prove["2 Prove"]
+        direction LR
+        install["5. yarn install"] --> verify["6. --verify"] --> gate["7. build + test"] --> triage["8. triage"]
+    end
+    merge --> prove
+
+    classDef default fill:#F8FAFC,stroke:#64748B,stroke-width:1px,color:#0F172A
+    classDef group fill:none,stroke:#64748B,stroke-width:1px,stroke-dasharray:2 4
+    class merge,prove group
 ```
+
+<!-- prettier-ignore -->
+*Figure 2. L4 Detail -- The sync cycle. Read each stage left to right, then down.* Up: [The fork](README.md).
 
 ```bash
 git switch -c sync/upstream-2.34.0 main
@@ -96,27 +117,28 @@ otherwise.
 
 ---
 
-## What each step is actually doing
+## What steps 1 to 3 do
 
 ### 1. Strip, so there is nothing to conflict on
 
 `--unapply` rewrites `resolutions` back to upstream's block at our current base
-and reverse-applies every patch. The tree now matches upstream where the
-temporary layer used to be, so git takes upstream's version of those hunks whole
-and the merge never sees a delta there.
+and reverse-applies every patch. The tree matches upstream where the temporary
+layer used to be, so git takes upstream's version of those hunks whole and the
+merge never sees a delta there.
 
 ### 2. Merge
 
 rerere replays previously-recorded resolutions for our PERMANENT deltas.
 `yarn.lock` is routed to `scripts/merge-lockfile.sh`, which takes upstream's
-copy outright. Anything left conflicting is a genuine three-way conflict on a
-catalogued file.
+copy outright. Anything left conflicting is a three-way conflict on a catalogued
+file.
 
 **A replayed resolution is not a correct one.** rerere reproduces the edit that
-resolved a conflict whose preimage matched; it has no idea whether the result
-still means anything. The failure it produces is specific and worth recognising:
-our side of a hunk lands over upstream's side of the surrounding code, so the
-file references names nothing imports, or declares parameters nobody passes.
+resolved a conflict whose preimage matched, and it has no idea whether the
+result still means anything. The failure it produces is specific and worth
+recognising: our side of a hunk lands over upstream's side of the surrounding
+code, so the file references names nothing imports, or declares parameters
+nobody passes.
 
 2.33.0 did exactly this to `OnboardingModal.tsx` - our import block, upstream's
 body, seven type errors. It survived six green workflow runs, because the gate
@@ -126,33 +148,37 @@ which is the check that was missing.
 
 The general form is worth keeping in mind, because it bit twice in one week: a
 gate that does not exercise the thing it claims to cover reports success from an
-empty run. The other instance was `--unapply` against an empty register - real
-workflow runs, genuinely green, proving only that nothing happened.
+empty run. The other instance was `--unapply` against an empty register -
+workflow runs, green, proving only that nothing happened.
 
 ### 3. Rebuild, and find out what upstream took off our hands
 
 `--apply` layers the register back over the NEW upstream block, and applies each
 entry ONLY where it raises the floor.
 
-That clause is load-bearing. Upstream pins the same packages we would. An entry
-left in the register after upstream passes it does not go quietly stale: a
-`^2.0.2` pin against an upstream now shipping 2.1.2 drags the whole tree
-BACKWARDS onto the vulnerable line. Taking the higher of the two makes a
-forgotten entry inert rather than harmful, and `--check` still nags until
-someone deletes it.
+Drop that clause and a forgotten entry does harm. Upstream pins the same
+packages we would. An entry left in the register after upstream passes it does
+not go quietly stale: a `^2.0.2` pin against an upstream shipping 2.1.2 drags
+the whole tree BACKWARDS onto the vulnerable line. Taking the higher of the two
+makes a forgotten entry inert rather than harmful, and `--check` still nags
+until someone deletes it.
 
 A patch that no longer applies is REPORTED, never forced. That is the signal the
 cycle exists to produce.
+
+---
+
+## What steps 5 and 6 do
 
 ### 5. The lockfile
 
 The merge took upstream's lockfile whole, so our fork-only entries are missing
 until `yarn install` re-derives them. Use `--mode=update-lockfile` first if you
-want the resolution step on its own. Do NOT use `--immutable` here; it is the
+want the resolution step on its own. Do NOT use `--immutable` here. It is the
 right flag everywhere else and the wrong one at exactly this point.
 
 `yarn install` re-derives only what our `package.json` asks for. A fix main
-carries in the lockfile alone - a `yarn up -R` inside a declared range - is gone
+holds in the lockfile alone - a `yarn up -R` inside a declared range - is gone
 after the merge, and nothing fails. Diff the resolved versions against
 `origin/main` and run `yarn up -R` again on every package main had moved past
 upstream. The 2.40.0 sync lost seven PRs of them, Next's RCE fix among them.
@@ -174,12 +200,12 @@ Generated state drifts silently the moment somebody hand-edits the block, and a
 sync is the worst possible moment to discover it.
 
 "In one direction only" is not pedantry. `git apply` searches outward from the
-hunk header, so a patch whose post-image already sits elsewhere in the file -- a
-second call site upstream ships already safe -- reverse-applies THERE while the
-real target sits untouched. Such a patch reads as applied while the fix is
-absent, and stripping it before a merge rewrites upstream's correct code into
-the vulnerable code. The tools call that `ambiguous` and refuse it; the fix is
-to re-derive the patch against the current tree so it names one site.
+hunk header, so a patch whose post-image sits elsewhere in the file -- a second
+call site upstream ships safe -- reverse-applies THERE while the intended target
+sits untouched. Such a patch reads as applied while the fix is absent, and
+stripping it before a merge rewrites upstream's correct code into the vulnerable
+code. The tools call that `ambiguous` and reject it. The fix is to re-derive the
+patch against the current tree so it names one site.
 
 The same workflow runs the tooling's own test suites before any of the above:
 
@@ -216,29 +242,38 @@ git checkout -- <the file>
 scripts/security-override.py --apply
 ```
 
-The numeric prefix is the apply order and reverses for unapply, so it is
-load-bearing. See [the patch series contract](../../security/patches/README.md).
+The numeric prefix is the apply order and reverses for unapply, so renumbering a
+patch changes what applies first. See
+[the patch series contract](../../security/patches/README.md).
 
 ---
 
 ## When a patch stops applying
 
-That is the cycle working, not failing. Two possibilities, and telling them
-apart needs judgement rather than a comparison:
+That is the cycle working, not failing. Telling the two possible causes apart
+needs judgement rather than a comparison, and each has its own fix.
 
 ```mermaid
-flowchart TB
-    stale["patch no longer applies"] --> q{"did upstream fix it,<br/>or did the code move?"}
-    q -->|upstream fixed it| drop["delete the patch<br/>and its register entry"]
-    q -->|the code moved| rederive["re-derive the hunk<br/>against the new file"]
+flowchart LR
+    accTitle: L4 Detail -- A patch that stops applying
+    accDescr: A patch that no longer applies means either upstream fixed it, so the patch and its register entry are deleted, or the code moved, so the hunk is re-derived against the new file.
 
-    classDef signal fill:#E69F00,stroke:#8a6100,color:#000000
-    classDef decision fill:#F0E442,stroke:#8a8200,color:#000000
-    classDef action fill:#009E73,stroke:#005f45,color:#ffffff
-    class stale signal
+    stale(["Patch no<br/>longer applies"])
+    q{"Fixed upstream,<br/>or code moved?"}
+    drop(["Delete the patch<br/>and its entry"])
+    rederive(["Re-derive<br/>the hunk"])
+
+    stale --> q
+    q -->|fixed| drop
+    q -->|moved| rederive
+
+    classDef default fill:#F8FAFC,stroke:#64748B,stroke-width:1px,color:#0F172A
+    classDef decision fill:#FCF1D6,stroke:#9A6700,stroke-width:1px,color:#3D2A00
     class q decision
-    class drop,rederive action
 ```
+
+<!-- prettier-ignore -->
+*Figure 3. L4 Detail -- A patch that stops applying.* Up: [The fork](README.md).
 
 `scripts/security-triage.py --patches` drafts which, with evidence. It PROPOSES
 only -- see below.
@@ -248,7 +283,7 @@ only -- see below.
 ## The triage step, and its limits
 
 `scripts/security-triage.py` answers the questions the mechanical tooling
-cannot. It reads the signals this repo already produces rather than rescanning:
+cannot. It reads the signals this repo produces rather than rescanning:
 
 | Flag        | Question                                            | Source it reads                      |
 | ----------- | --------------------------------------------------- | ------------------------------------ |
@@ -261,44 +296,49 @@ cannot. It reads the signals this repo already produces rather than rescanning:
 no key, no network and no human, so the existing signals do as much as they can
 before anything reaches the model:
 
-- Dependabot carries `dependency.scope`. A development-scoped advisory is build
-  tooling that never reaches the shipped image, so it is answered outright.
-  Measured on this repo: 13 of 72 settled for free.
-- `attribute-findings.py` has already sorted scanner findings into OURS /
-  ACCEPTED / INHERITED, so only OURS is drafted. That bucket is usually empty.
+- Dependabot has `dependency.scope`. A development-scoped advisory is build
+  tooling that never reaches the shipped image, so it is answered outright. On
+  this repo: 13 of 72 settled for free.
+- `attribute-findings.py` has sorted scanner findings into OURS / ACCEPTED /
+  INHERITED, so only OURS is drafted. That bucket is usually empty.
 
 The model is asked the residue, not the pile.
 
 It writes a markdown report and nothing else. It does not edit the register,
 apply a patch, or clear a finding. Reachability is a human verdict: a model that
-could clear its own findings would rebuild exactly the alert queue the fork's
-inverted posture exists to avoid.
+could clear its own findings would rebuild the alert queue the fork's inverted
+scanner settings exist to avoid.
 
 With no `ANTHROPIC_API_KEY` or no `anthropic` SDK it prints the mechanical facts
 and marks each unjudged section `NOT JUDGED`. A sync is never blocked by an
 expired secret.
+
+---
+
+## Where the triage reads its signals
 
 **CI reads Dependabot through a GitHub App, not a PAT.** The workflow
 `GITHUB_TOKEN` cannot reach the alerts endpoint whatever `permissions:` says -
 it wants the app-level Dependabot-alerts permission, and the 403 reads exactly
 like a missing scope on your own account.
 
-The sync workflow mints a token from `hyperi-container-mgt`, whose app id and
-private key are already org-wide secrets, so no new secret is needed here. What
-IS needed, once, from an org owner: add **Dependabot alerts: Read** to that
-app's permissions and accept it on the installation.
+The sync workflow mints a token from `hyperi-container-mgt`, whose client id
+(`vars.CONTAINER_MGT_CLIENT_ID`) and private key
+(`secrets.CONTAINER_MGT_APP_PRIVATE_KEY`) are org-wide, so no new secret is
+needed here. What IS needed, once, from an org owner: add **Dependabot alerts:
+Read** to that app's permissions and accept it on the installation.
 
 Until then the triage falls back to `yarn npm audit`, loses the `scope` field,
 and says so in the report rather than looking like a repo with 18 advisories
 instead of 72. A `DEPENDABOT_TOKEN` secret is still honoured as a fallback if
 someone would rather use a PAT, but the App is the house standard.
 
-**CodeQL is off** here (the
-[inverted security posture](design.md#the-security-posture-is-inverted-here)),
-so there is nothing to read from it. `attribute-findings.py` takes SARIF and
-serves CodeQL as readily as semgrep, so turning it on later needs no change to
-the triage. **Renovate** is scoped to the action pins in our own workflows and
-produces no dependency signal by design.
+**CodeQL default setup is on**, but the triage reads code findings as SARIF
+through `attribute-findings.py`, and `fork-security.yml` feeds it semgrep's.
+`attribute-findings.py` serves CodeQL's SARIF as readily, so adding it needs no
+change to the triage. **Renovate** is scoped to the files its `includePaths`
+names ([design.md](design.md#security-scanning-is-inverted-here)) and produces
+no signal on upstream's dependency tree by design.
 
 **Never use `gh api repos/{owner}/{repo}/...` in this repo.** A fork has two
 remotes, and with no default set gh resolves the placeholders to UPSTREAM: the
@@ -336,8 +376,8 @@ the cheap moment to shrink a delta down the
 turns it into a conflict. `upstream-drift.yml` runs it daily.
 
 **A stale `upstream/main` lies quietly.** One measurement taken against a ref
-that had not been fetched in weeks reported 34 commits of drift and 2 conflicts;
-a fresh fetch showed 122 commits and 11 conflicts. Nothing announces the
+that had not been fetched in weeks reported 34 commits of drift and 2 conflicts,
+and a fresh fetch showed 122 commits and 11 conflicts. Nothing announces the
 staleness - it just tells you the sync is smaller than it is. The daily CI
 number fetches every run, so trust it over whatever your laptop says.
 
@@ -373,103 +413,7 @@ why it has to stay accurate.
 
 ---
 
-## Track record
-
-Sync cost over time is the evidence the [de-fork decision](leaving-upstream.md)
-should be taken against, so it gets recorded.
-
-|                        | 2026-07-23 (dry run) | 2026-08-04 (2.29.0 -> 2.33.0, full run) | 2026-09-21 (2.36.0 -> 2.39.1, aborted) | 2026-10-06 (2.36.0 -> 2.40.0, full run) | 2026-11-01 (2.41.0 -> 2.43.0, full run) |
-| ---------------------- | -------------------- | --------------------------------------- | -------------------------------------- | --------------------------------------- | --------------------------------------- |
-| upstream commits ahead | 122                  | 164                                     | 116                                    | 164                                     | 105                                     |
-| conflicting files      | 11                   | 12                                      | 14                                     | 18                                      | 9                                       |
-| replayed by rerere     | n/a                  | n/a                                     | **0 of 9**                             | **0 of 13**                             | **0 of 7**                              |
-| `yarn.lock` conflicted | yes                  | **no**                                  | no                                     | no                                      | no                                      |
-| delta gate             | 81 `src/dfe` tests   | 211 suites / 4795 tests                 | not reached                            | 427 suites / 9159 tests, 5 packages     | 529 suites / 10780 tests, 5 packages    |
-
-What changed between the two rows is the merge driver and the generated security
-layer. The lockfile stopped conflicting outright: the driver took upstream's
-copy and `yarn install` re-derived exactly ONE entry, `jose`, our OIDC
-dependency.
-
-Of the 12 conflicts, 7 carried content; the other 5 were modify/delete on the
-workflows hyperi-ci replaced, whose resolution is to stay deleted. Two are worth
-remembering:
-
-- `packages/api/tsconfig.build.json` - our only delta turned out to be
-  FORMATTING; the `include` content was upstream's all along. Taking theirs
-  wholesale removed the file from the conflict surface entirely.
-- `packages/app/src/layout.tsx` - upstream added a kiosk mode that also hides
-  the nav. Both conditions now sit side by side, and that convergence is the
-  first real evidence for the de-fork path.
-
-### 2026-09-21 - rerere replayed nothing, and the alarm had been off for a month
-
-The 2.39.1 attempt produced 14 conflicts and rerere replayed **none** of them.
-It was enabled and configured, and it had 11 recorded resolutions sitting in
-`rr-cache`. Every one missed, because a preimage has to match EXACTLY and 116
-commits of upstream had moved the context around every hunk.
-
-That is the mechanism worth taking from this row: **rerere's value decays with
-backlog.** A resolution recorded against a 20-commit gap is worthless at 116.
-The weekly cadence is not a nicety, it is what keeps the preimages matching.
-
-Which is why the alarm mattered. `gh issue create --label 'upstream-sync'` needs
-the label to exist and this repo never had one, so the call failed on every
-conflicted run and `|| echo "Issue may already exist."` turned the failure into
-a success. Five consecutive Mondays reported green, no issue was filed, and the
-drift number nobody was reading is the number that decides when re-forking beats
-merging.
-
-The step now creates the label, tolerates only an already-open issue for the
-same ref, and fails the run otherwise.
-
-Of the 14: 5 are modify/delete on the upstream workflows that must stay deleted
-(see the 2026-08-27 entry in security-sync.md - `release.yml` would publish to
-hyperdxio's npm scopes and Docker Hub namespaces), and 9 carry content -
-`.gitignore`, `.prettierignore`,
-`docker/otel-collector/config.standalone.auth.yaml`, `DBChartPage.tsx` (2
-hunks), `DBDashboardPage.tsx` (2), `AppNav.tsx`, `SQLInlineEditor.tsx`,
-`useRowWhere.tsx` and `scripts/ci/ratchet-baseline.json` (2). Thirteen hunks in
-all.
-
-### 2026-10-06 - the merge was the easy part
-
-2.40.0 hit the 2.39.1 attempt's nine content conflicts plus four more:
-`package.json`, `packages/api/package.json`, `DBRowJsonViewer.tsx` and
-`DashboardsListPage.tsx`, which upstream rewrote with tabs and a header action
-group. The other five were the deleted upstream workflows again. `rr-cache` held
-25 entries and replayed none of the 13 content conflicts.
-`config.standalone.auth.yaml` left the surface, since our only delta was quote
-style, and upstream's new `jscpd.yml` joined `.fork-deleted`.
-
-Three breakages got past a merge git called resolved:
-
-- **The lockfile.** The driver took upstream's, so every security fix main held
-  in `yarn.lock` alone went back to upstream's version, Next 16.3.6 to 16.3.4
-  among them. Nothing failed. See step 5.
-- **`provisionDashboards/index.ts`** merged clean and failed `tsc`: upstream's
-  new `STATIC_LIST` filter has no `source` for our reference resolver to read.
-- **Upstream's new `DashboardsListPage.test.tsx`** mounts the page with no
-  QueryClient, and both components we inject there query. All 21 of its tests
-  failed until they went behind `dfe/QueryClientOnly.tsx`.
-
-### 2026-11-01 - two pins unwound, 120 packages put back
-
-2.43.0 conflicted on seven content files and the deleted `release.yml` and
-`vouch.yml`. `rr-cache` held 26 entries and replayed none. Upstream now ships
-next 16.4.2 and undici 7.30.1, so `--check` called both register entries
-redundant and they were removed.
-
-The lockfile regressed again, and wider: 120 packages main had moved with
-`yarn up -R` came back older, Storybook 10.6.2 to 10.1.4 and tar 7.5.22 to 6.2.1
-among them. osv-scanner read 10 unfiltered packages until `yarn up -R` on the
-whole list put them back.
-
-Upstream moved the filter-key limit read into `useFilterKeysFetchLimit`, which
-our `dfe/__tests__/jsonFilterSidebar.test.tsx` mocks partially, so its suite
-failed until the mock gained the new hook.
-
-### Expect `Build All-in-One Image` to fail on a sync PR
+## Expect `Build All-in-One Image` to fail on a sync PR
 
 It is upstream's workflow, and it dies with `no space left on device` partway
 through the collector's Go build. Not a regression, and not something to fix by
@@ -478,7 +422,7 @@ editing upstream's workflow.
 The job builds the whole Node app AND the Go collector into one image on a
 hosted runner, with no disk-reclaim step. The collector alone pulls the full
 prometheus and cloud-SDK dependency set. On an ordinary upstream PR the path
-filters keep it dormant; a sync touches those paths, so it runs, and it does not
+filters keep it dormant. A sync touches those paths, so it runs, and it does not
 fit.
 
 It is worth knowing this is capacity and nothing else, because the error looks
@@ -486,7 +430,7 @@ alarming. Our only deltas anywhere near it are config and entry-script -
 `docker/otel-collector/*.yaml`, `docker/hyperdx/entry.prod.sh` - so the Go
 compile that runs out of room is byte-identical to upstream's. Built on adequate
 hardware (12 cores, 540G free), the same commit produces a 2.62GB
-`all-in-one-auth` image with zero disk errors. Verified for 2.33.0; do that
+`all-in-one-auth` image with zero disk errors. Verified for 2.33.0. Do that
 again rather than trusting this paragraph if the failure ever looks different.
 
 The standing options are a self-hosted runner, a disk-reclaim step (upstream
@@ -498,6 +442,7 @@ surface, so no), or accepting the red check on sync PRs. We take the last.
 
 - [design.md](design.md) - why the fork is built this way
 - [what-we-changed.md](what-we-changed.md) - the change catalogue
+- [sync-track-record.md](sync-track-record.md) - what each sync cost
 - [leaving-upstream.md](leaving-upstream.md) - how this ends
 - [../../security/patches/README.md](../../security/patches/README.md) - the
   patch series contract

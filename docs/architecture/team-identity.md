@@ -7,11 +7,7 @@ caller holding `query:execute` at system scope through a role other than
 `org_viewer`, else `dfe_org_<org>` for a caller that resolves to exactly one
 org. The team is named after that username, so there is one team per org plus
 one platform team, and two users share a team only when the engine gives them
-the same identity.
-
----
-
-## The rule
+the same identity. How the API learns it:
 
 - `GET /api/v1/auth/me` answers `hyperdx_identity`, the username
   `GET /api/v1/hyperdx/connection` hands the same caller, without its password.
@@ -29,53 +25,92 @@ the same identity.
 ## Seeding the connection
 
 `dfe/controllers/org-connection.ts` runs on every request, after the user is
-placed on the team.
+placed on the team. A team holding its user goes on, a team holding any other
+user rejects the session, and a team holding none is seeded.
 
 ```mermaid
-flowchart TB
-    held{"team holds a connection?"}
-    held -->|as the team name| present["present: carry on once any seed in flight settles"]
-    held -->|as anyone else| mismatch["mismatch: 403"]
-    held -->|none| claim{"seed claim taken?"}
-    claim -->|this team failed under 30s ago| unavailable
-    claim -->|another request holds it| wait{"that seed settles within 30s?"}
-    wait -->|yes| present
-    wait -->|no| unavailable
-    claim -->|taken| ask["ask the engine for the caller's connection"]
-    ask -->|401 or 403| refused["refused: 403"]
-    ask -->|unreachable, 5xx, unreadable| unavailable["unavailable: log in, retry once the claim lapses"]
-    ask -->|username is not the team name| mismatch
-    ask -->|username is the team name| create["create the connection and seed sources"]
-    create -->|another replica won| present
+flowchart LR
+    accTitle: L4 Detail -- Team connection check
+    accDescr: On every request the API checks the team's connection. A connection as the team's own ClickHouse user lets the request carry on, one as another user is refused with 403, and no connection starts a seed.
 
-    classDef bad fill:#D55E00,stroke:#7a3500,color:#ffffff
-    classDef ok fill:#009E73,stroke:#005f45,color:#ffffff
-    class mismatch,refused bad
-    class present,create,unavailable ok
+    request(["Request on<br/>a team"])
+    held{"Team holds<br/>a connection?"}
+    carry(["Carry on"])
+    refuse(["Reject, 403"])
+    seed["Seed the<br/>connection"]
+
+    request --> held
+    held -->|team's user| carry
+    held -->|other user| refuse
+    held -->|none| seed
+
+    classDef default fill:#F8FAFC,stroke:#64748B,stroke-width:1px,color:#0F172A
+    classDef decision fill:#FCF1D6,stroke:#9A6700,stroke-width:1px,color:#3D2A00
+    classDef error fill:#FBE3D6,stroke:#C2410C,stroke-width:1px,color:#4A1A05
+    class held decision
+    class refuse error
 ```
 
-- A connection is created only as the team's own name, so a platform admin
+<!-- prettier-ignore -->
+*Figure 1. L4 Detail -- Team connection check.* Up: [L3 Components -- HyperDX API](backend.md#structure).
+
+A seed takes a claim first. One request per team holds the seed claim and asks
+the engine, and the rest wait up to 30 seconds for it to settle.
+
+```mermaid
+flowchart LR
+    accTitle: L4 Detail -- Seeding a team connection
+    accDescr: A request takes the team's seed claim if it is free and asks the engine for the caller's connection. The team's own user creates the connection and its sources. An engine 401 or 403, or another ClickHouse user, is refused with 403. Any other answer lets the request in and retries later. A request that finds the claim held waits for that seed, then carries on if the connection exists or retries later.
+
+    claim{"Seed claim<br/>free?"}
+    ask{"Engine<br/>answer?"}
+    wait["Wait up to<br/>30 seconds"]
+    create(["Create connection<br/>and sources"])
+    refuse(["Reject, 403"])
+    later(["Let in,<br/>retry later"])
+    carry(["Carry on"])
+
+    claim -->|free| ask
+    claim -->|held| wait
+    ask -->|team's user| create
+    ask -->|refused| refuse
+    ask -.->|no answer| later
+    wait -.->|not seeded| later
+    wait -->|seeded| carry
+
+    classDef default fill:#F8FAFC,stroke:#64748B,stroke-width:1px,color:#0F172A
+    classDef decision fill:#FCF1D6,stroke:#9A6700,stroke-width:1px,color:#3D2A00
+    classDef error fill:#FBE3D6,stroke:#C2410C,stroke-width:1px,color:#4A1A05
+    class claim,ask decision
+    class refuse error
+```
+
+<!-- prettier-ignore -->
+*Figure 2. L4 Detail -- Seeding a team connection. Dotted arrows let the request in without a connection.* Up: [L3 Components -- HyperDX API](backend.md#structure).
+
+- A connection is created as the team's name and no other, so a platform admin
   arriving first on an org team cannot seed it with the platform reader.
 - The `dfe_one_connection_per_team` unique index on `connections.team` makes a
   seed racing on another replica fail with a duplicate key, which reads as
-  `present`. It is ensured from the dfe layer in `oidc-proxy` mode only;
-  `header-dev` and upstream seed several `DEFAULT_CONNECTIONS` onto one team.
+  `present`. The dfe layer creates it in `oidc-proxy` mode alone, and a failure
+  logs a warning without stopping a seed, because `header-dev` and upstream seed
+  several `DEFAULT_CONNECTIONS` onto one team.
 - A team holding no connection is seeded whatever happened before, so a failed
   first seed or a connection since deleted is restored.
 - `dfe/models/team-seed.ts` holds one claim per team, atomic across replicas. A
   login's parallel requests make one seeding attempt, and a failed attempt is
-  retried once the 30-second claim lapses. The attempt marks the claim settled
+  retried once the 30-second claim lapses. The attempt sets the claim settled
   when it ends, and every other request on the team waits for that mark, at most
   until the claim lapses, so none answers for a team holding its connection but
   not yet its sources.
 - The `dfe_one_source_name_per_team` index is started once Mongo connects. On
   DocumentDB a unique index on a non-empty collection builds in the background,
   and a first seed that started the build would wait on it.
-- A query ClickHouse refuses with code 516 marks the team's connection for a
+- A query ClickHouse rejects with code 516 flags the team's connection for a
   re-check. The team's next request asks the engine for its material and updates
   the stored host and password in place when they differ. A replica asks at most
-  once every 30 seconds per team, and ClickHouse's own error reaches the caller
-  in the meantime.
+  once every 30 seconds per team, and ClickHouse's error reaches the caller in
+  the meantime.
 
 ## The startup repair
 
@@ -83,7 +118,7 @@ Before this rule a team was named after the first of its members' IdP groups and
 seeded from whichever member arrived first, so a group team could hold a
 ClickHouse user wider than some of its members were handed.
 `dfe/tasks/team-connection-repair.ts` runs once per process when Mongo connects,
-in `oidc-proxy` mode only, and deletes every connection whose username is not
+in `oidc-proxy` mode alone, and deletes every connection whose username is not
 its team's name, orphans included.
 
 - It never touches users or content. Members move onto their identity team on
@@ -98,7 +133,7 @@ its team's name, orphans included.
 Each deletion logs the team, the username and the member count, then each
 emptied team's content:
 
-```text
+```console
 WARN  DFE: deleting a team connection that is not the team identity
       teamId: "6abb3e94a0702ad8a4b5265c"  team: "acme-team"  username: "dfe_query_reader"
       connectionId: "6abb3e94a0702ad8a4b52670"  members: 2
@@ -114,9 +149,9 @@ INFO  DFE: team connection repair complete
 ## Evidence before the repair
 
 Run these in `mongosh` against the dfe-hyperdx database before deploying the
-release that carries the repair, and keep the output. They are read-only, and
-every projection is an inclusion list, so `password` and the team `apiKey` are
-never returned.
+release that has the repair, and keep the output. They are read-only, and every
+projection is an inclusion list, so `password` and the team `apiKey` are never
+returned.
 
 Connections whose username is not their team's name, the set the repair deletes:
 

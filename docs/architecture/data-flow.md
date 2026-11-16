@@ -1,112 +1,134 @@
 # Data flow
 
 > **Scope.** This describes UPSTREAM HyperDX's architecture, which we do not
-> modify. It is here so the fork's own docs are readable on their own;
-> upstream's [`agent_docs/`](../../agent_docs/) is the authority, and anything
+> modify. It is here so the fork's own docs are readable on their own.
+> Upstream's [`agent_docs/`](../../agent_docs/) is the authority, and anything
 > specific to DFE is called out as such.
 
-## Write Path (Telemetry Ingestion)
+## Write path
+
+Upstream's collector takes OTLP and Fluentd input, and its routing connector
+sends rrweb events to their own table and everything else to the OTel tables.
 
 ```mermaid
 flowchart LR
-    subgraph Sources["Sources"]
-        A1["App (OTLP gRPC)"]
-        A2["App (OTLP HTTP)"]
-        A3["App (Fluentd)"]
-        A4["Browser (rrweb events)"]
+    accTitle: L4 Detail -- Telemetry write path
+    accDescr: Applications send OTLP and Fluentd input and browsers send rrweb events to the collector receivers. Processors transform and batch them, and the routing connector writes rrweb events to hyperdx_sessions and everything else to the OTel tables.
+
+    subgraph sources["Sources"]
+        otlp["Apps, OTLP"]
+        fluent["Apps, Fluentd"]
+        rrweb["Browsers, rrweb"]
     end
 
-    subgraph OTel_Collector["OTel Collector"]
-        direction TB
-        RX["Receivers<br/>otlp, fluentforward"]
-        TX["Processors<br/>transform, batch,<br/>memory_limiter"]
-        RT["Routing Connector<br/>(logs)"]
-        EX1["Exporter<br/>clickhouse"]
-        EX2["Exporter<br/>clickhouse/rrweb"]
-    end
+    receivers["Receivers"]
+    processors["Processors"]
+    routing{"rr-web.event<br/>present?"}
+    sessions[("hyperdx_sessions")]
+    otel[("otel_logs, traces,<br/>metrics")]
 
-    subgraph ClickHouse["ClickHouse"]
-        T1["otel_logs"]
-        T2["otel_traces"]
-        T3["otel_metrics_*"]
-        T4["hyperdx_sessions"]
-    end
+    sources --> receivers
+    receivers --> processors
+    processors --> routing
+    routing -->|yes| sessions
+    routing -->|no| otel
 
-    A1 -->|:4317| RX
-    A2 -->|:4318| RX
-    A3 -->|:24225| RX
-    A4 -->|:4318| RX
-    RX --> TX --> RT
-    RT -->|rr-web.event present| EX2
-    RT -->|default| EX1
-    EX1 --> T1 & T2 & T3
-    EX2 --> T4
+    classDef default fill:#F8FAFC,stroke:#64748B,stroke-width:1px,color:#0F172A
+    classDef store fill:#DDF3EC,stroke:#00785A,stroke-width:1px,color:#0B3327
+    classDef decision fill:#FCF1D6,stroke:#9A6700,stroke-width:1px,color:#3D2A00
+    classDef ext fill:#EEF0F2,stroke:#6B7280,stroke-width:1px,stroke-dasharray:4 3,color:#1F2937
+    classDef group fill:none,stroke:#64748B,stroke-width:1px,stroke-dasharray:2 4
+    class otlp,fluent,rrweb ext
+    class routing decision
+    class sessions,otel store
+    class sources group
 ```
 
-Key details:
+<!-- prettier-ignore -->
+*Figure 1. L4 Detail -- Telemetry write path. Dashed boxes are external.* Up: [Architecture](README.md).
 
-- **Receivers** accept OTLP (gRPC on 4317, HTTP on 4318) and Fluentd (24225)
-- **Transform processor** parses JSON log bodies, infers severity, normalizes
-  case
-- **Routing connector** inspects log attributes - events with `rr-web.event` are
-  routed to the session replay pipeline (`hyperdx_sessions` table)
-- **ClickHouse exporter** writes to `otel_logs`, `otel_traces`, and five metric
-  tables via the native TCP protocol (port 9000)
+- Receivers accept OTLP (gRPC on 4317, HTTP on 4318) and Fluentd (24225).
+- The transform processor parses JSON log bodies, infers severity and normalises
+  case. Batch and memory limiter processors follow.
+- The routing connector checks the `rr-web.event` log attribute.
+- The ClickHouse exporter writes `otel_logs`, `otel_traces` and five metric
+  tables over the native protocol.
 
-## Read Path (Query Execution)
+DFE runs none of this. The DFE pipeline writes the telemetry tables, and no
+OpAMP-managed collector of HyperDX's is deployed.
+
+## Read path
+
+The browser renders the SQL, and the API adds the team connection's credentials
+on the way to ClickHouse.
 
 ```mermaid
 sequenceDiagram
-    participant Browser
+    accTitle: L4 Detail -- Query read path
+    accDescr: The browser renders a chart config to SQL and posts it to the ClickHouse proxy. The API checks the session, loads the connection's credentials and forwards the query to ClickHouse, then returns the results.
+    participant Browser as Browser
     participant API as HyperDX API
     participant CH as ClickHouse
 
-    Browser->>Browser: renderChartConfig(chartConfig)<br/> to  parameterized SQL
-    Browser->>API: POST /api/clickhouse-proxy<br/>(SQL + connection ID)
-    API->>API: Validate session<br/>Load Connection credentials
-    API->>CH: Proxy HTTP request<br/>(injected auth headers)
-    CH-->>API: Query results (JSON)
-    API-->>Browser: Query results
+    Browser->>Browser: renderChartConfig to parameterised SQL
+    Browser->>API: POST /api/clickhouse-proxy, SQL and connection id
+    API->>API: check session, load connection credentials
+    API->>CH: forward with the connection's ClickHouse user
+    CH-->>API: query results
+    API-->>Browser: query results
 ```
 
+<!-- prettier-ignore -->
+*Figure 2. L4 Detail -- Query read path. Dashed arrows are answers.* Up: [L3 Components -- HyperDX API](backend.md#structure).
+
 The query engine (`renderChartConfig` in `common-utils`) runs **in the
-browser**, generating parameterized ClickHouse SQL. The API acts as an
-authenticated proxy - it never interprets the SQL, only validates the session
-and injects ClickHouse credentials.
+browser**, generating parameterised ClickHouse SQL. The API is an authenticated
+proxy: it never interprets the SQL, it checks the session and sets
+`X-ClickHouse-User` and `X-ClickHouse-Key` from the connection. In DFE mode it
+first drops every credential the caller sent (`dropClientCredentials`).
 
-In **local mode** (single-user deployment), the browser queries ClickHouse
-directly, bypassing the proxy entirely.
+In **local mode** (`IS_LOCAL_MODE`, a single-user deployment), the browser
+queries ClickHouse directly, bypassing the proxy.
 
-## Alert Evaluation (Disabled in DFE - See DFE Rules and Hunts)
+## Alert evaluation
 
-> **DFE note:** The HyperDX alert checker is **not started** in DFE deployments.
-> Detection and alerting are handled by the DFE platform's rules engine and hunt
-> workflows, which query ClickHouse directly. The alert API routes are blocked
-> via Casbin RBAC. The code below documents upstream HyperDX's built-in alerting
-> for reference only.
+The alert checker task starts with the image in DFE as well, but nobody can
+create an alert for it to evaluate. In DFE mode `/alerts` and `/webhooks` refuse
+every human session, the engine's service token reaches team, source and
+connection routes alone, and the console sends a visit to `/alerts` back to
+`/search`. Detection and alerting are the DFE rules engine's and its hunts,
+which query ClickHouse directly
+([ADR 0002](../decisions/0002-alerting-disabled-for-dfe-rules.md)). The flow
+below is upstream's, for reference.
 
 ```mermaid
 flowchart LR
-    subgraph check_alerts_Background_Task_DISABLED_IN_DFE["check-alerts (Background Task) - DISABLED IN DFE"]
-        LOAD["Load active alerts"]
-        BUILD["Build ChartConfig<br/>from alert source"]
-        QUERY["Execute query<br/>on ClickHouse"]
-        EVAL["Compare result<br/>vs threshold"]
-        FIRE["Send webhook<br/>notification"]
-        HIST["Write AlertHistory"]
-    end
+    accTitle: L4 Detail -- Upstream alert evaluation
+    accDescr: The alert checker loads active alerts from DocumentDB, builds each one's query, runs it on ClickHouse and compares the result with the threshold. A triggered alert sends a webhook and records history, and an alert within its threshold records history alone.
 
-    DB["DocumentDB"] --> LOAD
-    LOAD --> BUILD --> QUERY
-    CH[(ClickHouse)] <--> QUERY
-    QUERY --> EVAL
-    EVAL -->|Triggered| FIRE --> HIST
-    EVAL -->|OK| HIST
-    FIRE --> WH["Slack / Generic /<br/>Incident.io Webhook"]
-    HIST --> DB
+    alerts[("Alerts<br/>DocumentDB")]
+    build["Load and<br/>build query"]
+    query["Query<br/>ClickHouse"]
+    check{"Threshold<br/>crossed?"}
+    fire(["Send webhook,<br/>record history"])
+    record(["Record history"])
+
+    alerts --> build
+    build --> query
+    query --> check
+    check -->|yes| fire
+    check -->|no| record
+
+    classDef default fill:#F8FAFC,stroke:#64748B,stroke-width:1px,color:#0F172A
+    classDef store fill:#DDF3EC,stroke:#00785A,stroke-width:1px,color:#0B3327
+    classDef decision fill:#FCF1D6,stroke:#9A6700,stroke-width:1px,color:#3D2A00
+    class alerts store
+    class check decision
 ```
 
-The alert checker runs as a separate Node.js process on a per-minute schedule.
-Each alert references either a Saved Search or a Dashboard tile, from which a
-`ChartConfig` is derived and evaluated against ClickHouse. Webhook notifications
-use Mustache templates with full alert context.
+<!-- prettier-ignore -->
+*Figure 3. L4 Detail -- Upstream alert evaluation.* Up: [Architecture](README.md).
+
+The checker runs once a minute. Each alert references a saved search or a
+dashboard tile, from which a `ChartConfig` is derived and evaluated against
+ClickHouse. Webhook bodies are templates with the alert's context.
