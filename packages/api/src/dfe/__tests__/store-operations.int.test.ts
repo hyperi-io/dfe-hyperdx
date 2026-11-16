@@ -16,6 +16,7 @@ import mongoose from 'mongoose';
 import request from 'supertest';
 
 import * as config from '@/config';
+import { dropTestStore } from '@/dfe/__tests__/dropTestStore';
 import {
   isOwnedName,
   listByTeam,
@@ -58,8 +59,7 @@ describe('dfe store operations against a real store', () => {
   });
 
   afterAll(async () => {
-    await mongoose.connection.dropDatabase();
-    await mongoose.disconnect();
+    await dropTestStore();
   });
 
   test('first logins racing on a new team name all land on one team', async () => {

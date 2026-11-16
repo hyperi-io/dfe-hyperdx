@@ -22,6 +22,7 @@ import mongoose from 'mongoose';
 
 import * as config from '@/config';
 import { getSources } from '@/controllers/sources';
+import { dropTestStore } from '@/dfe/__tests__/dropTestStore';
 import { seedFields } from '@/dfe/__tests__/engineMaterial';
 import { upsertEverywhere } from '@/dfe/controllers/dfe-sources';
 import {
@@ -70,8 +71,7 @@ describe('the team seed claim against a real store', () => {
   });
 
   afterAll(async () => {
-    await mongoose.connection.dropDatabase();
-    await mongoose.disconnect();
+    await dropTestStore();
   });
 
   test('every first-login request on a new team answers only once the registered sources are on it', async () => {

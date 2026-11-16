@@ -33,6 +33,7 @@ import request from 'supertest';
 
 import app from '@/api-app';
 import * as config from '@/config';
+import { dropTestStore } from '@/dfe/__tests__/dropTestStore';
 import { seedFields } from '@/dfe/__tests__/engineMaterial';
 import { clearEngineSessionCache } from '@/dfe/controllers/engine-session';
 import { clearTeamSeedCache } from '@/dfe/controllers/org-connection';
@@ -146,8 +147,7 @@ describe('the admin surface through the real app', () => {
   });
 
   afterAll(async () => {
-    await mongoose.connection.dropDatabase();
-    await mongoose.disconnect();
+    await dropTestStore();
   });
 
   it.each([

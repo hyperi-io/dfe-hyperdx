@@ -21,6 +21,7 @@ import mongoose from 'mongoose';
 
 import * as config from '@/config';
 import { getSources } from '@/controllers/sources';
+import { dropTestStore } from '@/dfe/__tests__/dropTestStore';
 import { seedFields } from '@/dfe/__tests__/engineMaterial';
 import {
   clearTeamSeedCache,
@@ -79,8 +80,7 @@ describe('team connections against a real store', () => {
   });
 
   afterAll(async () => {
-    await mongoose.connection.dropDatabase();
-    await mongoose.disconnect();
+    await dropTestStore();
   });
 
   test('the repair deletes a group-seeded connection and touches no user or content', async () => {

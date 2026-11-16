@@ -21,6 +21,7 @@ import mongoose from 'mongoose';
 import request from 'supertest';
 
 import * as config from '@/config';
+import { dropTestStore } from '@/dfe/__tests__/dropTestStore';
 import { seedFields } from '@/dfe/__tests__/engineMaterial';
 import {
   clearTeamSeedCache,
@@ -82,8 +83,7 @@ describe('a team connection ClickHouse refuses, through the real proxy', () => {
     await new Promise<void>((resolve, reject) =>
       upstream.close(err => (err ? reject(err) : resolve())),
     );
-    await mongoose.connection.dropDatabase();
-    await mongoose.disconnect();
+    await dropTestStore();
   });
 
   // The identity middleware's two calls, for a signed-in member of `teamId`.
