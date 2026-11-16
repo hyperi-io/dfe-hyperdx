@@ -170,6 +170,10 @@ jobs:
             echo "status=clean" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # rerere cannot record a modify/delete conflict, so a file we deleted
+          # on purpose (.fork-deleted) that upstream edited would stall every
+          # sync. Keep those deleted. Any other conflict still stops the run.
+          scripts/resolve-fork-deleted.py
           # rerere may have staged resolutions but left the merge in-progress.
           unresolved="$(git diff --name-only --diff-filter=U)"
           if [ -z "$unresolved" ]; then

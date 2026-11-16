@@ -135,6 +135,11 @@ rerere replays previously-recorded resolutions for our PERMANENT deltas.
 copy outright. Anything left conflicting is a three-way conflict on a catalogued
 file.
 
+A file we deleted that upstream then edits is a modify/delete conflict, which
+rerere cannot record, so `scripts/resolve-fork-deleted.py` runs straight after
+the merge and `git rm`s each conflicted path listed in `.fork-deleted`. A text
+conflict, or a modify/delete on an unlisted path, still stops the sync.
+
 **A replayed resolution is not a correct one.** rerere reproduces the edit that
 resolved a conflict whose preimage matched, and it has no idea whether the
 result still means anything. The failure it produces is specific and worth
