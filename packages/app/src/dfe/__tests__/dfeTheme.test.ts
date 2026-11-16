@@ -1,23 +1,23 @@
 /**
- * Fork-local coverage for the DFE brand theme.
+ * Fork-local coverage for the DFE brand.
  *
- * The theme registry validates SHAPE at import; these tests pin the brand
- * IDENTITY - the values a well-meaning upstream refactor of the shared theme
- * scaffolding could quietly reset. The primary scale is anchored on the brand
- * tokens in `_tokens.scss`, so those two anchors are asserted against the
- * stylesheet rather than duplicated as loose constants.
+ * Upstream ships one brand and one palette, and takes ours through three
+ * swapped references. These tests pin the brand IDENTITY and that wiring. The
+ * primary scale is anchored on the brand tokens in `_tokens.scss`, so those two
+ * anchors are asserted against the stylesheet rather than duplicated as
+ * constants.
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-import { FONT_VAR_MAP, MANTINE_FONT_MAP } from '@/config/fonts';
-import { dfeTheme } from '@/theme/themes/dfe';
-import { makeTheme } from '@/theme/themes/dfe/mantineTheme';
+import { MANTINE_FONT_MAP } from '@/config/fonts';
+import { makeTheme, theme } from '@/theme/themes/dfe/mantineTheme';
 
-const tokensScss = readFileSync(
-  join(__dirname, '../../theme/themes/dfe/_tokens.scss'),
-  'utf-8',
-);
+const APP_ROOT = join(__dirname, '../../..');
+const read = (relative: string) =>
+  readFileSync(join(APP_ROOT, relative), 'utf-8');
+
+const tokensScss = read('src/theme/themes/dfe/_tokens.scss');
 
 const cssToken = (name: string): string => {
   const match = tokensScss.match(
@@ -29,51 +29,89 @@ const cssToken = (name: string): string => {
   return match[1].toLowerCase();
 };
 
-describe('dfeTheme registration', () => {
-  it('registers under the dfe name with the DFE display name', () => {
-    expect(dfeTheme.name).toBe('dfe');
-    expect(dfeTheme.displayName).toBe('DFE');
+type Brand = typeof import('@/dfe/brand');
+
+function loadBrand(upstream: boolean): Brand {
+  const pinned = process.env.DFE_UPSTREAM_BRAND;
+  if (upstream) {
+    process.env.DFE_UPSTREAM_BRAND = 'true';
+  } else {
+    delete process.env.DFE_UPSTREAM_BRAND;
+  }
+  try {
+    let brand: Brand | undefined;
+    jest.isolateModules(() => {
+      brand = jest.requireActual<Brand>('@/dfe/brand');
+    });
+    if (!brand) {
+      throw new Error('@/dfe/brand did not load');
+    }
+    return brand;
+  } finally {
+    process.env.DFE_UPSTREAM_BRAND = pinned;
+  }
+}
+
+// The DFE logomark's viewBox, which upstream's ClickStack mark does not share.
+const DFE_LOGOMARK_VIEWBOX = '0 0 113.77 78.052';
+
+describe('the DFE brand', () => {
+  it('names the console DFE with the DFE marks and theme', () => {
+    const brand = loadBrand(false);
+
+    expect(brand.dfeBrandName('ClickStack')).toBe('DFE');
+    expect(brand.theme.primaryColor).toBe(theme.primaryColor);
+    expect(brand.Logomark({}).props.viewBox).toBe(DFE_LOGOMARK_VIEWBOX);
+    expect(brand.Wordmark({ name: 'DFE' }).type).toBe('div');
   });
 
-  it('scopes its CSS custom properties with the theme-dfe class', () => {
-    // ThemeProvider swaps exactly one class on <html>, so the token blocks must
-    // be scoped to the class this theme declares.
-    expect(dfeTheme.cssClass).toBe('theme-dfe');
-    expect(tokensScss).toContain(
-      ".theme-dfe[data-mantine-color-scheme='dark']",
+  it('gives upstream its own brand under the test pin', () => {
+    const brand = loadBrand(true);
+
+    expect(brand.dfeBrandName('ClickStack')).toBe('ClickStack');
+    expect(brand.theme.primaryColor).not.toBe(theme.primaryColor);
+    expect(brand.Logomark({}).props.viewBox).not.toBe(DFE_LOGOMARK_VIEWBOX);
+    expect(brand.Wordmark({ name: 'ClickStack' }).type).not.toBe('div');
+  });
+});
+
+describe('upstream files take the DFE brand', () => {
+  it('reads the name and marks in brand/index.tsx', () => {
+    const index = read('src/brand/index.tsx');
+    expect(index).toContain(
+      "import { dfeBrandName, Logomark, Wordmark } from '@/dfe/brand';",
     );
-    expect(tokensScss).toContain(
-      ".theme-dfe[data-mantine-color-scheme='light']",
+    expect(index).toMatch(/BRAND_DISPLAY_NAME = dfeBrandName\(/);
+  });
+
+  it('reads the Mantine theme in ThemeWrapper.tsx', () => {
+    expect(read('src/ThemeWrapper.tsx')).toContain(
+      "import { theme as baseTheme } from '@/dfe/brand';",
     );
   });
 
-  it('does not scope its tokens onto another theme class', () => {
-    // These blocks began life as a copy of the hyperdx theme. Left pointing at
-    // `.theme-hyperdx` they emit AFTER hyperdx's own block (both are @used from
-    // _base-tokens.scss, dfe second), so equal specificity hands the win to us
-    // and the hyperdx theme silently renders DFE brand colours.
-    expect(tokensScss).not.toContain('.theme-hyperdx[');
-    expect(tokensScss).not.toContain('.theme-clickstack[');
+  it('reads the CSS tokens in theme/_base-tokens.scss', () => {
+    const baseTokens = read('src/theme/_base-tokens.scss');
+    expect(baseTokens).toContain("@use './themes/dfe/tokens';");
+    expect(baseTokens).not.toContain("@use './tokens';");
   });
 
-  it('ships its own favicon set rather than upstream hyperdx branding', () => {
-    expect(dfeTheme.favicon.svg).toBe('/favicons/dfe/favicon.svg');
-    expect(dfeTheme.favicon.png32).toBe('/favicons/dfe/favicon-32x32.png');
-    expect(dfeTheme.favicon.png16).toBe('/favicons/dfe/favicon-16x16.png');
-    expect(dfeTheme.favicon.appleTouchIcon).toBe(
-      '/favicons/dfe/apple-touch-icon.png',
-    );
+  it('emits its tokens for both colour schemes, unscoped', () => {
+    // Nothing puts a theme class on <html> any more, so a scoped block would
+    // never match.
+    expect(tokensScss).toContain("\n[data-mantine-color-scheme='dark'] {");
+    expect(tokensScss).toContain("\n[data-mantine-color-scheme='light'] {");
+    expect(tokensScss).not.toMatch(/\.theme-[a-z]+\[/);
   });
 
-  it('supplies a Wordmark and a Logomark', () => {
-    expect(dfeTheme.Wordmark).toBeDefined();
-    expect(dfeTheme.Logomark).toBeDefined();
+  it('links the DFE favicon set in _document.tsx', () => {
+    const document = read('pages/_document.tsx');
+    expect(document).toContain('/favicons/dfe/favicon.svg');
+    expect(document).not.toContain('/favicons/clickstack/');
   });
 });
 
 describe('DFE mantine theme', () => {
-  const theme = dfeTheme.mantineTheme;
-
   it('uses the brand blue as primary, not the inherited olive yellow', () => {
     expect(theme.primaryColor).toBe('brand');
     expect(theme.primaryShade).toBe(6);
@@ -98,19 +136,10 @@ describe('DFE mantine theme', () => {
   });
 });
 
-describe('DFE work-UI fonts', () => {
-  // The DFE console is pinned to Inter (tabular numerals, legible in dense
-  // tables) with IBM Plex Mono for code. Both must stay resolvable, because
-  // _app.tsx maps the DFE theme onto them by NAME.
+describe('DFE work-UI font', () => {
+  // The console is pinned to Inter (tabular numerals, legible in dense tables),
+  // and _app.tsx hands it to the theme wrapper by NAME.
   it('resolves Inter', () => {
-    expect(FONT_VAR_MAP['Inter']).toBe('var(--font-inter)');
     expect(MANTINE_FONT_MAP['Inter']).toBe('var(--font-inter), sans-serif');
-  });
-
-  it('resolves IBM Plex Mono', () => {
-    expect(FONT_VAR_MAP['IBM Plex Mono']).toBe('var(--font-ibm-plex-mono)');
-    expect(MANTINE_FONT_MAP['IBM Plex Mono']).toBe(
-      'var(--font-ibm-plex-mono), monospace',
-    );
   });
 });

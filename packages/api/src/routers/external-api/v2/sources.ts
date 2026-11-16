@@ -720,6 +720,11 @@ function formatExternalSource(source: SourceDocument) {
  *           description: HyperDX Source for logs associated with metrics. Optional
  *           nullable: true
  *           example: 507f1f77bcf86cd799439011
+ *         minAutoGranularity:
+ *           type: string
+ *           description: Floor for the auto-inferred chart granularity. Set it to the scrape/report interval of the metrics so a short time range does not produce buckets smaller than that interval (sparse, steppy series). Only constrains "Auto" granularity; an explicit granularity picked on a tile is never overridden. Omit for no minimum. Uses the SQL interval format (a positive integer followed by second, minute, hour, or day), not the short form of the materialized view granularity fields.
+ *           pattern: '^\d+ (second|minute|hour|day)$'
+ *           example: 1 minute
  *     SessionSource:
  *       type: object
  *       required:
@@ -830,6 +835,16 @@ function formatExternalSource(source: SourceDocument) {
  *           type: string
  *           description: Required by the API for all source kinds; not used by PromQL queries.
  *           example: timestamp
+ *         minAutoGranularity:
+ *           type: string
+ *           description: Floor for the auto-inferred chart granularity, and the scrape interval that `$__rate_interval` is computed from. Set it to the Prometheus scrape interval so a short time range does not produce buckets smaller than that interval. Only constrains "Auto" granularity; an explicit granularity picked on a tile is never overridden. Omit for no minimum. Uses the SQL interval format (a positive integer followed by second, minute, hour, or day), not the short form of the materialized view granularity fields.
+ *           pattern: '^\d+ (second|minute|hour|day)$'
+ *           example: 1 minute
+ *         promqlBackend:
+ *           type: string
+ *           enum: [auto, clickhouse-http, table-function]
+ *           description: How PromQL is evaluated on a ClickHouse connection. "clickhouse-http" uses ClickHouse's Prometheus HTTP API, which needs ClickHouse 26.6+ with the prometheus_api_v1 handler configured; queries fail with an error when the server does not serve it. "table-function" uses the prometheusQuery table functions. "auto" (the default when omitted) checks the server and prefers the HTTP API. Ignored when the connection is a Prometheus-compatible endpoint.
+ *           example: auto
  *     Source:
  *       oneOf:
  *         - $ref: '#/components/schemas/LogSource'

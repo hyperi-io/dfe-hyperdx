@@ -83,7 +83,7 @@ describe('_app.tsx - route guard and font pin', () => {
   });
 
   it('pins the DFE console font to Inter regardless of user preference', () => {
-    expect(app).toMatch(/isDFETheme\s*\|\|\s*isClickStackTheme\s*\?\s*'Inter'/);
+    expect(app).toContain('fontFamily={MANTINE_FONT_MAP.Inter}');
   });
 });
 

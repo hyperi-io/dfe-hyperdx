@@ -20,7 +20,7 @@
         "src/sessions.ts",
         "src/utils/webhookIcons.tsx",
         "src/defaults.ts",
-        "src/theme/index.ts"
+        "src/components/ServiceMap/ServiceMapGroupByInput.tsx"
       ],
       "ignoreDependencies": [
         "eslint-config-next",
@@ -47,6 +47,9 @@
       "project": ["src/**/*.ts"],
       "ignoreDependencies": ["@stryker-mutator/core"],
       "ignoreBinaries": ["stryker"]
+    },
+    "packages/cli": {
+      "ignoreBinaries": ["claude"]
     },
     "packages/hdx-eval": {
       "project": ["src/**/*.ts"],

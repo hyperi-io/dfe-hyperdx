@@ -10,7 +10,7 @@ jest.mock('next/router', () => ({
   useRouter: () => ({ push: jest.fn() }),
 }));
 
-jest.mock('@/theme/ThemeProvider', () => ({
+jest.mock('@/brand', () => ({
   useBrandDisplayName: () => 'DFE',
   useLogomark: () => null,
 }));

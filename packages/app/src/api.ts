@@ -13,10 +13,14 @@ import type {
   AlertEvaluationsApiResponse,
   AlertHistoryRangeApiResponse,
   AlertsApiResponse,
+  CreateOrgApiKeyApiResponse,
+  CreateOrgApiKeyRequest,
   InstallationApiResponse,
   MeApiResponse,
   OnboardingDataApiResponse,
   OnboardingTaskId,
+  OrgApiKeyApiResponse,
+  OrgApiKeysApiResponse,
   PresetDashboard,
   PresetDashboardFilter,
   PrometheusMatrixResult,
@@ -89,6 +93,8 @@ const server = ky.create({
   },
   timeout: false,
 });
+
+const ORG_API_KEYS_QUERY_KEY = ['team', 'api-keys'];
 
 export const hdxServer = (
   url: string,
@@ -476,6 +482,53 @@ const api = {
       },
     });
   },
+  useOrgApiKeys() {
+    return useQuery<OrgApiKeysApiResponse>({
+      queryKey: ORG_API_KEYS_QUERY_KEY,
+      queryFn: () => hdxServer('team/api-keys').json<OrgApiKeysApiResponse>(),
+    });
+  },
+  useCreateOrgApiKey() {
+    const queryClient = useQueryClient();
+    return useMutation<
+      CreateOrgApiKeyApiResponse,
+      Error | HTTPError,
+      CreateOrgApiKeyRequest
+    >({
+      mutationFn: async json =>
+        hdxServer('team/api-keys', {
+          method: 'POST',
+          json,
+        }).json<CreateOrgApiKeyApiResponse>(),
+      onSuccess: () =>
+        queryClient.invalidateQueries({ queryKey: ORG_API_KEYS_QUERY_KEY }),
+    });
+  },
+  useUpdateOrgApiKey() {
+    const queryClient = useQueryClient();
+    return useMutation<
+      OrgApiKeyApiResponse,
+      Error | HTTPError,
+      { id: string; description: string }
+    >({
+      mutationFn: async ({ id, description }) =>
+        hdxServer(`team/api-keys/${id}`, {
+          method: 'PATCH',
+          json: { description },
+        }).json<OrgApiKeyApiResponse>(),
+      onSuccess: () =>
+        queryClient.invalidateQueries({ queryKey: ORG_API_KEYS_QUERY_KEY }),
+    });
+  },
+  useDeleteOrgApiKey() {
+    const queryClient = useQueryClient();
+    return useMutation<unknown, Error | HTTPError, { id: string }>({
+      mutationFn: async ({ id }) =>
+        hdxServer(`team/api-keys/${id}`, { method: 'DELETE' }),
+      onSuccess: () =>
+        queryClient.invalidateQueries({ queryKey: ORG_API_KEYS_QUERY_KEY }),
+    });
+  },
   useDismissOnboarding() {
     const queryClient = useQueryClient();
     return useMutation<OnboardingDataApiResponse, Error | HTTPError, boolean>({
@@ -630,6 +683,7 @@ const api = {
         url: string;
         name: string;
         description: string;
+        titleEmoji?: boolean;
         queryParams?: Record<string, string>;
         headers?: Record<string, string>;
         body?: string;
@@ -640,6 +694,7 @@ const api = {
         url,
         name,
         description,
+        titleEmoji,
         queryParams,
         headers,
         body,
@@ -651,6 +706,7 @@ const api = {
             service,
             url,
             description,
+            titleEmoji,
             queryParams: queryParams || {},
             headers: headers || {},
             body,
@@ -672,6 +728,7 @@ const api = {
         url: string;
         name: string;
         description: string;
+        titleEmoji?: boolean;
         queryParams?: Record<string, string>;
         headers?: Record<string, string>;
         body?: string;
@@ -683,6 +740,7 @@ const api = {
         url,
         name,
         description,
+        titleEmoji,
         queryParams,
         headers,
         body,
@@ -694,6 +752,7 @@ const api = {
             service,
             url,
             description,
+            titleEmoji,
             queryParams: queryParams || {},
             headers: headers || {},
             body,

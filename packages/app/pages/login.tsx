@@ -1,5 +1,5 @@
 import AuthPage from '@/AuthPage';
-import { IS_DEV } from '@/theme';
+import { IS_DEV } from '@/config';
 
 // Dev-only page (DFE users come from OIDC); DFE_LOCAL_AUTH_PAGES=true lets a
 // deployment opt in until its OIDC wiring lands. Gate via getServerSideProps
