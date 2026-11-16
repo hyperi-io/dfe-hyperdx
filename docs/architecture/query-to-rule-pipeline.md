@@ -1,40 +1,48 @@
 # Query-to-rule pipeline
 
 **Turn a HyperDX search into a DFE detection rule without retyping it.** An
-analyst who has already found the thing in HyperDX presses a button; the engine
-gets the SQL that search runs and saves it as a rule a hunt can use.
+analyst who has found the thing in HyperDX presses a button, and the engine gets
+the SQL that search runs and saves it as a rule a hunt can use.
 
 Two routes (`POST /dfe/export-sql`, `POST /dfe/create-rule`) and one button, all
-under `dfe/` - no upstream file is modified.
+under `dfe/`. No upstream file is modified.
 
 ---
 
 ## The path
 
+The API renders the search with the same renderer the search page uses, and the
+engine decides whether the result is a rule.
+
 ```mermaid
 sequenceDiagram
+    accTitle: L4 Detail -- Search to rule
+    accDescr: The analyst refines a search. The UI asks the API to export it, and the API reads column metadata from ClickHouse and returns the rendered SQL. The UI posts the raw SQL to create-rule, the API forwards it to the engine as the caller, and the engine's answer comes back to the UI.
     participant User as Analyst
     participant App as HyperDX UI
-    participant API as HyperDX API /dfe
+    participant API as HyperDX API
     participant CH as ClickHouse
     participant Engine as DFE engine
 
-    User->>App: refine a search until it is right
-    App->>API: POST /dfe/export-sql with the search's chart config
-    API->>API: resolve source and connection for the team
+    User->>App: refine a search
+    App->>API: POST /dfe/export-sql
     API->>CH: fetch column metadata
-    API->>API: renderChartConfig then parameterizedQueryToSql then format
     API-->>App: sql, rawSql, config, source
     App->>API: POST /dfe/create-rule with rawSql
-    API->>Engine: POST /api/v1/rules/from-hyperdx as the caller
-    Engine-->>API: the rule id, or 422 when the SQL cannot be compiled
-    API-->>App: the engine's status and body
-    App-->>User: open the rule in the DFE UI, or show the engine's reason
+    API->>Engine: POST /api/v1/rules/from-hyperdx
+    Engine-->>API: rule id, or 422
+    API-->>App: engine status and body
 ```
+
+<!-- prettier-ignore -->
+*Figure 1. L4 Detail -- Search to rule. Dashed arrows are answers.* Up: [L3 Components -- HyperDX API](backend.md#structure).
+
+The UI then opens the created rule in the DFE console, or shows why it was
+refused.
 
 ---
 
-## What the export renders
+## The routes and the button
 
 `packages/api/src/dfe/routers/query-export.ts`, mounted at `/dfe` behind
 upstream's `isUserAuthenticated`.
@@ -51,62 +59,53 @@ plus optional `startTime` / `endTime` in milliseconds.
 | `config` | the original chart config, for structured consumption |
 | `source` | `{ name, kind, from, connection }`                    |
 
-The query is the one the search runs. `from` is the source's own table, and the
+The query is the one the search runs. `from` is the source's table, and the
 search bar, its language and every side-panel filter reach `renderChartConfig`
-as the view holds them, so the renderer that runs the search also writes the
-rule. The engine reads the `FROM` as the table the hunt scans and the `WHERE` as
-the detection logic.
+as the view holds them, so the renderer that runs the search writes the rule.
+The engine reads the `FROM` as the table the hunt scans and the `WHERE` as the
+detection logic.
 
-There is no time bound. The saved chart config carries no
-`timestampValueExpression`, so the renderer emits none, and the hunt runner
-supplies its own window. The engine strips the display-only rest (`LIMIT`,
-`SETTINGS`, time buckets).
+The button sends no `startTime` or `endTime`, so the rule has no time bound. The
+saved chart config has no `timestampValueExpression`, so the renderer emits
+none, and the hunt runner supplies its window. The engine strips the
+display-only rest (`LIMIT`, `SETTINGS`, time buckets).
 
 The engine expands no placeholder. A templated table such as
 `{{org_id}}.{{source_table_name}}` or a `{timestamp_condition}` does not parse,
-and the engine refuses a rule it cannot compile with 422 and saves nothing.
+and the engine rejects with 422, saving nothing, a rule it cannot compile or one
+that matches every event.
 
-### Rendering
-
-`renderChartConfig` (needs ClickHouse column metadata, hence the client), then
-`parameterizedQueryToSql`, then `format`. **A formatting failure is not
-fatal** - it falls back to the raw SQL, because a valid query that reads badly
-beats no query at all.
-
----
-
-## The button
+The render is `renderChartConfig` (it needs ClickHouse column metadata, hence
+the client), then `parameterizedQueryToSql`, then `format`. A formatting failure
+is not fatal: it falls back to the raw SQL, because a valid query that reads
+badly beats no query at all.
 
 `packages/app/src/dfe/components/CreateRuleFromSearch/` exports the search,
 posts the `rawSql` to `/dfe/create-rule`, and opens the created rule at
-`DFE_UI_BASE_URL/rules/<id>`. A refusal shows the engine's own reason.
+`DFE_UI_BASE_URL/rules/<id>`. A 422 shows the engine's reason, a 403 says the
+user may not create rules, and an engine that rejects the session's token (which
+the route answers as 502, so the app does not redirect to a login) says the
+engine did not accept the session.
 
 It deliberately uses plain `useState` rather than react-query's `useMutation`.
-The component is injected into upstream's `DBSearchPage`, and upstream's own
-tests render that page behind a _partial_ `@tanstack/react-query` mock - pulling
-a second hook out of that module makes their pristine tests explode. Our delta
-has to stay invisible to upstream's test suite.
-
----
-
-## Version sensitivity
+The component is injected into upstream's `DBSearchPage`, and upstream's tests
+render that page behind a PARTIAL `@tanstack/react-query` mock. Pulling a second
+hook out of that module makes their pristine tests explode. Our delta has to
+stay invisible to upstream's test suite.
 
 Two things moved in 2.29 and the code guards for both:
 
 - `SavedChartConfig` became a **union**, so `chartConfig.source` is optional and
-  `where` only exists on the builder variant. Both are checked before use.
+  `where` exists on the builder variant alone. Both are checked before use.
 - `source.connection` is a **connection-id string**, not a populated object.
 
-Neither guard is decorative; removing either produces a runtime failure on some
-chart types only.
+Removing either guard produces a runtime failure on some chart types.
 
----
-
-## AI steering
+The mistakes a change here tends to make, and what to do instead:
 
 | Don't                                            | Do                                        | Why                                                        |
 | ------------------------------------------------ | ----------------------------------------- | ---------------------------------------------------------- |
-| Assume `chartConfig.where` exists                | Check `'where' in chartConfig` first      | It is a union; raw-SQL and PromQL variants have no `where` |
-| Swap the table or the time filter for a template | Render against `source.from` as it stands | The engine expands no placeholder and refuses the rule     |
+| Assume `chartConfig.where` exists                | Check `'where' in chartConfig` first      | It is a union. Raw-SQL and PromQL variants have no `where` |
+| Swap the table or the time filter for a template | Render against `source.from` as it stands | The engine expands no placeholder and rejects the rule     |
 | Rewrite the search into SQL by hand              | Let `renderChartConfig` render it         | The search page runs the same renderer                     |
 | Add a react-query hook to this component         | Use plain state                           | Upstream's partial mock of that module breaks their tests  |

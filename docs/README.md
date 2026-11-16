@@ -3,7 +3,7 @@
 DFE's fork of [HyperDX](https://github.com/hyperdxio/hyperdx), embedded in the
 DFE platform as its visualisation and search layer.
 
-Two questions bring people here, and they are answered in different places:
+Four questions bring people here, and they are answered in different places:
 
 | Question | Start at |
 | --- | --- |
@@ -12,44 +12,48 @@ Two questions bring people here, and they are answered in different places:
 | How do I run it locally? | [development/](development/README.md) |
 | Why was it built this way? | [decisions/](decisions/README.md) |
 
----
-
-## What is ours and what is upstream's
-
-This matters more here than in a normal repo, because the answer decides whether
-a change is free or expensive.
+Which files are ours and which are upstream's matters more here than in a normal repo, because the answer decides whether
+a change is free or expensive. Our files sit beside upstream's, and HyperI
+standards apply to ours alone.
 
 ```mermaid
-flowchart TB
-    subgraph ours["OURS - HyperI standards apply"]
-        d["docs/"]
+flowchart LR
+    accTitle: L4 Detail -- Ours and upstream's files
+    accDescr: Ours are our pages under docs, every dfe directory under packages, the security and githooks directories, our scripts and the workflows we added. Upstream's are agent_docs, the root agent and contributor docs, and everything under packages outside a dfe directory. Ownership is per file, and .fork-surface lists the upstream files we edit.
+
+    subgraph ours["Ours, HyperI standards apply"]
+        direction TB
+        d["Our pages<br/>under docs/"]
         dfe["packages/**/dfe/**"]
-        tools["scripts/, security/, .githooks/"]
-        wf[".github/workflows/<br/>ci, fork-*, upstream-*"]
+        tools["security/, .githooks/,<br/>our scripts/"]
+        wf["Our workflows"]
     end
 
-    subgraph theirs["UPSTREAM - left exactly as shipped"]
+    subgraph theirs["Upstream's"]
+        direction TB
         ad["agent_docs/"]
-        rootmd["AGENTS.md, MCP.md,<br/>LOCAL.md, DEPLOY.md,<br/>CONTRIBUTING.md"]
-        code["everything under packages/<br/>outside dfe/"]
+        rootmd["AGENTS.md, MCP.md, LOCAL.md,<br/>DEPLOY.md, CONTRIBUTING.md"]
+        code["packages/ outside dfe/"]
     end
 
-    classDef mine fill:#0072B2,stroke:#00456b,color:#ffffff
-    classDef up fill:#009E73,stroke:#005f45,color:#ffffff
-    class d,dfe,tools,wf mine
-    class ad,rootmd,code up
+    ours ~~~ theirs
+
+    classDef default fill:#F8FAFC,stroke:#64748B,stroke-width:1px,color:#0F172A
+    classDef ext fill:#EEF0F2,stroke:#6B7280,stroke-width:1px,stroke-dasharray:4 3,color:#1F2937
+    classDef group fill:none,stroke:#64748B,stroke-width:1px,stroke-dasharray:2 4
+    class ad,rootmd,code ext
+    class ours,theirs group
 ```
 
-**Our files follow HyperI documentation standards. Upstream's files are left
-untouched, including their docs.** Applying our conventions to `agent_docs/` or
-`AGENTS.md` would buy nothing and create conflict surface on every sync.
+*Figure 1. L4 Detail -- Ours and upstream's files. Dashed boxes are upstream's.* Up: [dfe-hyperdx](../README.md).
 
-`README.md` and `CLAUDE.md` are the two shared files: both exist upstream, both
-carry a small catalogued delta of ours, and both are listed in `.fork-surface`.
+Applying our conventions to `agent_docs/` or `AGENTS.md` would buy nothing and
+create conflict surface on every sync. Where an upstream file does have a delta
+of ours, `.fork-surface` lists it and [fork/what-we-changed.md](fork/what-we-changed.md)
+says why. `README.md`, `CLAUDE.md` and `docs/alert-webhook-template-variables.md`
+are the shared docs: upstream ships each, and each has a small delta of ours.
 
----
-
-## The documentation set
+The documentation set:
 
 ```text
 docs/
@@ -60,4 +64,4 @@ docs/
 ```
 
 Everything here is plain CommonMark plus fenced mermaid, so it renders on GitHub
-and drops into a docs generator without a rewrite.
+without a build step.

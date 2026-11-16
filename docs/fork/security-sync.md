@@ -160,7 +160,7 @@ returns an `apiKey`. That was not needed to clear it.
 
 **#199 and #150, both high, command injection in `networkInterfaces()`.**
 
-This one is genuinely reached. `packages/api/src/index.ts` instantiates
+This one is reached. `packages/api/src/index.ts` instantiates
 `@opentelemetry/host-metrics`, which requires `systeminformation/lib/network`
 (`si.js:22`) and calls `networkStats()` on the metrics timer. `networkStats()`
 calls `networkInterfaces()` at `network.js:1302` and `:1518`.
@@ -182,7 +182,7 @@ PIN just produced, so it cannot tell an upstream fix from ours. `--verify` is
 the one CI gates on and it is correct. Do not act on `--check` calling a fresh
 pin redundant.
 
-### ip-address - the only genuinely remote one, already closed
+### ip-address - the one remote advisory, closed
 
 **#248, high, SSRF via leading-zero octets read as decimal.**
 
@@ -206,7 +206,7 @@ came back with 15 packages. That was wrong: a scoped package sits at
 and never matches. Depth 2 is the real number - **21**, not 15.
 
 Six more turned out to be in the image: `@hono/node-server` and five
-`@opentelemetry/*`. Only `@babel/runtime` was genuinely absent.
+`@opentelemetry/*`. Only `@babel/runtime` was absent.
 
 ### The OpenTelemetry six
 
@@ -297,7 +297,7 @@ Measured 2026-08-26: 99 Dependabot alerts, but only **26** audit findings at
 moderate-and-above. Fewer because yarn dedupes by package, and different because
 it walks the whole workspace including devDependencies - so it finds nested
 copies the hoisted `node_modules` view hides. `lodash` reads 4.18.1 at the top
-level and the audit finds a 4.17.21 copy; `semver` reads 6.3.1 and the audit
+level and the audit finds a 4.17.21 copy. `semver` reads 6.3.1 and the audit
 finds 5.7.1.
 
 **How to silence one, properly.** Yarn Berry's own settings, confirmed present
@@ -336,12 +336,12 @@ written reason per entry. Follow that format.
 
 ### Tooling warts found on the way
 
-- **`hyperi-ci deps drift` never read `yarn.lock`.** It looked for
+- `hyperi-ci deps drift` never read `yarn.lock`. It looked for
   `package-lock.json` only, so it compared nothing and reported clean - on this
   repo and on dfe-ui. Fixed in hyperi-ci 2.9.23. First honest run here: 12
   floors a whole major behind the lock, including `zod` declared `3.25` against
   `4.4.3` locked, in four packages.
-- **husky is not installed on a fresh clone**, so `lint-staged` never runs and
+- husky is not installed on a fresh clone, so `lint-staged` never runs and
   formatting errors reach the commit. Two of ours got through that way this
   pass.
 
@@ -363,17 +363,17 @@ written reason per entry. Follow that format.
   upstream's. Until then the hook stays off and lint-staged has to be run by
   hand.
 
-- **There are TWO ratchets, and the second one catches you fixing the first
-  wrongly.** `--max-warnings` per package is one. `scripts/ci/ratchet.mjs` is
-  the other, and it counts `as any` and `eslint-disable` occurrences against a
+- There are TWO ratchets, and the second one catches you fixing the first
+  wrongly. `--max-warnings` per package is one. `scripts/ci/ratchet.mjs` is the
+  other, and it counts `as any` and `eslint-disable` occurrences against a
   committed baseline. So silencing an eslint warning with a disable comment
   passes the first and fails the second, by design. Good design - it is the
   guard against exactly that reflex.
 
   The right move is a real fix. `sql[i]` in a loop trips
-  `security/detect-object-injection` on every read; `sql.charAt(i)` does not,
-  and is the same operation. `as jest.Mock` trips `no-unsafe-type-assertion`;
-  `jest.mocked()` is the typed helper and needs no cast. Eleven
+  `security/detect-object-injection` on every read, and `sql.charAt(i)` does not
+  and is the same operation. `as jest.Mock` trips `no-unsafe-type-assertion`,
+  and `jest.mocked()` is the typed helper and needs no cast. Eleven
   `(dfeConfig as any).X =` assignments collapse to one
   `dfeConfig as Record<string, unknown>` alias. Twenty-one casts removed that
   way this pass, none of them muted.
@@ -419,7 +419,7 @@ alerts arrive regardless.
 
 ### What is done as of this pass
 
-- 99 alerts -> 4. The 95 dismissed each carry their reason on the alert;
+- 99 alerts -> 4. The 95 dismissed each carry their reason on the alert, and
   `scripts/dismiss-triaged-alerts.py` holds the verdicts as data and re-runs
   after a sync.
 - The 4 left open are systeminformation, the one real finding. They close when
@@ -453,7 +453,7 @@ type-checks the mock properly, which is the point, and that is exactly why it
 fails: `createConnection` resolves a full mongoose `Document` - 50-plus methods
 
 - so `mockResolvedValue({ _id: someObjectId })` is rejected. Minting real
-  ObjectIds does not help; the Document type is the blocker, not the id type.
+  ObjectIds does not help. The Document type is the blocker, not the id type.
 
 17 tsc errors, and no honest way through short of building real Documents in
 every fixture. The loose `x as jest.Mock` cast exists for that reason and the
@@ -554,7 +554,7 @@ in the reusable workflow purely to dodge anonymous pull limits. Upstream's
 Five open PRs went red on `ci / Quality` overnight with the same two lines,
 while `ci / Test` stayed green:
 
-```text
+```console
 audit: failed
 YN0001: RequestError: Timeout awaiting 'socket' for 60000ms
 ```
@@ -625,10 +625,9 @@ done
 the `security/overrides.yaml` bar, so nothing is pinned and the register is
 unchanged.
 
-The interesting part is not the tally. Two entries in
-`scripts/dismiss-triaged-alerts.py` were written against advisories that have
-since been superseded, and both would have re-dismissed a new alert with a
-reason that is no longer true.
+Two entries in `scripts/dismiss-triaged-alerts.py` were written against
+advisories that have since been superseded, and both would have re-dismissed a
+new alert with a reason that is no longer true.
 
 ### fast-uri - the range moved up past us, not the other way round
 
@@ -644,11 +643,9 @@ wrote the mirror note, which is that a new advisory can raise the ceiling over a
 version that never moved. A version-comparison verdict has a shelf life and the
 advisory, not the lockfile, decides when it expires.
 
-Still not reachable, for a different reason than before:
-
-```text
-@hyperdx/api -> @modelcontextprotocol/sdk@1.29.0 -> ajv@8.20.0 -> fast-uri@3.1.4
-```
+Still not reachable, for a different reason than before. The one path is
+`@hyperdx/api`, which pulls `@modelcontextprotocol/sdk@1.29.0`, which pulls
+`ajv@8.20.0`, which pulls `fast-uri@3.1.4`.
 
 ajv is the only parent. It uses fast-uri to resolve `$id` and `$ref` and to
 validate `format: uri`, against schemas that are our own source, and it issues
@@ -657,15 +654,12 @@ need a requester downstream of the parse. There is none. The fork also puts
 `requireServicePrincipal` in front of `/mcp` (`api-app.ts:137`), so the
 transport that drags ajv in is not reachable by a human user at all.
 
-### qs - the old reason was simply wrong
+### qs - the old reason was wrong
 
 The old entry read "No call site passes request-derived input to the sink."
-Express's own query parser is a call site, and `req.query` is request-derived:
-
-```text
-@hyperdx/api -> express@4.22.1 -> qs@6.14.2
-@hyperdx/api -> express@4.22.1 -> body-parser@1.20.6 -> qs@6.15.3
-```
+Express's query parser is a call site, and `req.query` is request-derived.
+`@hyperdx/api` pulls `express@4.22.1`, which pulls `qs@6.14.2` directly and
+`qs@6.15.3` through `body-parser@1.20.6`.
 
 Every request that carries a query string or an urlencoded body reaches qs
 before any of our code does. GHSA-4mjr-xmp4-gh2g (DoS via attacker-controlled
@@ -677,7 +671,12 @@ entry in that table to use it. Both advisories are moderate, so they do not
 clear THE BAR, and the caller is an OIDC-authenticated tenant user rather than
 the open internet - HyperDX sits behind Envoy or oauth2-proxy in every DFE
 deployment. What it buys an attacker is a self-inflicted DoS on the tenant they
-already have an account on.
+already have an account on. Corrected 2026-11-16: the k8s gateway puts no OIDC
+policy on the HyperDX route (dfe-infra `helm/edge/gateway/values.yaml`,
+`routes.hyperdx`), and express parses the query string before any auth runs, so
+any caller that reaches the route reaches qs. The route is off the public
+listener by default (`ui.public.hyperdx: false`). Both advisories are moderate,
+so the verdict below THE BAR stands.
 
 **Watch this one.** The parents pin `~6.14.0` and `~6.15.1`, so a `resolutions`
 bump to 6.16.0 is not free - express and body-parser would each be off their
@@ -719,7 +718,7 @@ write it has already won.
 `@hyperdx/otel-web-session-recorder`, both imported through `@hyperdx/browser`
 (`_app.tsx:9`, `DBSearchPage.tsx:28`, `AppNav.tsx:6`, `AppNavFeedback.tsx:3`).
 The advisory is an infinite loop in `unzipSync` on a malformed ZIP64 archive. A
-session recorder compresses; nothing in the bundle parses a ZIP. Grepping
+session recorder compresses, and nothing in the bundle parses a ZIP. Grepping
 `packages/` for `unzipSync`, `unzlibSync`, `decompressSync` and `fflate` returns
 nothing, so no code of ours reaches it either. NOT VERIFIED against the library
 source: this clone has an empty `node_modules` and no `.yarn/cache`, so the
@@ -793,23 +792,20 @@ a sync.
 
 ### The lockfile copy is dev only
 
-`yarn why image-size --recursive` gives one path:
-
-```text
-@hyperdx/app -> @storybook/nextjs@10.1.4 -> image-size@2.0.2
-```
+`yarn why image-size --recursive` gives one path: `@hyperdx/app` pulls
+`@storybook/nextjs@10.1.4`, which pulls `image-size@2.0.2`.
 
 `@storybook/nextjs` is an app devDependency. Dependabot calls it `runtime`
 because it reads the lockfile, not the image - the same mistake as every earlier
 pass. After `yarn workspaces focus @hyperdx/api --production` there is no
 `image-size` directory anywhere in `node_modules`.
 
-### Next vendors the same code, and that copy is in the image
+### Next ships the same code, and that copy is in the image
 
 `next@16.3.4` ships its own image-size at `next/dist/compiled/image-size` and
 the type detector at `next/dist/compiled/image-detector/detector.js`. Neither is
 in `yarn.lock`, so no alert will ever fire on them. Both carry the ICNS, JXL and
-HEIF parsers, and the vendored JXL parser still throws 2.0.2's
+HEIF parsers, and Next's copied-in JXL parser still throws 2.0.2's
 `No codestream found in JXL container`, so it predates the fix. The standalone
 server that `Dockerfile:106` copies into the image loads them from
 `next/dist/server/image-optimizer.js`.
@@ -826,8 +822,11 @@ size or by 8 on a zero, so it always terminates. Next splits the two:
   placeholder sharp has just produced.
 
 So production never parses request-derived bytes with the vulnerable code, and
-`/_next/image` sits behind the OIDC gateway anyway. The vendored copy moves when
-a Next release vendors 2.0.3 or later. Check it on the next sync with:
+`/_next/image` sits behind the OIDC gateway anyway. Next's copy moves when a
+Next release ships 2.0.3 or later. Corrected 2026-11-16: the k8s gateway puts no
+OIDC policy on the HyperDX route (dfe-infra `helm/edge/gateway/values.yaml`,
+`routes.hyperdx`), so "behind the OIDC gateway" does not hold. The verdict rests
+on the first sentence alone. Check it on the next sync with:
 
 ```sh
 rg -o 'No codestream found in JXL container' node_modules/next/dist/compiled/image-size/index.js
@@ -893,17 +892,17 @@ do not bite, but because nobody opts in, not because nothing starts the SDK.
 
 ### #184 - reachable, bounded, tolerable risk
 
-With the SDK running, every inbound request on the api port reaches the sink:
-
-```text
-http server 'request'
-  -> instrumentation-http 0.57.2  http.js:385  propagation.extract(ROOT_CONTEXT, headers)
-  -> CompositePropagator -> W3CBaggagePropagator.extract  (@opentelemetry/core 1.30.1)
-```
+With the SDK running, every inbound request on the api port reaches the sink.
+The http server's `request` event runs instrumentation-http 0.57.2, which calls
+`propagation.extract(ROOT_CONTEXT, headers)` (`http.js:385`). That reaches the
+`CompositePropagator` and then `W3CBaggagePropagator.extract` in
+`@opentelemetry/core` 1.30.1.
 
 That runs before express, so before any auth middleware. In a DFE deployment the
 OIDC gateway stops an unauthenticated request first, but anything that reaches
-the pod port directly gets to the propagator.
+the pod port directly gets to the propagator. Corrected 2026-11-16: the k8s
+gateway puts no OIDC policy on the HyperDX route, so any request that reaches
+the route reaches the propagator too.
 
 What bounds it is the advisory's own Impact section. Node caps the combined
 headers at 16 KB by default, the header is already in memory, and the extra cost
@@ -928,16 +927,12 @@ Re-dismissing needs repo admin.
 
 Alert 213, GHSA-23hp-3jrh-7fpw, npm 1123940. Decompression and parse DoS,
 `<= 7.5.18`. The only parent was Yarn's implicit `node-gyp@npm:latest`, locked
-at 10.2.0:
-
-```text
-@hyperdx/app -> @storybook/nextjs -> node-polyfill-webpack-plugin -> crypto-browserify
-  -> browserify-cipher -> browserify-aes -> evp_bytestokey -> node-gyp@10.2.0 -> tar@6.2.1
-node-gyp@10.2.0 -> make-fetch-happen@13.0.1 -> cacache@18.0.4 -> tar@6.2.1
-```
-
-plus `fsevents` under rollup, jest, nodemon and playwright, which never installs
-on Linux.
+at 10.2.0. `@hyperdx/app` reached it through `@storybook/nextjs`,
+`node-polyfill-webpack-plugin`, `crypto-browserify`, `browserify-cipher`,
+`browserify-aes`, `evp_bytestokey` and `node-gyp@10.2.0`, which pulls
+`tar@6.2.1` directly and again through `make-fetch-happen@13.0.1` and
+`cacache@18.0.4`. The same `node-gyp` sits under `fsevents` under rollup, jest,
+nodemon and playwright, which never installs on Linux.
 
 It never ran. A full Linux install builds nx, esbuild, msw, protobufjs,
 core-js-pure, @scarf/scarf and unrs-resolver, and nothing through node-gyp. The
@@ -1007,12 +1002,9 @@ copy, and the published `ghcr.io/hyperi-io/dfe-hyperdx:latest` (0.2.8, revision
 
 ### axios - fixed in the image, still pinned by nx
 
-Two copies, and all 12 ranges end at `< 1.20.0`:
-
-```text
-@hyperdx/api -> @slack/webhook@7.0.7 -> axios@1.20.0
-hyperdx (root) -> nx@23.1.1 -> axios@1.18.1      nx pins "1.18.1" exactly
-```
+Two copies, and all 12 ranges end at `< 1.20.0`. `@hyperdx/api` pulls
+`@slack/webhook@7.0.7`, which pulls `axios@1.20.0`. The root workspace pulls
+`nx@23.1.1`, which pins `axios` at exactly `1.18.1`.
 
 The production focus holds one axios, 1.20.0, which #111 put there.
 
@@ -1041,9 +1033,9 @@ describe main, and the image catches up at the next release.
 `publicPath` has no trailing slash. The range is `< 7.4.5`, and the advisory's
 own text puts the fix at 8.3.0 with no backport to 6.x or 7.x.
 
-```text
-@hyperdx/app -> @storybook/nextjs@10.1.4 -> @storybook/builder-webpack5@10.1.4 -> webpack-dev-middleware@6.1.3
-```
+`@hyperdx/app` pulls `@storybook/nextjs@10.1.4`, which pulls
+`@storybook/builder-webpack5@10.1.4`, which pulls
+`webpack-dev-middleware@6.1.3`.
 
 `@storybook/nextjs` is an app devDependency (`packages/app/package.json:115`),
 and only `storybook dev` serves the middleware. It is in neither the production
@@ -1136,7 +1128,7 @@ range.
   5.30.7, under the floor. The synced tree resolves 5.33.14. No patches.
 - ip-address: `packages/api` now declares upstream's `^10.7.1` and resolves
   10.7.2, so the SSRF guard stays above the 2026-08-26 range.
-- Next 16.3.6 still vendors the pre-fix image-size: `rg` finds
+- Next 16.3.6 still ships the pre-fix image-size: `rg` finds
   `No codestream found in JXL container` in
   `next/dist/compiled/image-size/index.js`. The 2026-09-27 verdict stands, since
   production only runs `validate()`.
@@ -1147,11 +1139,8 @@ range.
 exhaustion on deeply nested brace patterns, `<= 3.0.3`. 3.0.3, from 2024-05-21,
 is the latest release, so there is no fix to take.
 
-It is in the image:
-
-```text
-@hyperdx/api -> http-proxy-middleware@4.1.1 -> micromatch@4.0.8 -> braces@3.0.3
-```
+It is in the image: `@hyperdx/api` pulls `http-proxy-middleware@4.1.1`, which
+pulls `micromatch@4.0.8`, which pulls `braces@3.0.3`.
 
 It does not bite. braces expands the PATTERN, never the string being matched,
 and the one proxy the api mounts (`routers/api/clickhouseProxy.ts:209`) passes a
@@ -1395,7 +1384,7 @@ Alert 350 is the one left open by reading. Apart from `login` and `register`
 static HTML. Whether that counts as the advisory's SSG for cache replacement was
 not traced. 16.3.8 carries the fix either way.
 
-The vendored image-size in 16.3.8 still carries the pre-fix JXL parser:
+The image-size copied into 16.3.8 still carries the pre-fix JXL parser:
 `rg -c 'No codestream found in JXL container'` finds it once in
 `next/dist/compiled/image-size/index.js`. The 2026-09-27 verdict stands.
 
@@ -1554,7 +1543,7 @@ the fix, since the 2026-10-09 re-resolve, and 16.4.1 raises next's own floor to
 Pinned rather than re-resolved because the merge driver takes upstream's
 lockfile, which is how 2.40.0 took next 16.3.6 back to 16.3.4. Upstream has the
 bump open as hyperdxio/hyperdx#3460. `npmMinimalAgeGate` holds 16.4.3
-(2026-10-23), so the range takes 16.4.2 (2026-10-15). 16.4.2 still vendors the
+(2026-10-23), so the range takes 16.4.2 (2026-10-15). 16.4.2 still ships the
 pre-fix image-size, so the 2026-09-27 verdict stands.
 
 ### storybook 10.2.13 -> 10.6.2, and @vitest/mocker gone
@@ -1577,7 +1566,7 @@ yarn up -R storybook @storybook/nextjs @storybook/addon-docs @storybook/addon-li
 
 The family moves together because `@storybook/nextjs` pins its builder exactly,
 and builder-webpack5 10.6.2 drops @vitest/mocker. A newer babel preset and
-probe-image-size make the lockfile diff about 2,900 lines, every added version
+probe-image-size made the lockfile diff about 2,900 lines, every added version
 reached only through the new storybook packages. `storybook build` completes on
 10.6.2. `osv-scanner.toml` loses GHSA-82fw-gwwq-j7x9, which the scanner no
 longer reports.
@@ -1726,7 +1715,7 @@ osv-scanner reports all four copies. The code it names is v4 only.
   production tree. It is not one: the SDK has no nested copy and resolves the
   hoisted root, measured with `node -p "require.resolve('zod/package.json')"`
   from the SDK's own directory, which answers `node_modules/zod` 3.25.76.
-- Next's vendored `next/dist/compiled/zod` carries `ZodArray` sixteen times and
+- Next's copy at `next/dist/compiled/zod` carries `ZodArray` sixteen times and
   `handleArrayResult` never, so the copy in the standalone trace is v3 too.
 
 **The residual, and it is not this advisory.** v3's `ZodArray._parse`

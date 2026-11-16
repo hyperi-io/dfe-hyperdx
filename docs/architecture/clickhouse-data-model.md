@@ -1,128 +1,105 @@
 # ClickHouse data model
 
 > **Scope.** This describes UPSTREAM HyperDX's architecture, which we do not
-> modify. It is here so the fork's own docs are readable on their own;
-> upstream's [`agent_docs/`](../../agent_docs/) is the authority, and anything
+> modify. It is here so the fork's own docs are readable on their own.
+> Upstream's [`agent_docs/`](../../agent_docs/) is the authority, and anything
 > specific to DFE is called out as such.
 
-The central architectural innovation: HyperDX is not tied to any specific table
-schema. The **Source** model maps ClickHouse table columns to semantic roles via
-SQL expressions.
+HyperDX is not tied to any table schema. The **Source** model maps ClickHouse
+table columns to semantic roles through SQL expressions. A connection holds the
+ClickHouse login, and each source points one kind of telemetry at one table
+through that connection.
 
 ```mermaid
 flowchart LR
-    subgraph Configuration_DocumentDB["Configuration (DocumentDB)"]
-        CONN["Connection<br/>host, user, password"]
-        SRC_LOG["Source (Log)<br/>from: default.otel_logs"]
-        SRC_TRACE["Source (Trace)<br/>from: default.otel_traces"]
-        SRC_SESSION["Source (Session)<br/>from: default.hyperdx_sessions"]
-        SRC_METRIC["Source (Metric)<br/>from: default.otel_metrics_*"]
+    accTitle: L4 Detail -- Sources and tables
+    accDescr: A connection holds the ClickHouse login. Log, trace, session and metric sources each read their own table through it.
+
+    conn["Connection<br/>host, user, password"]
+
+    subgraph sources["Sources"]
+        srclog["Log source"]
+        srctrace["Trace source"]
+        srcsession["Session source"]
+        srcmetric["Metric source"]
     end
 
-    subgraph Expression_Mapping["Expression Mapping"]
-        direction TB
-        TS["timestampValueExpression<br/>-> TimestampTime"]
-        BODY["bodyExpression<br/>-> Body"]
-        SEV["severityTextExpression<br/>-> SeverityText"]
-        TID["traceIdExpression<br/>-> TraceId"]
-        SID["spanIdExpression<br/>-> SpanId"]
-        SVC["serviceNameExpression<br/>-> ServiceName"]
+    subgraph tables["ClickHouse tables"]
+        logs[("otel_logs")]
+        traces[("otel_traces")]
+        sessions[("hyperdx_sessions")]
+        metrics[("otel_metrics_*")]
     end
 
-    subgraph ClickHouse_Tables["ClickHouse Tables"]
-        T1["otel_logs"]
-        T2["otel_traces"]
-        T3["hyperdx_sessions"]
-        T4["otel_metrics_*"]
-    end
+    conn -->|login| sources
+    srclog -->|reads| logs
+    srctrace -->|reads| traces
+    srcsession -->|reads| sessions
+    srcmetric -->|reads| metrics
 
-    CONN --- SRC_LOG & SRC_TRACE & SRC_SESSION & SRC_METRIC
-    SRC_LOG --> TS & BODY & SEV & TID
-    SRC_LOG --> T1
-    SRC_TRACE --> T2
-    SRC_SESSION --> T3
-    SRC_METRIC --> T4
-
-    SRC_LOG -.->|cross-references| SRC_TRACE
-    SRC_LOG -.->|cross-references| SRC_SESSION
+    classDef default fill:#F8FAFC,stroke:#64748B,stroke-width:1px,color:#0F172A
+    classDef store fill:#DDF3EC,stroke:#00785A,stroke-width:1px,color:#0B3327
+    classDef group fill:none,stroke:#64748B,stroke-width:1px,stroke-dasharray:2 4
+    class logs,traces,sessions,metrics store
+    class sources,tables group
 ```
 
-Each Source has 20+ expression fields that map semantic concepts (timestamp,
-body, severity, trace ID, span ID, service name, etc.) to arbitrary SQL
-expressions over the underlying table. Sources cross-reference each other
-(`logSourceId`, `traceSourceId`, `sessionSourceId`, `metricSourceId`), enabling
-navigation between telemetry types.
+<!-- prettier-ignore -->
+*Figure 1. L4 Detail -- Sources and tables.* Up: [Architecture](README.md).
 
-This means HyperDX can work on top of **any** ClickHouse table - you point it at
-your existing schema and map the columns.
+A source's expression fields map semantic concepts to SQL over its table:
+`timestampValueExpression`, `bodyExpression`, `severityTextExpression`,
+`traceIdExpression`, `spanIdExpression`, `serviceNameExpression` and many more.
+Sources cross-reference each other (`logSourceId`, `traceSourceId`,
+`sessionSourceId`, `metricSourceId`), which is how the UI moves between
+telemetry types. So HyperDX can work on top of any ClickHouse table: point it at
+your schema and map the columns.
 
-## ClickHouse Data Model
+In DFE the engine owns sources. A team is seeded with `main` and `hunts`, and
+the platform team with the OTel tables and ClickHouse's `system` database as
+well
+([what-we-changed.md](../fork/what-we-changed.md#dfe-integration-features)).
+
+## Tables
+
+Logs and traces join on `TraceId`, and traces join a browser session through the
+`rum.sessionId` attribute.
 
 ```mermaid
 erDiagram
+    direction LR
+    accTitle: L4 Detail -- Upstream telemetry tables
+    accDescr: otel_logs and otel_traces share TraceId, and otel_traces links to hyperdx_sessions through the rum.sessionId attribute.
     otel_logs {
-        DateTime TimestampTime PK
+        DateTime64 Timestamp
+        String TraceId
+        String ServiceName
+        Map LogAttributes
+    }
+    otel_traces {
         DateTime64 Timestamp
         String TraceId
         String SpanId
-        UInt8 TraceFlags
-        String SeverityText
-        Int32 SeverityNumber
-        String ServiceName
-        String Body
-        Map ResourceAttributes
-        Map LogAttributes
-        String ScopeName
-    }
-
-    otel_traces {
-        DateTime Timestamp PK
-        String TraceId
-        String SpanId
-        String ParentSpanId
-        String ServiceName
-        String SpanName
-        String SpanKind
-        String StatusCode
-        Map ResourceAttributes
-        Map SpanAttributes
         UInt64 Duration
-        Map Events_Timestamp
-        Map Events_Name
-        Map Events_Attributes
-        Map Links_TraceId
-        Map Links_SpanId
     }
-
     hyperdx_sessions {
-        DateTime TimestampTime PK
+        DateTime TimestampTime
         String TraceId
-        String Body
-        String ServiceName
-        Map ResourceAttributes
         Map LogAttributes
     }
-
-    otel_metrics_gauge {
-        DateTime TimeUnix PK
-        String MetricName
-        String ServiceName
-        Float64 Value
-        Map ResourceAttributes
-        Map MetricAttributes
-    }
-
-    otel_logs ||--o{ otel_traces : "TraceId"
-    otel_logs ||--o{ hyperdx_sessions : "rum.sessionId"
-    otel_traces ||--o{ hyperdx_sessions : "rum.sessionId"
+    otel_logs }o--o{ otel_traces : "TraceId"
+    otel_traces }o--o{ hyperdx_sessions : "rum.sessionId"
 ```
 
-All tables use:
+<!-- prettier-ignore -->
+*Figure 2. L4 Detail -- Upstream telemetry tables. Key columns only.* Up: [Architecture](README.md).
 
-- **MergeTree** engine with ZSTD compression
-- **Partitioning** by `toDate(Timestamp)`
-- **TTL** based on timestamp for automatic data expiry
-- **Bloom filter indexes** on attribute map keys/values for fast filtering
-- **tokenbf_v1** full-text index on Body/SpanName for text search
-- **Materialized columns** for frequently-accessed nested attributes (e.g.,
-  Kubernetes metadata, `rum.sessionId`)
+The schema is in `docker/otel-collector/schema/seed/`. The telemetry tables are
+MergeTree with ZSTD codecs, partitioned by day and expired by a TTL on their
+timestamp. Rollups are SummingMergeTree, and `00008_otel_metrics_timeseries.sql`
+adds a TimeSeries table. The primary `otel_logs` and `otel_traces` schemas use
+`text` indexes on attribute maps, trace ids and the body or span name. The
+`_compat` schemas and `hyperdx_sessions` use bloom filter and `tokenbf_v1`
+indexes. Kubernetes resource attributes, and `rum.sessionId` on traces, are
+materialised columns. The metrics land in five tables, `otel_metrics_gauge`,
+`_sum`, `_histogram`, `_exponential_histogram` and `_summary`.

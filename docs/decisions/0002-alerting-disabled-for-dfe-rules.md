@@ -1,5 +1,14 @@
 # HyperDX alerting disabled in favour of DFE rules and hunts
 
+**Status:** accepted, mechanism superseded. Casbin was removed
+([ADR 0004](0004-casbin-removed.md)), and the alert checker still starts with
+the image. What holds the decision: in DFE mode `/alerts` and `/webhooks` refuse
+every human session (`dfe/middleware/admin-lockdown.ts`), the engine's service
+token reaches team, source and connection routes alone, and the console sends a
+visit to `/alerts` back to `/search` (`packages/app/src/dfe/embedFeatures.ts`),
+so nobody can create an alert for the checker to run. The record below is kept
+as written.
+
 HyperDX includes a built-in alerting system (the `checkAlerts` background task,
 Alert/AlertHistory models, webhook notifications). **We disable this entirely**
 and use the DFE platform's own rules engine and hunt workflows instead.

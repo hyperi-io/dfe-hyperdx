@@ -1,5 +1,11 @@
 # Additive-only fork strategy
 
+**Status:** superseded. The fork edits upstream files in place where a change
+cannot go under `dfe/`, and catalogues each one in `.fork-surface` and
+[../fork/what-we-changed.md](../fork/what-we-changed.md). How that is held
+together is [../fork/design.md](../fork/design.md). Casbin was removed
+([ADR 0004](0004-casbin-removed.md)). The assessment below is kept as written.
+
 A realistic assessment of where the additive-only principle holds, where it gets
 difficult, and what the actual upstream merge cost looks like.
 
@@ -12,7 +18,7 @@ Zero upstream application files modified. The only changes are to Docker Compose
 
 **Upstream merge cost: zero.**
 
-### OIDC Identity Middleware: Effectively Additive
+### OIDC Identity Middleware: Mostly Additive
 
 All DFE logic lives in new files under `packages/api/src/dfe/`. The only
 upstream file touched is `api-app.ts` with a single conditional block appended
@@ -97,7 +103,7 @@ upstream conflicts are unlikely but possible.
 | Work Stream       | Files modified in upstream | Truly additive?          | Merge cost per release          |
 | ----------------- | -------------------------- | ------------------------ | ------------------------------- |
 | DocumentDB        | 0                          | Yes                      | Zero                            |
-| OIDC middleware   | 1 (`api-app.ts`)           | Effectively yes          | Trivial (one delimited block)   |
+| OIDC middleware   | 1 (`api-app.ts`)           | Mostly                   | Trivial (one delimited block)   |
 | Casbin RBAC       | 0                          | Yes                      | Zero (review new routes)        |
 | Multi-tenancy     | 0                          | Yes (with review caveat) | Zero (review `getTeam()` calls) |
 | Alerting disabled | 0                          | Yes                      | Zero                            |
