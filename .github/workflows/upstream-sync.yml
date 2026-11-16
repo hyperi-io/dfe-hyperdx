@@ -128,6 +128,8 @@ jobs:
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
           echo "Cutting $branch from $base"
           git checkout -B "$branch" "$base"
+          # The lockfile floor is main as it stood at the cut, before any merge.
+          echo "base_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # THE TEMPORARY LAYER COMES OFF BEFORE THE MERGE. Our security pins and
       # patches are generated, not committed, precisely so the merge sees no
@@ -245,6 +247,8 @@ jobs:
           steps.merge.outputs.status == 'clean' || steps.merge.outputs.status ==
           'replayed'
         continue-on-error: true # a failure must still surface a PR, not just red the run
+        env:
+          BASE_SHA: ${{ steps.branch.outputs.base_sha }}
         run: |
           corepack enable
           # NOT --immutable: the lockfile is upstream's at this point (the merge
@@ -253,6 +257,16 @@ jobs:
           # wrong one exactly here.
           yarn install --mode=update-lockfile
           yarn install
+          # Step 5 of docs/fork/sync-cycle.md. The driver took upstream's
+          # lockfile whole, so every fix main held in the lockfile alone came
+          # back older and `yarn install` did not notice. Re-resolve those
+          # packages inside their declared ranges, then fail if any is still
+          # below the version main held.
+          regressed="$(scripts/lockfile-floor.py --base "$BASE_SHA" --names)"
+          if [ -n "$regressed" ]; then
+            yarn up -R $regressed
+          fi
+          scripts/lockfile-floor.py --base "$BASE_SHA"
           scripts/security-override.py --verify
           scripts/upstream-pin.py --verify
           # NOT `yarn build`: that is the DFE wrapper

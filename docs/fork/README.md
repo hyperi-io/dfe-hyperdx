@@ -100,6 +100,7 @@ lockfile merge driver are all per-clone git config, and a fresh clone starts unp
 | `.githooks/fork-surface-check.py --audit` | What is catalogued that should not be? |
 | `scripts/security-override.py --verify` | Does the tree match the security register? |
 | `scripts/upstream-pin.py --show` | Which upstream are we built on? |
+| `scripts/lockfile-floor.py` | Does the lockfile resolve any package below main's version? |
 | `scripts/security-triage.py --audit` | What is newly vulnerable, and is it reachable? |
 
 `--drift` is the one to run before starting work. It is the cheap moment to

@@ -105,7 +105,9 @@ git merge '@hyperdx/app@2.34.0'               # 2
 scripts/security-override.py --apply          # 3
 scripts/upstream-pin.py --set '@hyperdx/app@2.34.0'   # 4
 yarn install                                  # 5
+yarn up -R $(scripts/lockfile-floor.py --names)
 scripts/security-override.py --verify         # 6
+scripts/lockfile-floor.py
 scripts/upstream-pin.py --verify
 yarn build && yarn test                       # 7
 scripts/security-triage.py --audit --patches --carried   # 8
@@ -179,9 +181,15 @@ right flag everywhere else and the wrong one at exactly this point.
 
 `yarn install` re-derives only what our `package.json` asks for. A fix main
 holds in the lockfile alone - a `yarn up -R` inside a declared range - is gone
-after the merge, and nothing fails. Diff the resolved versions against
-`origin/main` and run `yarn up -R` again on every package main had moved past
-upstream. The 2.40.0 sync lost seven PRs of them, Next's RCE fix among them.
+after the merge, and nothing fails. The 2.40.0 sync lost seven PRs of them,
+Next's RCE fix among them.
+
+`scripts/lockfile-floor.py` diffs the resolved versions against the base branch
+and names every package that fell.
+`yarn up -R $(scripts/lockfile-floor.py --names)` puts them back inside their
+declared ranges, and the sync workflow runs both. `fork-surface.yml` runs the
+check on every PR and fails one that leaves a package below main's. An intended
+downgrade goes in `security/lockfile-floor-allow.txt` as `<package> <reason>`.
 
 ### 6. The invariants
 
