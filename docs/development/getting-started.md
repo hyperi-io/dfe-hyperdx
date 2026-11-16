@@ -21,13 +21,12 @@ required keys.
 yarn dev:dfe
 ```
 
-This starts DocumentDB in Docker (replacing upstream MongoDB) and
-runs the API and Next.js app as local processes. It does NOT start ClickHouse or
-the otel collectors -- the DFE override scales them to zero because ingest
-belongs to the DFE stack (dfe-docker or a local ClickHouse you point
-`DEFAULT_CONNECTIONS` at, in `.env.dfe`). The collectors are never built either:
-the override pins the prebuilt image, so there is no from-source collector
-compile.
+This starts DocumentDB in Docker (replacing upstream MongoDB) and runs the API
+and Next.js app as local processes. It does NOT start ClickHouse or the otel
+collectors -- the DFE override scales them to zero because ingest belongs to the
+DFE stack (dfe-docker or a local ClickHouse you point `DEFAULT_CONNECTIONS` at,
+in `.env.dfe`). The collectors are never built either: the override pins the
+prebuilt image, so there is no from-source collector compile.
 
 ```mermaid
 flowchart LR
@@ -104,11 +103,11 @@ the full design (DocumentDB, OIDC, additive-only strategy) is in
 
 ## Where config lives
 
-| File                            | Purpose                                    |
-| ------------------------------- | ------------------------------------------ |
-| `.env`                          | Upstream defaults (image versions, ports)  |
-| `.env.dfe.example`              | Template for `.env.dfe` -- copy first      |
-| `.env.dfe`                      | DFE overrides (auth mode, engine, conns)   |
-| `packages/api/.env.development` | Local API dev config                       |
+| File                            | Purpose                                      |
+| ------------------------------- | -------------------------------------------- |
+| `.env`                          | Upstream defaults (image versions, ports)    |
+| `.env.dfe.example`              | Template for `.env.dfe` -- copy first        |
+| `.env.dfe`                      | DFE overrides (auth mode, engine, conns)     |
+| `packages/api/.env.development` | Local API dev config                         |
 | `docker-compose.dfe.dev.yml`    | DFE dev compose override (DocumentDB, no CH) |
-| `docker-compose.dfe.yml`        | DFE production compose override            |
+| `docker-compose.dfe.yml`        | DFE production compose override              |

@@ -65,15 +65,17 @@ flowchart LR
 
 ## Data layer: DocumentDB
 
-DocumentDB is PostgreSQL with the DocumentDB extensions and a Mongo wire-protocol
-gateway in one container. **HyperDX application code is unchanged** - Mongoose,
-`connect-mongo` and `passport-local-mongoose` all talk to the gateway unmodified.
+DocumentDB is PostgreSQL with the DocumentDB extensions and a Mongo
+wire-protocol gateway in one container. **HyperDX application code is
+unchanged** - Mongoose, `connect-mongo` and `passport-local-mongoose` all talk
+to the gateway unmodified.
 
 - `docker-compose.dfe.yml` - production override, replaces `db` with
   `documentdb` and repoints `MONGO_URI`
 - `docker-compose.dfe.dev.yml` - dev override
 
-Rationale: [../decisions/0006-documentdb-document-store.md](../decisions/0006-documentdb-document-store.md).
+Rationale:
+[../decisions/0006-documentdb-document-store.md](../decisions/0006-documentdb-document-store.md).
 
 ## External OIDC authentication
 

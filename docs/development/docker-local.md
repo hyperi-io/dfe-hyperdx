@@ -49,11 +49,11 @@ request).
 Layer this file LAST. `docker compose up` (v2) honours
 `deploy.resources.limits.memory` outside swarm. Current ceilings:
 
-| Service                     | limit | reservation | k8s note                         |
-| --------------------------- | ----- | ----------- | -------------------------------- |
-| ch-server (ClickHouse)      | 2g    | 512m        | dominant; drop to 1536m if tight |
-| otel-collector / -json      | 300m  | -           | one each                         |
-| prometheus                  | 300m  | -           | dev metrics                      |
+| Service                | limit | reservation | k8s note                         |
+| ---------------------- | ----- | ----------- | -------------------------------- |
+| ch-server (ClickHouse) | 2g    | 512m        | dominant; drop to 1536m if tight |
+| otel-collector / -json | 300m  | -           | one each                         |
+| prometheus             | 300m  | -           | dev metrics                      |
 
 The `documentdb` service has no cap in this file.
 

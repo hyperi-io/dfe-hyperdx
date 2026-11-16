@@ -5,9 +5,9 @@
 ## Context
 
 HyperDX keeps users, teams, dashboards and saved searches in a document store it
-reaches through Mongoose. MongoDB is licensed under the SSPL, which does not suit
-a product other organisations deploy, and a direct PostgreSQL rewrite would cost
-effort on every upstream sync.
+reaches through Mongoose. MongoDB is licensed under the SSPL, which does not
+suit a product other organisations deploy, and a direct PostgreSQL rewrite would
+cost effort on every upstream sync.
 
 DocumentDB 1.0 shipped on 2026-10-19 under MIT: PostgreSQL extensions plus a
 Mongo wire-protocol gateway, in one container. Upstream is moving its own dev,
