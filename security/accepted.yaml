@@ -40,13 +40,11 @@ accepted:
       Test-only. Joins __dirname with literal relative paths to read repo files
       under test. No user input reaches it.
 
-  - rule: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
-    path: packages/app/src/theme/index.ts
+  - rule: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    path: packages/app/src/dfe/__tests__/dfeTheme.test.ts
     reason: >-
-      The interpolated value is a theme NAME that has just failed validation
-      against our own closed enum, written to console.warn. It is not
-      attacker-controlled and the sink is a dev-console log, not a format string
-      passed to util.format.
+      Test-only. Joins __dirname with literal relative paths to read repo files
+      under test. No user input reaches it.
 
   - rule: package_managers.renovate.renovate-missing-minimum-release-age.renovate-missing-minimum-release-age
     path: renovate.json
