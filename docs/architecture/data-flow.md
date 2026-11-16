@@ -44,8 +44,8 @@ flowchart LR
     class sources group
 ```
 
-<!-- prettier-ignore -->
-*Figure 1. L4 Detail -- Telemetry write path. Dashed boxes are external.* Up: [Architecture](README.md).
+_Figure 1. L4 Detail -- Telemetry write path. Dashed boxes are external._ Up:
+[Architecture](README.md).
 
 - Receivers accept OTLP (gRPC on 4317, HTTP on 4318) and Fluentd (24225).
 - The transform processor parses JSON log bodies, infers severity and normalises
@@ -78,8 +78,8 @@ sequenceDiagram
     API-->>Browser: query results
 ```
 
-<!-- prettier-ignore -->
-*Figure 2. L4 Detail -- Query read path. Dashed arrows are answers.* Up: [L3 Components -- HyperDX API](backend.md#structure).
+_Figure 2. L4 Detail -- Query read path. Dashed arrows are answers._ Up:
+[L3 Components -- HyperDX API](backend.md#structure).
 
 The query engine (`renderChartConfig` in `common-utils`) runs **in the
 browser**, generating parameterised ClickHouse SQL. The API is an authenticated
@@ -126,8 +126,8 @@ flowchart LR
     class check decision
 ```
 
-<!-- prettier-ignore -->
-*Figure 3. L4 Detail -- Upstream alert evaluation.* Up: [Architecture](README.md).
+_Figure 3. L4 Detail -- Upstream alert evaluation._ Up:
+[Architecture](README.md).
 
 The checker runs once a minute. Each alert references a saved search or a
 dashboard tile, from which a `ChartConfig` is derived and evaluated against

@@ -40,8 +40,10 @@ flowchart LR
     class api group
 ```
 
-<!-- prettier-ignore -->
-*Figure 1. L3 Components -- HyperDX API.* Up: [L2 Services -- dfe-hyperdx](README.md#the-system). Down: [L4 Detail -- Engine token check](oidc-authentication.md#the-flow), [L4 Detail -- Query read path](data-flow.md#read-path).
+_Figure 1. L3 Components -- HyperDX API._ Up:
+[L2 Services -- dfe-hyperdx](README.md#the-system). Down:
+[L4 Detail -- Engine token check](oidc-authentication.md#the-flow),
+[L4 Detail -- Query read path](data-flow.md#read-path).
 
 | Part             | What it is                                                                                                                                             |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -84,8 +86,8 @@ sequenceDiagram
     COL->>CH: write telemetry
 ```
 
-<!-- prettier-ignore -->
-*Figure 2. L4 Detail -- OpAMP collector configuration. Dashed arrows are answers.* Up: [L3 Components -- HyperDX API](#structure).
+_Figure 2. L4 Detail -- OpAMP collector configuration. Dashed arrows are
+answers._ Up: [L3 Components -- HyperDX API](#structure).
 
 The remote configuration covers receivers, connectors, exporters and pipeline
 wiring, built from team settings. Processors and each pipeline's processor list

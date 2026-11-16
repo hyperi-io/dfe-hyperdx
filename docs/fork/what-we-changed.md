@@ -70,8 +70,8 @@ flowchart LR
     class additive,inplace group
 ```
 
-<!-- prettier-ignore -->
-*Figure 1. L4 Detail -- Where our code lives. Orange is the conflict surface.* Up: [The fork](README.md).
+_Figure 1. L4 Detail -- Where our code lives. Orange is the conflict surface._
+Up: [The fork](README.md).
 
 ---
 

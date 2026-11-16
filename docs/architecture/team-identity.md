@@ -51,8 +51,8 @@ flowchart LR
     class refuse error
 ```
 
-<!-- prettier-ignore -->
-*Figure 1. L4 Detail -- Team connection check.* Up: [L3 Components -- HyperDX API](backend.md#structure).
+_Figure 1. L4 Detail -- Team connection check._ Up:
+[L3 Components -- HyperDX API](backend.md#structure).
 
 A seed takes a claim first. One request per team holds the seed claim and asks
 the engine, and the rest wait up to 30 seconds for it to settle.
@@ -85,8 +85,9 @@ flowchart LR
     class refuse error
 ```
 
-<!-- prettier-ignore -->
-*Figure 2. L4 Detail -- Seeding a team connection. Dotted arrows let the request in without a connection.* Up: [L3 Components -- HyperDX API](backend.md#structure).
+_Figure 2. L4 Detail -- Seeding a team connection. Dotted arrows let the request
+in without a connection._ Up:
+[L3 Components -- HyperDX API](backend.md#structure).
 
 - A connection is created as the team's name and no other, so a platform admin
   arriving first on an org team cannot seed it with the platform reader.

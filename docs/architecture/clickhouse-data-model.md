@@ -44,8 +44,7 @@ flowchart LR
     class sources,tables group
 ```
 
-<!-- prettier-ignore -->
-*Figure 1. L4 Detail -- Sources and tables.* Up: [Architecture](README.md).
+_Figure 1. L4 Detail -- Sources and tables._ Up: [Architecture](README.md).
 
 A source's expression fields map semantic concepts to SQL over its table:
 `timestampValueExpression`, `bodyExpression`, `severityTextExpression`,
@@ -91,8 +90,8 @@ erDiagram
     otel_traces }o--o{ hyperdx_sessions : "rum.sessionId"
 ```
 
-<!-- prettier-ignore -->
-*Figure 2. L4 Detail -- Upstream telemetry tables. Key columns only.* Up: [Architecture](README.md).
+_Figure 2. L4 Detail -- Upstream telemetry tables. Key columns only._ Up:
+[Architecture](README.md).
 
 The schema is in `docker/otel-collector/schema/seed/`. The telemetry tables are
 MergeTree with ZSTD codecs, partitioned by day and expired by a TTL on their

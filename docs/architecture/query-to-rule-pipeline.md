@@ -34,8 +34,8 @@ sequenceDiagram
     API-->>App: engine status and body
 ```
 
-<!-- prettier-ignore -->
-*Figure 1. L4 Detail -- Search to rule. Dashed arrows are answers.* Up: [L3 Components -- HyperDX API](backend.md#structure).
+_Figure 1. L4 Detail -- Search to rule. Dashed arrows are answers._ Up:
+[L3 Components -- HyperDX API](backend.md#structure).
 
 The UI then opens the created rule in the DFE console, or shows why it was
 refused.

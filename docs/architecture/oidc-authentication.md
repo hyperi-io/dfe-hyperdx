@@ -44,8 +44,8 @@ sequenceDiagram
     HDX-->>Browser: the route answers
 ```
 
-<!-- prettier-ignore -->
-*Figure 1. L4 Detail -- Engine token check. Dashed arrows are answers.* Up: [L3 Components -- HyperDX API](backend.md#structure).
+_Figure 1. L4 Detail -- Engine token check. Dashed arrows are answers._ Up:
+[L3 Components -- HyperDX API](backend.md#structure).
 
 Three things about the flow are worth knowing:
 
@@ -92,8 +92,8 @@ flowchart LR
     class mode decision
 ```
 
-<!-- prettier-ignore -->
-*Figure 2. L4 Detail -- Identity mode.* Up: [L3 Components -- HyperDX API](backend.md#structure).
+_Figure 2. L4 Detail -- Identity mode._ Up:
+[L3 Components -- HyperDX API](backend.md#structure).
 
 **`header-dev` is dev-only and trusts headers without any verification.** It
 exists so local development works without a running engine. Anything that can

@@ -47,8 +47,8 @@ flowchart LR
     class permanent,temporary group
 ```
 
-<!-- prettier-ignore -->
-*Figure 1. L4 Detail -- Permanent and temporary content.* Up: [The fork](README.md).
+_Figure 1. L4 Detail -- Permanent and temporary content._ Up:
+[The fork](README.md).
 
 Our features are permanent, so they belong in merged history where rerere can
 replay their conflict resolutions. Security fixes are temporary by design:
@@ -95,8 +95,8 @@ flowchart TB
     class merge,prove group
 ```
 
-<!-- prettier-ignore -->
-*Figure 2. L4 Detail -- The sync cycle. Read each stage left to right, then down.* Up: [The fork](README.md).
+_Figure 2. L4 Detail -- The sync cycle. Read each stage left to right, then
+down._ Up: [The fork](README.md).
 
 ```bash
 git switch -c sync/upstream-2.34.0 main
@@ -272,8 +272,7 @@ flowchart LR
     class q decision
 ```
 
-<!-- prettier-ignore -->
-*Figure 3. L4 Detail -- A patch that stops applying.* Up: [The fork](README.md).
+_Figure 3. L4 Detail -- A patch that stops applying._ Up: [The fork](README.md).
 
 `scripts/security-triage.py --patches` drafts which, with evidence. It PROPOSES
 only -- see below.
