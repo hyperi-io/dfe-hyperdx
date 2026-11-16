@@ -16,14 +16,12 @@ whether the app runs locally (dev, hot reload) or in a container.
 For dev, `yarn dev:dfe` is the flow ([getting-started.md](getting-started.md)):
 it starts DocumentDB in Docker and runs the API and app locally. The DFE dev
 override scales ClickHouse and both collectors to zero, so ingest and ClickHouse
-come from dfe-docker or a ClickHouse you point `DEFAULT_CONNECTIONS` at. To cap
-what it starts, bring the infra up yourself with the caps layers, then run the
-app:
+come from dfe-docker or a ClickHouse you point `DEFAULT_CONNECTIONS` at. To
+bring the infra up yourself and run the app separately:
 
 ```sh
 docker compose --env-file .env.dfe \
   -f docker-compose.dev.yml -f docker-compose.dfe.dev.yml \
-  -f docker-compose.caps.yml -f docker-compose.caps.dev.yml \
   up -d documentdb
 
 dotenvx run -f .env.dfe -f .env -- yarn app:dev:dfe
@@ -32,7 +30,7 @@ dotenvx run -f .env.dfe -f .env -- yarn app:dev:dfe
 App: <http://localhost:8080>, API: <http://localhost:8000>. It needs `.env.dfe`
 (dev credentials, gitignored, copied from `.env.dfe.example`).
 
-To run the app in a container, the closest to k8s:
+To run the app in a container, the closest to k8s, once the caps file loads:
 
 ```sh
 docker compose --env-file .env --env-file .env.dfe \

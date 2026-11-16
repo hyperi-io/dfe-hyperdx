@@ -6,11 +6,13 @@ than trusting a header.**
 The user signs in on the DFE console, through the engine, which is the OIDC
 relying party to the customer's identity provider. The console plants the
 engine's ES384 token in the `dfe_token` cookie, scoped by `DFE_COOKIE_DOMAIN` to
-the parent domain so the HyperDX subdomain receives it. The gateway puts no OIDC
-policy on the HyperDX route, because a provider redirect cannot complete inside
-the console's iframe. So dfe-hyperdx verifies the token against the engine's
-JWKS: it is the policy enforcement point, and an unverified header is not an
-identity.
+the parent domain so the HyperDX subdomain receives it. By default the gateway
+chart puts no OIDC policy on the HyperDX route, because a provider redirect
+cannot complete inside the console's iframe. An operator changes that by setting
+`routes.hyperdx.edgePolicy`, by adding hyperdx to `oidc.targetRoutes`, or by
+enabling `jwtAuthn`, a Gateway-wide filter on `/`. Either way dfe-hyperdx
+verifies the token against the engine's JWKS: it is the policy enforcement
+point, and an unverified header is not an identity.
 
 In DFE mode HyperDX's password login, registration and invite acceptance answer
 404 (`dfe/middleware/legacy-auth-lockdown.ts`). None of this touches upstream's
