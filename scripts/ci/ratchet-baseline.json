@@ -2,7 +2,7 @@
   "api": {
     "as-any": 88,
     "ts-ignore": 0,
-    "eslint-disable": 56,
+    "eslint-disable": 55,
     "@source": 0
   },
   "app": {
@@ -20,7 +20,7 @@
   "common-utils": {
     "as-any": 116,
     "ts-ignore": 0,
-    "eslint-disable": 39,
+    "eslint-disable": 40,
     "@source": 0
   },
   "hdx-eval": {

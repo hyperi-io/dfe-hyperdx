@@ -6,10 +6,7 @@ import { Button, Center, Group, Text } from '@mantine/core';
 import { useIsomorphicEffect } from '@mantine/hooks';
 import { IconX } from '@tabler/icons-react';
 
-// INTERIM (2.29 merge): use upstream's AppNav. The DFE nav (@/dfe/components/AppNav
-// + SidebarMenu/HyperDxNavItems) drifted hard against 2.29 (use-query-params->nuqs,
-// removed @/types SavedSearch/ServerDashboard, Mantine Collapse) and is being
-// replaced by the config-driven condensed embed nav. Re-point once that lands.
+import { useBrandDisplayName } from '@/brand';
 import AppNav from '@/components/AppNav';
 import { IS_CLICKHOUSE_BUILD } from '@/config';
 import { isEmbedChrome } from '@/dfe/embedFeatures';
@@ -36,6 +33,7 @@ export const APP_CONTENT_SCROLL_CONTAINER_ID = 'app-content-scroll-container';
  */
 function PageWrapper({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const brandName = useBrandDisplayName();
   const [bannerState, setBannerState] = useLocalStorage(
     'clickstack-banner-state',
     'opened',
@@ -72,8 +70,8 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
         <Group bg="var(--color-text-primary)">
           <Center style={{ flexGrow: 1 }}>
             <Text py="xs" size="sm" c="var(--color-text-inverted)">
-              This is not recommended for production use and is lacking core
-              ClickStack features such as alerts and saved searches. For a
+              This is not recommended for production use and is lacking core{' '}
+              {brandName} features such as alerts and saved searches. For a
               proper experience, visit the{' '}
               <strong>
                 <Link
@@ -81,7 +79,7 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  ClickStack Docs
+                  {brandName} docs
                 </Link>
               </strong>
             </Text>

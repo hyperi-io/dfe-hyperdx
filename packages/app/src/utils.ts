@@ -20,7 +20,6 @@ import {
 } from '@hyperdx/common-utils/dist/types';
 import { SortingState } from '@tanstack/react-table';
 
-import { DEFAULT_THEME } from './theme';
 import { MetricsDataType, NumberFormat } from './types';
 
 // From: https://usehooks.com/useWindowSize/
@@ -396,9 +395,8 @@ export function getLogSeverityLevel({
  *
  * Keep in sync with `CATEGORICAL_PALETTE_TOKENS` in
  * `@hyperdx/common-utils/dist/types` and with the `--color-chart-{hue}`
- * vars in `packages/app/src/theme/themes/_chart-categorical-tokens.scss`
- * (the single shared SCSS source for categorical hues; both brand
- * themes `@use` it).
+ * vars in `packages/app/src/theme/_chart-categorical-tokens.scss`
+ * (the single shared SCSS source for categorical hues).
  */
 type CategoricalChartPaletteToken = (typeof CATEGORICAL_PALETTE_TOKENS)[number];
 
@@ -442,36 +440,13 @@ type SemanticChartColorKey =
   | 'errorHighlight';
 
 /**
- * Per-brand semantic chart palette. SSR / `getComputedStyle` fallback
- * for `getChartColor{Success,Warning,Error,Info,*Highlight}` helpers.
+ * Semantic chart palette. SSR / `getComputedStyle` fallback for
+ * `getChartColor{Success,Warning,Error,Info,*Highlight}` helpers.
  * Live values come from `--color-chart-{success|warning|error|info}[-highlight]`
  * in `_chart-categorical-tokens.scss` (`chart-semantic-tokens` mixin).
- *
- * Kept per-brand (instead of collapsed to one object) so the
- * `Record<'hyperdx' | 'clickstack', SemanticChartHexes>` constraint
- * forces both brands to declare every semantic key — dropping or
- * renaming one in either entry becomes a compile error rather than a
- * silent runtime divergence between SSR and client. The two entries
- * are byte-identical today; collapse to a flat object if and when a
- * brand actually needs to diverge.
  */
-type SemanticChartHexes = Readonly<Record<SemanticChartColorKey, string>>;
-
-const SEMANTIC_CHART_PALETTE: Readonly<
-  Record<'hyperdx' | 'clickstack' | 'dfe', SemanticChartHexes>
-> = {
-  // DFE: brand semantic colours (see theme/themes/dfe/_tokens.scss). TODO: source
-  // from the shared @dfe/design-tokens package.
-  dfe: {
-    success: '#00c28a',
-    warning: '#efb118',
-    error: '#ff725c',
-    info: '#2ea4f6',
-    successHighlight: '#80d9b3',
-    warningHighlight: '#f5c94d',
-    errorHighlight: '#ffa090',
-  },
-  hyperdx: {
+const SEMANTIC_CHART_PALETTE: Readonly<Record<SemanticChartColorKey, string>> =
+  {
     success: '#3ca951',
     warning: '#efb118',
     error: '#ff725c',
@@ -479,17 +454,7 @@ const SEMANTIC_CHART_PALETTE: Readonly<
     successHighlight: '#80d9b3',
     warningHighlight: '#f5c94d',
     errorHighlight: '#ffa090',
-  },
-  clickstack: {
-    success: '#3ca951',
-    warning: '#efb118',
-    error: '#ff725c',
-    info: '#437eef',
-    successHighlight: '#80d9b3',
-    warningHighlight: '#f5c94d',
-    errorHighlight: '#ffa090',
-  },
-};
+  };
 
 /**
  * Ordered hex array for positional series assignment.
@@ -528,36 +493,6 @@ export {
 export type { ChartPaletteToken };
 
 /**
- * Detects the active theme by checking for theme classes on documentElement.
- * Returns theme from documentElement classes, or the configured DEFAULT_THEME when none match.
- * Note: classList.contains() is O(1) and fast - no caching needed.
- */
-function detectActiveTheme(): 'clickstack' | 'hyperdx' | 'dfe' {
-  if (typeof window === 'undefined') {
-    // SSR: default to hyperdx (can't detect theme without DOM)
-    return DEFAULT_THEME;
-  }
-
-  try {
-    const isDFE = document.documentElement.classList.contains('theme-dfe');
-    const isHyperDX =
-      document.documentElement.classList.contains('theme-hyperdx');
-    const isClickStack =
-      document.documentElement.classList.contains('theme-clickstack');
-    return isDFE
-      ? 'dfe'
-      : isHyperDX
-        ? 'hyperdx'
-        : isClickStack
-          ? 'clickstack'
-          : DEFAULT_THEME;
-  } catch {
-    // Fallback if DOM access fails
-    return DEFAULT_THEME;
-  }
-}
-
-/**
  * Returns the Nth categorical chart hex by series index. Index wraps
  * modulo `CATEGORICAL_PALETTE_TOKENS.length`.
  *
@@ -582,10 +517,10 @@ function getColorFromCSSVariable(index: number): string {
  * always resolve to the same value, and skipping `getComputedStyle`
  * avoids an unnecessary layout read per series.
  *
- * Semantic tokens (`chart-success`, `-warning`, `-error`) DO vary per
- * brand, so they read the matching CSS var (`--color-chart-{name}`)
- * via `getComputedStyle` and fall back to the active theme's entry in
- * `SEMANTIC_CHART_PALETTE` for SSR / `getComputedStyle` failures.
+ * Semantic tokens (`chart-success`, `-warning`, `-error`) read the
+ * matching CSS var (`--color-chart-{name}`) via `getComputedStyle` and
+ * fall back to `SEMANTIC_CHART_PALETTE` for SSR / `getComputedStyle`
+ * failures.
  *
  * @example
  *   getColorFromCSSToken('chart-blue')     // Observable blue (both themes)
@@ -633,12 +568,11 @@ function semanticTokenFallback(
     case 'chart-success':
     case 'chart-warning':
     case 'chart-error': {
-      const theme = detectActiveTheme();
       const key = token.slice('chart-'.length) as
         | 'success'
         | 'warning'
         | 'error';
-      return SEMANTIC_CHART_PALETTE[theme][key];
+      return SEMANTIC_CHART_PALETTE[key];
     }
     default: {
       // Exhaustiveness assertion: if a new semantic token lands on
@@ -746,9 +680,8 @@ export function hashCode(str: string) {
 }
 
 /**
- * Theme-aware semantic chart color resolver. Reads `cssVarName` from
- * `documentElement` and falls back to the active theme's value from
- * `SEMANTIC_CHART_PALETTE` (HyperDX during SSR).
+ * Semantic chart color resolver. Reads `cssVarName` from
+ * `documentElement` and falls back to `SEMANTIC_CHART_PALETTE`.
  *
  * Charts typically render client-side after data fetching, so hydration
  * mismatches between the SSR fallback and the live var are rare.
@@ -758,7 +691,7 @@ function getSemanticChartColor(
   key: SemanticChartColorKey,
 ): string {
   if (typeof window === 'undefined') {
-    return SEMANTIC_CHART_PALETTE.hyperdx[key];
+    return SEMANTIC_CHART_PALETTE[key];
   }
 
   try {
@@ -771,11 +704,11 @@ function getSemanticChartColor(
     // Fallback if getComputedStyle fails
   }
 
-  return SEMANTIC_CHART_PALETTE[detectActiveTheme()][key];
+  return SEMANTIC_CHART_PALETTE[key];
 }
 
-// Semantic chart colors (theme-aware). Read from CSS variables with
-// per-theme fallbacks in `SEMANTIC_CHART_PALETTE`.
+// Semantic chart colors. Read from CSS variables with fallbacks in
+// `SEMANTIC_CHART_PALETTE`.
 export function getChartColorSuccess(): string {
   return getSemanticChartColor('--color-chart-success', 'success');
 }
@@ -789,7 +722,7 @@ export function getChartColorError(): string {
 }
 
 /** Chart blue used for info-level logs and similar "neutral / default"
- *  series. Same hue as categorical `chart-blue` on both brands. */
+ *  series. Same hue as categorical `chart-blue`. */
 export function getChartColorInfo(): string {
   return getSemanticChartColor('--color-chart-info', 'info');
 }

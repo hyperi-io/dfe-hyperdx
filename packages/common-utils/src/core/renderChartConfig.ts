@@ -2,7 +2,13 @@ import isPlainObject from 'lodash/isPlainObject';
 import * as SQLParser from 'node-sql-parser';
 import SqlString from 'sqlstring';
 
-import { ChSql, chSql, concatChSql, wrapChSqlIfNotEmpty } from '@/clickhouse';
+import {
+  ChSql,
+  chSql,
+  concatChSql,
+  isCHIntegerType,
+  wrapChSqlIfNotEmpty,
+} from '@/clickhouse';
 import { stripTypeWrappers } from '@/core/eventDeltas';
 import { compileFormulaAst, FormulaAst, validateFormula } from '@/core/formula';
 import {
@@ -1277,7 +1283,13 @@ function renderFrom({
   );
 }
 
-async function renderWhereExpressionStr({
+/**
+ * Render a where condition as a SQL string: Lucene is serialized against the
+ * table's schema, and the result is rewritten to use materialized columns
+ * where the table has them. Used by chart rendering and by any caller that
+ * needs the same SQL outside a chart config.
+ */
+export async function renderWhereExpressionStr({
   condition,
   language,
   metadata,
@@ -2039,6 +2051,44 @@ async function getComputedMetricColumns(
   };
 }
 
+/**
+ * WHERE for a metric source CTE. OTLP sets bit 0 of Flags
+ * (FLAG_NO_RECORDED_VALUE) on a point that has no value, such as a Prometheus
+ * staleness marker. The ClickHouse exporter stores that point as zeros, so it
+ * is left out before any aggregation or delta reads it. A series that comes
+ * back after a marker is then compared with its last real point, so a counter
+ * that restarted behind the marker is clamped like any other counter reset
+ * (see the Sum Source CTE). The gauge and sum CTEs already read Flags, but
+ * HyperDX does not require it on histogram tables, and none of them need it
+ * to be an integer. So a table without an integer Flags column (or a failed
+ * column lookup) is read as before. Nullable is excluded too:
+ * `bitAnd(NULL, 1) = 0` is NULL and would drop the row.
+ */
+async function renderMetricWhere(
+  chartConfig: BuilderChartConfigWithOptDateRangeEx,
+  metadata: Metadata,
+): Promise<ChSql> {
+  const where = await renderWhere(chartConfig, metadata);
+  let hasFlags = false;
+  try {
+    const flags = await metadata.getColumn({
+      databaseName: chartConfig.from.databaseName,
+      tableName: chartConfig.from.tableName,
+      column: 'Flags',
+      connectionId: chartConfig.connection,
+    });
+    hasFlags =
+      flags != null &&
+      isCHIntegerType(flags.type) &&
+      !flags.type.includes('Nullable(');
+  } catch (e) {
+    console.warn('Failed to look up the Flags column of a metric table', e);
+  }
+  return hasFlags
+    ? concatChSql(' AND ', where, chSql`bitAnd(Flags, 1) = 0`)
+    : where;
+}
+
 async function translateMetricChartConfig(
   chartConfig: BuilderChartConfigWithOptDateRangeEx,
   metadata: Metadata,
@@ -2098,7 +2148,7 @@ async function translateMetricChartConfig(
       minGranularitySeconds: chartConfig.minGranularitySeconds,
     });
 
-    const where = await renderWhere(
+    const where = await renderMetricWhere(
       {
         ...chartConfig,
         from: {
@@ -2204,7 +2254,7 @@ async function translateMetricChartConfig(
     // Render the where clause to limit data selection on the source CTE but also search forward/back one
     // bucket window to ensure that there is enough data to compute a reasonable value on the ends of the
     // series.
-    const where = await renderWhere(
+    const where = await renderMetricWhere(
       {
         ...chartConfig,
         from: {
@@ -2500,7 +2550,7 @@ async function translateMetricChartConfig(
           minGranularitySeconds: cteChartConfig.minGranularitySeconds,
         })
       : undefined;
-    const where = await renderWhere(cteChartConfig, metadata);
+    const where = await renderMetricWhere(cteChartConfig, metadata);
 
     // Time bucket grouping is being handled separately, so make sure to ignore the granularity
     // logic for histograms specifically.

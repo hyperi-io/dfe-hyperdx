@@ -394,20 +394,15 @@ expects undeclared static-filter keys to persist is skipped by name in
   now call `mergePath` with the JSON roots derived from the field list they
   already hold, so neither adds a query.
 - `packages/app/jest.dfe.config.js` + `jest.dfe.setup.js` - pins
-  `NEXT_PUBLIC_THEME=hyperdx` and `NEXT_PUBLIC_DFE_SHOW_SOURCE_ADD=true` for app
+  `DFE_UPSTREAM_BRAND=true` and `NEXT_PUBLIC_DFE_SHOW_SOURCE_ADD=true` for app
   unit tests, so upstream's suite passes unchanged instead of us editing their
   test files to accommodate the rebrand. Mirrors
   `packages/api/jest.dfe.config.js`. The setup file is loaded by the jest config
   rather than compiled, so no tsconfig project covers it and typed linting
   cannot parse it. **`packages/app/eslint.config.mjs`** has one added `ignores`
-  entry for it, beside upstream's own `global-setup.js` line. The env pin
-  reaches the CHART palette and `getTheme`'s fallback too, because both resolve
-  an unmatched brand to the configured `DEFAULT_THEME`: `detectActiveTheme` in
-  **`src/utils.ts`** for a document carrying no theme class, and `getTheme` in
-  **`src/theme/index.ts`** for an unknown name. A DFE deployment, where
-  `NEXT_PUBLIC_THEME` is unset or `dfe`, resolves both to `dfe` as before, and
-  upstream's three theme assertions pass unedited.
-  `src/dfe/__tests__/themeFallback.test.ts` pins the DFE side.
+  entry for it, beside upstream's own `global-setup.js` line. The brand pin is
+  read by `src/dfe/brand.tsx` (see Branding below), and a deployment never sets
+  it.
 - `packages/app/src/dfe/defaultSource.ts` - which source `/search` opens on
   cold. The embed opens on `main`, the landing every record falls into, because
   a first Observe load that shows an empty window reads as a broken deployment.
@@ -463,7 +458,7 @@ expects undeclared static-filter keys to persist is skipped by name in
 - `packages/app/src/dfe/embedFeatures.ts` + `EmbedThemeSync.tsx` - chromeless
   embed mode: feature gating by route, and live theme sync from the host UI.
   `pages/_document.tsx` carries one added inline head script
-  (`EMBED_INIT_SCRIPT`, alongside upstream's own `THEME_INIT_SCRIPT`) that sets
+  (`EMBED_INIT_SCRIPT`, after upstream's `__ENV.js` script) that sets
   `html.dfe-embed` from the `embed=1` URL param / persisted flag before
   hydration, and `styles/globals.css` hides `.dfe-appnav-slot` (the layout.tsx
   wrapper) under that class, so the full chrome sidebar never flashes before
@@ -596,7 +591,22 @@ expects undeclared static-filter keys to persist is skipped by name in
 
 - `packages/app/src/theme/themes/dfe/**` - tokens, Mantine theme, logomark and
   wordmark assets. Typography is Inter + IBM Plex Mono - see ADR
-  [0005](../decisions/0005-console-typography.md).
+  [0005](../decisions/0005-console-typography.md), and upstream pins Inter
+  itself.
+- `packages/app/src/dfe/brand.tsx` - the name "DFE", the marks and the Mantine
+  theme. Upstream has one brand, ClickStack, with its name and marks in
+  `src/brand/` and its palette in `src/theme/`, and no way to pick another at
+  run time. Three upstream files take ours instead, each by one swapped
+  reference: **`brand/index.tsx`** imports the marks from `@/dfe/brand` and
+  wraps its name literal in `dfeBrandName`, **`ThemeWrapper.tsx`** imports its
+  Mantine theme from `@/dfe/brand`, and **`theme/_base-tokens.scss`** `@use`s
+  `themes/dfe/tokens` in place of upstream's `tokens`. The DFE tokens are
+  emitted for both colour schemes unscoped, because nothing sets a theme class
+  on `<html>`. Under `DFE_UPSTREAM_BRAND=true`, which only the jest setup sets,
+  `brand.tsx` hands back upstream's name, marks and Mantine theme, so the
+  upstream tests that assert "ClickStack" pass unedited.
+  **`pages/_document.tsx`** links `/favicons/dfe/*` in place of upstream's
+  `/favicons/clickstack/*`. `dfe/__tests__/dfeTheme.test.ts` pins all four.
 - `packages/app/src/dfe/components/**` - LandingPage, CreateRuleFromSearch and
   RestoreShippedDashboards
 - Search language defaults to SQL, not upstream's Lucene (an explicit user
@@ -726,15 +736,14 @@ expects undeclared static-filter keys to persist is skipped by name in
   touched the file four times, and the conflict is trivial either way: take
   ours, then re-run `yarn ratchet:update` after the sync so the numbers match
   the merged tree.
-- `package.json` `resolutions` - four generated fork pins,
-  `systeminformation ^5.33.16`, raising upstream's own `^5.24.0`, and
-  `follow-redirects ^1.16.2`, `body-parser ^1.20.9` and `mongoose ^6.13.12`,
-  which upstream does not pin. All four are generated from
-  `security/overrides.yaml` by `scripts/security-override.py --apply`, so edit
-  the register, never these lines. The vectors are in the register entries.
-  `--check` judges the pin against upstream's own lockfile at our merge base,
-  never ours: the pin makes our lockfile resolve above its own floor, so ours
-  would call every live pin redundant.
+- `package.json` `resolutions` - two generated fork pins,
+  `follow-redirects ^1.16.2` and `body-parser ^1.20.9`, which upstream does not
+  pin. Both are generated from `security/overrides.yaml` by
+  `scripts/security-override.py --apply`, so edit the register, never these
+  lines. The vectors are in the register entries. `--check` judges the pin
+  against upstream's own lockfile at our merge base, never ours: the pin makes
+  our lockfile resolve above its own floor, so ours would call every live pin
+  redundant.
 
 ## Docs
 
@@ -751,11 +760,14 @@ ones that carry a delta, each listed in `.fork-surface`.
   upstream product. The working guide that once sat at its end is
   [working-guide.md](working-guide.md). Any upstream edit to the README
   conflicts with it.
+- **`SECURITY.md`** - our policy, which points a reporter at the fork's advisory
+  triage. Upstream later added its own, which points at ClickHouse's policy, so
+  the two meet as an add/add conflict. Keep ours whole.
 - **`docs/alert-webhook-template-variables.md`** - an upstream page the DFE docs
   site publishes to customers. Three of its mentions of HyperDX say "the
   console" instead, and one "today" is gone. The whole file is also
   prettier-formatted, so every line upstream touches conflicts.
-- `LOCAL.md`, `agent_docs/tech_stack.md`, `docker/nginx/README.md`,
+- `agent_docs/tech_stack.md`, `docker/nginx/README.md`,
   `docker/otel-collector/schema/README.md`, `packages/app/tests/e2e/README.md`
   and `packages/common-utils/README.md` differ from the merge base by prettier
   formatting alone. Formatting is no reason to hold a delta, so each is a

@@ -2,11 +2,7 @@
 
 /* Default theme with blue accent */
 
-/*
- * These mixins define all design tokens for HyperI theme.
- * They are used both here (for .theme-hyperi scoped selectors) and
- * in _base-tokens.scss (for unscoped fallback selectors during SSR).
- */
+/* The console's only palette: theme/_base-tokens.scss uses this file in place of upstream's. */
 
 @mixin base-tokens {
   /* hyperi-graphics brand SSoT navy (hyperi.tokens.json); matches the logo SVGs */
@@ -250,12 +246,10 @@
   --color-chart-warning-highlight: #f5c94d;
 }
 
-/* Dark Mode - scoped to .theme-dfe */
-.theme-dfe[data-mantine-color-scheme='dark'] {
+[data-mantine-color-scheme='dark'] {
   @include dark-mode-tokens;
 }
 
-/* Light Mode - scoped to .theme-dfe */
-.theme-dfe[data-mantine-color-scheme='light'] {
+[data-mantine-color-scheme='light'] {
   @include light-mode-tokens;
 }

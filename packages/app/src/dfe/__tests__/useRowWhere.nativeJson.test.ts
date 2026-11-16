@@ -2,7 +2,7 @@
  * A JSON column that ClickHouse returns already parsed must still hash.
  *
  * With a native JSON column the driver hands back an object, not the JSON text
- * upstream's row-identity path assumed. Passing the object straight to MD5
+ * upstream's row-identity path assumed. Passing the object straight to SHA256
  * hashes "[object Object]", so every row in the table shares one identity and
  * the row side panel opens the wrong row. `useRowWhere.tsx` stringifies first -
  * this pins that.
@@ -11,20 +11,20 @@
  * upstream's.
  */
 /* eslint-disable @typescript-eslint/no-unsafe-type-assertion --
- * The MD5 double returns only the `toString` the code under test calls, which
- * is narrower than WordArray. The assertion IS the double.
+ * The SHA256 double returns only the `toString` the code under test calls,
+ * which is narrower than WordArray. The assertion IS the double.
  */
-import MD5 from 'crypto-js/md5';
+import SHA256 from 'crypto-js/sha256';
 import { JSDataType } from '@hyperdx/common-utils/dist/clickhouse';
 
 import { processRowToWhereClause } from '@/hooks/useRowWhere';
 
-jest.mock('crypto-js/md5');
+jest.mock('crypto-js/sha256');
 
 beforeEach(() => {
   jest.clearAllMocks();
-  (MD5 as jest.Mock).mockImplementation((value: string) => ({
-    toString: () => `md5_${value}`,
+  (SHA256 as jest.Mock).mockImplementation((value: string) => ({
+    toString: () => `sha256_${value}`,
   }));
 });
 
@@ -44,6 +44,6 @@ describe('processRowToWhereClause', () => {
 
     processRowToWhereClause({ data: { key: 'value' } }, columnMap);
 
-    expect(MD5).toHaveBeenCalledWith('{"key":"value"}');
+    expect(SHA256).toHaveBeenCalledWith('{"key":"value"}');
   });
 });

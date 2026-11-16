@@ -327,12 +327,14 @@ function isAlreadyCoerced(sql: string, index: number): boolean {
 }
 
 // A comparison operator and a number literal, on either side of the path.
+/* eslint-disable security/detect-unsafe-regex -- no quantified group repeats, so matching is linear */
 const NUMBER_AFTER =
   /^\s*(?:[!<>=]=|<>|[<>=])\s*-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?![\w.])/;
 const NUMBER_BEFORE =
   /(?<![\w.])-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\s*(?:[!<>=]=|<>|[<>=])\s*$/;
 const BETWEEN_NUMBERS =
   /^\s+(?:NOT\s+)?BETWEEN\s+-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\s+AND\s+-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?![\w.])/i;
+/* eslint-enable security/detect-unsafe-regex */
 
 /**
  * True when the path at `index` needs the numeric coercion: it is compared
