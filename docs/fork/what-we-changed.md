@@ -290,6 +290,12 @@ expects undeclared static-filter keys to persist is skipped by name in
   `JSONExtract*` also rejects, so that ONE case is wrapped in `toString()`.
   Narrow by design - wrapping unconditionally changed the SQL for String and Map
   columns too.
+- **`DBRowJsonViewer.tsx` (catalogued)** defaults `filterBlanks` to `true` in
+  `DEFAULT_VIEWER_OPTIONS`, one value. A row carries every typed column of its
+  source table, such as the Cisco ASA columns, and most are null on any one
+  message, so they buried the fields holding data. Upstream's "Hide blank
+  values" menu item turns it off, and a browser that already stored the option
+  keeps its choice. `dfe/__tests__/DBRowJsonViewer.hideBlanks.test.tsx` pins it.
 - `packages/common-utils/src/dfe/jsonPath.ts` - native ClickHouse JSON for
   charts and filters. A JSON sub-path is `Dynamic`, which ClickHouse refuses in
   `IN`, aggregates, `GROUP BY` and `ORDER BY`, so it needs an explicit coercion.
