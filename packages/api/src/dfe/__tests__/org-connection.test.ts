@@ -416,10 +416,18 @@ describe('ensureOrgConnection', () => {
       }),
     );
     const hunts = mockCreateSource.mock.calls.find(c => c[1].name === 'hunts');
-    expect(hunts?.[1].defaultTableSelectExpression).toBe(
-      '_timestamp,severity,hunt_name,rule_name,source_table,matched_uuid,rule_id,_json',
+    const select = hunts?.[1].defaultTableSelectExpression as string;
+    expect(
+      select.startsWith(
+        '_timestamp,severity,hunt_name,rule_name,source_table,',
+      ),
+    ).toBe(true);
+    expect(select.endsWith(',rule_id,_json')).toBe(true);
+    expect(select).not.toContain('_org_id');
+    // The cap's summary row renders as its counts, a match as its UUID.
+    expect(select).toContain(
+      "if(matched_uuid = toUUID('00000000-0000-0000-0000-000000000000'), concat('capped: ', toString(_json.written), ' of ', toString(_json.matched), ' kept'), toString(matched_uuid)) AS match",
     );
-    expect(hunts?.[1].defaultTableSelectExpression).not.toContain('_org_id');
   });
 
   test('both DFE sources sit in the engine data database', async () => {
