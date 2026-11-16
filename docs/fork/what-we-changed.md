@@ -722,13 +722,16 @@ expects undeclared static-filter keys to persist is skipped by name in
   the 16 upstream workflows we do not carry. `.fork-surface` cannot cover a
   deletion: it reads `--diff-filter=ACMR` against the merge base, where a file
   we removed is unchanged and therefore invisible, so a sync reinstates it in
-  silence. The check fails when a listed path exists.
+  silence. The check fails when a listed path exists. The sync keeps a listed
+  path deleted on its own (`scripts/resolve-fork-deleted.py`), so only a text
+  conflict, or an upstream delete of a file we edited, still stops it.
 - `scripts/ci/__tests__/**` in `knip.json` - upstream's ratchet test. Only
   upstream's `main.yml` ever ran it, and we do not carry that workflow, so knip
   is correct that nothing uses it. Ignored rather than deleted, on the same
   reasoning as the orphaned upstream pages: removing an upstream file buys a
-  delete/modify conflict on every sync. **`scripts/ci/ratchet.mjs` itself is
-  therefore not wired into our CI either** - run it by hand, or give it a home.
+  delete/modify conflict on every sync until its path is in `.fork-deleted`.
+  **`scripts/ci/ratchet.mjs` itself is therefore not wired into our CI
+  either** - run it by hand, or give it a home.
 - `scripts/ci/ratchet-baseline.json` - upstream's escape-hatch ratchet, our
   numbers. The baseline is the floor for `as any` and `eslint-disable` counts
   per package, so every hatch we remove has to be locked in here or the ratchet
