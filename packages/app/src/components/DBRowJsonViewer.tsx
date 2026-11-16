@@ -154,7 +154,7 @@ const DEFAULT_VIEWER_OPTIONS: ViewerOptions = {
   normallyExpanded: true,
   whiteSpace: 'pre-wrap',
   tabulate: true,
-  filterBlanks: false,
+  filterBlanks: true,
   keyOrder: DEFAULT_KEY_ORDER,
 };
 
