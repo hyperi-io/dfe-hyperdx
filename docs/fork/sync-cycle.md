@@ -17,34 +17,83 @@ Our permanent changes ride merged history for rerere to replay, and the
 temporary security layer is declared and generated, so rerere never sees it.
 
 ```mermaid
+---
+config:
+  theme: base
+  look: neo
+  fontFamily: Inter, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif
+  flowchart:
+    curve: linear
+    nodeSpacing: 40
+    rankSpacing: 64
+    padding: 18
+    wrappingWidth: 280
+    htmlLabels: true
+  elk:
+    preset: modelOrder
+  themeVariables:
+    fontSize: 15px
+    lineColor: "#64748B"
+    primaryTextColor: "#0F172A"
+    clusterBorder: "#0072B2"
+    edgeLabelBackground: "#FFFFFF"
+  themeCSS: >-
+    p{margin:0}
+    .node[data-look] rect,.node[data-look] path,.node[data-look] polygon,.node[data-look] .outer-path{filter:drop-shadow(0 1px 2px rgba(15,23,42,.10)) drop-shadow(0 6px 14px rgba(15,23,42,.10))}
+    .node rect{rx:10px;ry:10px}
+    .cluster rect{rx:16px;ry:16px}
+    .node .label div{min-width:150px}
+    .node.decision .label div{min-width:0}
+    .cluster[data-look] rect{filter:none}
+    .nodeLabel{line-height:1.35}
+    .nodeLabel b{font-weight:600;font-size:15px;letter-spacing:-0.01em}
+    .nodeLabel span{font-size:12.5px;font-weight:400;color:#334155}
+    .cluster-label span.nodeLabel{display:inline-block;background:#FFFFFF;color:#0B2A3F;border:1.5px solid #0072B2;border-radius:999px;padding:2px 12px;font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+    .flowchart-link{stroke-width:1.75px}
+    .labelBkg{background:transparent!important}
+    span.edgeLabel{display:inline-block;background:#FFFFFF!important;color:#1E293B;border:1px solid #94A3B8;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:500}
+    span.edgeLabel p{background:transparent!important}
+    .label-icon{width:20px;height:20px;vertical-align:-4px;margin-right:6px}
+    .ingest .label-icon{color:#0E8A7D}
+    .xform .label-icon{color:#7B4FB0}
+    .load .label-icon{color:#0072B2}
+    .bus .label-icon{color:#A8517F}
+    .store .label-icon{color:#00785A}
+    .ui .label-icon{color:#D9480F}
+    .ext .label-icon{color:#64748B}
+---
 flowchart LR
-    accTitle: L4 Detail -- Permanent and temporary content
-    accDescr: Permanent content, the DFE features, the dfe directories and the catalogued in-place edits, is carried as merged history and git rerere replays its resolutions. Temporary content, the dependency pins and code patches, is declared, stripped before a merge and rebuilt after.
-
-    subgraph permanent["PERMANENT, survives every update"]
-        direction LR
-        feat["DFE features"]
-        dfedir["packages/**/dfe/**"]
-        inplace["In-place edits<br/>.fork-surface"]
-        feat ~~~ dfedir ~~~ inplace
-    end
-
-    subgraph temporary["TEMPORARY, upstream will fix"]
-        direction LR
-        pins["Dependency pins<br/>security/overrides.yaml"]
-        patches["Code fixes<br/>security/patches/"]
-        pins ~~~ patches
-    end
-
-    rerere["git rerere replays<br/>our resolutions"]
-    gen["Strip before merge,<br/>rebuild after"]
-
-    permanent -->|merged history| rerere
-    temporary -->|declared| gen
-
-    classDef default fill:#F8FAFC,stroke:#64748B,stroke-width:1px,color:#0F172A
-    classDef group fill:none,stroke:#64748B,stroke-width:1px,stroke-dasharray:2 4
-    class permanent,temporary group
+  accTitle: L4 Detail -- Permanent and temporary content
+  accDescr: Permanent content, the DFE features, the dfe directories and the catalogued in-place edits, is carried as merged history and git rerere replays its resolutions. Temporary content, the dependency pins and code patches, is declared, stripped before a merge and rebuilt after.
+  subgraph temporary["TEMPORARY, upstream will fix"]
+    direction LR
+    pins("<b>Dependency pins</b><br/><span>security/overrides.yaml</span>")
+    patches("<b>Code fixes</b><br/><span>security/patches/</span>")
+    pins ~~~ patches
+  end
+  subgraph permanent["PERMANENT, survives every update"]
+    direction LR
+    feat("<b>DFE features</b>")
+    dfedir("<b>packages/**/dfe/**</b>")
+    inplace("<b>In-place edits</b><br/><span>.fork-surface</span>")
+    feat ~~~ dfedir ~~~ inplace
+  end
+  gen("<b>Strip before merge,</b><br/><span>rebuild after</span>")
+  rerere("<b>git rerere replays</b><br/><span>our resolutions</span>")
+  temporary -->|declared| gen
+  permanent -->|merged history| rerere
+  classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
+  classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
+  classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
+  classDef load fill:#FFFFFF,stroke:#0072B2,stroke-width:3px,color:#0F172A
+  classDef bus fill:#FFFFFF,stroke:#A8517F,stroke-width:3px,color:#0F172A
+  classDef store fill:#FFFFFF,stroke:#00785A,stroke-width:3px,color:#0F172A
+  classDef ui fill:#FFFFFF,stroke:#D9480F,stroke-width:3px,color:#0F172A
+  classDef decision fill:#FFFFFF,stroke:#9A6700,stroke-width:3px,color:#0F172A
+  classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
+  classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
+  classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
+  class feat,dfedir,inplace,pins,patches,rerere,gen part
 ```
 
 _Figure 1. L4 Detail -- Permanent and temporary content._ Up:
@@ -76,23 +125,75 @@ The cycle strips and rebuilds the security layer around the merge, then proves
 the result.
 
 ```mermaid
+---
+config:
+  theme: base
+  look: neo
+  fontFamily: Inter, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif
+  flowchart:
+    curve: linear
+    nodeSpacing: 40
+    rankSpacing: 64
+    padding: 18
+    wrappingWidth: 280
+    htmlLabels: true
+  elk:
+    preset: modelOrder
+  themeVariables:
+    fontSize: 15px
+    lineColor: "#64748B"
+    primaryTextColor: "#0F172A"
+    clusterBorder: "#0072B2"
+    edgeLabelBackground: "#FFFFFF"
+  themeCSS: >-
+    p{margin:0}
+    .node[data-look] rect,.node[data-look] path,.node[data-look] polygon,.node[data-look] .outer-path{filter:drop-shadow(0 1px 2px rgba(15,23,42,.10)) drop-shadow(0 6px 14px rgba(15,23,42,.10))}
+    .node rect{rx:10px;ry:10px}
+    .cluster rect{rx:16px;ry:16px}
+    .node .label div{min-width:150px}
+    .node.decision .label div{min-width:0}
+    .cluster[data-look] rect{filter:none}
+    .nodeLabel{line-height:1.35}
+    .nodeLabel b{font-weight:600;font-size:15px;letter-spacing:-0.01em}
+    .nodeLabel span{font-size:12.5px;font-weight:400;color:#334155}
+    .cluster-label span.nodeLabel{display:inline-block;background:#FFFFFF;color:#0B2A3F;border:1.5px solid #0072B2;border-radius:999px;padding:2px 12px;font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+    .flowchart-link{stroke-width:1.75px}
+    .labelBkg{background:transparent!important}
+    span.edgeLabel{display:inline-block;background:#FFFFFF!important;color:#1E293B;border:1px solid #94A3B8;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:500}
+    span.edgeLabel p{background:transparent!important}
+    .label-icon{width:20px;height:20px;vertical-align:-4px;margin-right:6px}
+    .ingest .label-icon{color:#0E8A7D}
+    .xform .label-icon{color:#7B4FB0}
+    .load .label-icon{color:#0072B2}
+    .bus .label-icon{color:#A8517F}
+    .store .label-icon{color:#00785A}
+    .ui .label-icon{color:#D9480F}
+    .ext .label-icon{color:#64748B}
+---
 flowchart TB
-    accTitle: L4 Detail -- The sync cycle
-    accDescr: Merge runs four steps, unapply the security layer, git merge with rerere replaying, apply the layer and set the pin. Prove runs four more, yarn install to re-derive the lock, verify the invariants, build and test, and triage for a human.
-
-    subgraph merge["1 Merge"]
-        direction LR
-        strip["1. --unapply"] --> gitmerge["2. git merge"] --> apply["3. --apply"] --> pin["4. --set pin"]
-    end
-    subgraph prove["2 Prove"]
-        direction LR
-        install["5. yarn install"] --> verify["6. --verify"] --> gate["7. build + test"] --> triage["8. triage"]
-    end
-    merge --> prove
-
-    classDef default fill:#F8FAFC,stroke:#64748B,stroke-width:1px,color:#0F172A
-    classDef group fill:none,stroke:#64748B,stroke-width:1px,stroke-dasharray:2 4
-    class merge,prove group
+  accTitle: L4 Detail -- The sync cycle
+  accDescr: Merge runs four steps, unapply the security layer, git merge with rerere replaying, apply the layer and set the pin. Prove runs four more, yarn install to re-derive the lock, verify the invariants, build and test, and triage for a human.
+  subgraph merge["1 Merge"]
+    direction LR
+    strip("<b>1. --unapply</b>") --> gitmerge("<b>2. git merge</b>") --> apply("<b>3. --apply</b>") --> pin("<b>4. --set pin</b>")
+  end
+  subgraph prove["2 Prove"]
+    direction LR
+    install("<b>5. yarn install</b>") --> verify("<b>6. --verify</b>") --> gate("<b>7. build + test</b>") --> triage("<b>8. triage</b>")
+  end
+  merge --> prove
+  classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
+  classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
+  classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
+  classDef load fill:#FFFFFF,stroke:#0072B2,stroke-width:3px,color:#0F172A
+  classDef bus fill:#FFFFFF,stroke:#A8517F,stroke-width:3px,color:#0F172A
+  classDef store fill:#FFFFFF,stroke:#00785A,stroke-width:3px,color:#0F172A
+  classDef ui fill:#FFFFFF,stroke:#D9480F,stroke-width:3px,color:#0F172A
+  classDef decision fill:#FFFFFF,stroke:#9A6700,stroke-width:3px,color:#0F172A
+  classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
+  classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
+  classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
+  class strip,gitmerge,apply,pin,install,verify,gate,triage part
 ```
 
 _Figure 2. L4 Detail -- The sync cycle. Read each stage left to right, then
@@ -267,22 +368,74 @@ That is the cycle working, not failing. Telling the two possible causes apart
 needs judgement rather than a comparison, and each has its own fix.
 
 ```mermaid
+---
+config:
+  theme: base
+  look: neo
+  fontFamily: Inter, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif
+  flowchart:
+    curve: linear
+    nodeSpacing: 40
+    rankSpacing: 64
+    padding: 18
+    wrappingWidth: 280
+    htmlLabels: true
+  elk:
+    preset: modelOrder
+  themeVariables:
+    fontSize: 15px
+    lineColor: "#64748B"
+    primaryTextColor: "#0F172A"
+    clusterBorder: "#0072B2"
+    edgeLabelBackground: "#FFFFFF"
+  themeCSS: >-
+    p{margin:0}
+    .node[data-look] rect,.node[data-look] path,.node[data-look] polygon,.node[data-look] .outer-path{filter:drop-shadow(0 1px 2px rgba(15,23,42,.10)) drop-shadow(0 6px 14px rgba(15,23,42,.10))}
+    .node rect{rx:10px;ry:10px}
+    .cluster rect{rx:16px;ry:16px}
+    .node .label div{min-width:150px}
+    .node.decision .label div{min-width:0}
+    .cluster[data-look] rect{filter:none}
+    .nodeLabel{line-height:1.35}
+    .nodeLabel b{font-weight:600;font-size:15px;letter-spacing:-0.01em}
+    .nodeLabel span{font-size:12.5px;font-weight:400;color:#334155}
+    .cluster-label span.nodeLabel{display:inline-block;background:#FFFFFF;color:#0B2A3F;border:1.5px solid #0072B2;border-radius:999px;padding:2px 12px;font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+    .flowchart-link{stroke-width:1.75px}
+    .labelBkg{background:transparent!important}
+    span.edgeLabel{display:inline-block;background:#FFFFFF!important;color:#1E293B;border:1px solid #94A3B8;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:500}
+    span.edgeLabel p{background:transparent!important}
+    .label-icon{width:20px;height:20px;vertical-align:-4px;margin-right:6px}
+    .ingest .label-icon{color:#0E8A7D}
+    .xform .label-icon{color:#7B4FB0}
+    .load .label-icon{color:#0072B2}
+    .bus .label-icon{color:#A8517F}
+    .store .label-icon{color:#00785A}
+    .ui .label-icon{color:#D9480F}
+    .ext .label-icon{color:#64748B}
+---
 flowchart LR
-    accTitle: L4 Detail -- A patch that stops applying
-    accDescr: A patch that no longer applies means either upstream fixed it, so the patch and its register entry are deleted, or the code moved, so the hunk is re-derived against the new file.
-
-    stale(["Patch no<br/>longer applies"])
-    q{"Fixed upstream,<br/>or code moved?"}
-    drop(["Delete the patch<br/>and its entry"])
-    rederive(["Re-derive<br/>the hunk"])
-
-    stale --> q
-    q -->|fixed| drop
-    q -->|moved| rederive
-
-    classDef default fill:#F8FAFC,stroke:#64748B,stroke-width:1px,color:#0F172A
-    classDef decision fill:#FCF1D6,stroke:#9A6700,stroke-width:1px,color:#3D2A00
-    class q decision
+  accTitle: L4 Detail -- A patch that stops applying
+  accDescr: A patch that no longer applies means either upstream fixed it, so the patch and its register entry are deleted, or the code moved, so the hunk is re-derived against the new file.
+  stale(["<b>Patch no longer applies</b>"])
+  q{"<b>Fixed upstream,<br/>or code moved?</b>"}
+  drop(["<b>Delete the patch</b><br/><span>and its entry</span>"])
+  rederive(["<b>Re-derive</b><br/><span>the hunk</span>"])
+  stale --> q
+  q -->|fixed| drop
+  q -->|moved| rederive
+  classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
+  classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
+  classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
+  classDef load fill:#FFFFFF,stroke:#0072B2,stroke-width:3px,color:#0F172A
+  classDef bus fill:#FFFFFF,stroke:#A8517F,stroke-width:3px,color:#0F172A
+  classDef store fill:#FFFFFF,stroke:#00785A,stroke-width:3px,color:#0F172A
+  classDef ui fill:#FFFFFF,stroke:#D9480F,stroke-width:3px,color:#0F172A
+  classDef decision fill:#FFFFFF,stroke:#9A6700,stroke-width:3px,color:#0F172A
+  classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
+  classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
+  classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
+  class stale,drop,rederive part
+  class q decision
 ```
 
 _Figure 3. L4 Detail -- A patch that stops applying._ Up: [The fork](README.md).

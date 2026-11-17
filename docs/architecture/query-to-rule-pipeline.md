@@ -15,23 +15,58 @@ The API renders the search with the same renderer the search page uses, and the
 engine decides whether the result is a rule.
 
 ```mermaid
+---
+config:
+  theme: base
+  look: neo
+  fontFamily: Inter, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif
+  themeVariables:
+    fontSize: 15px
+    lineColor: "#64748B"
+    primaryTextColor: "#0F172A"
+    edgeLabelBackground: "#FFFFFF"
+    actorBkg: "#FFFFFF"
+    actorBorder: "#94A3B8"
+    actorTextColor: "#0F172A"
+    actorLineColor: "#94A3B8"
+    signalColor: "#64748B"
+    signalTextColor: "#0F172A"
+    sequenceNumberColor: "#FFFFFF"
+    noteBkgColor: "#FFFFFF"
+    noteBorderColor: "#94A3B8"
+    noteTextColor: "#0F172A"
+    labelBoxBkgColor: "#FFFFFF"
+    labelBoxBorderColor: "#94A3B8"
+    labelTextColor: "#0F172A"
+    loopTextColor: "#0F172A"
+  themeCSS: >-
+    p{margin:0}
+    .labelBkg{background:transparent!important}
+    span.edgeLabel{display:inline-block;background:#FFFFFF!important;color:#1E293B;border:1px solid #94A3B8;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:500}
+    span.edgeLabel p{background:transparent!important}
+    .messageText{fill:#0F172A;stroke:#FFFFFF;stroke-width:4px;paint-order:stroke;stroke-linejoin:round}
+    .loopText,.loopText tspan{fill:#0F172A;stroke:#FFFFFF;stroke-width:4px;paint-order:stroke;stroke-linejoin:round}
+    .loopLine{stroke:#64748B}
+    .actor{rx:10px;ry:10px;filter:drop-shadow(0 1px 2px rgba(15,23,42,.10)) drop-shadow(0 6px 14px rgba(15,23,42,.10))}
+    .actor-line{stroke-dasharray:4 4}
+---
 sequenceDiagram
-    accTitle: L4 Detail -- Search to rule
-    accDescr: The analyst refines a search. The UI asks the API to export it, and the API reads column metadata from ClickHouse and returns the rendered SQL. The UI posts the raw SQL to create-rule, the API forwards it to the engine as the caller, and the engine's answer comes back to the UI.
-    participant User as Analyst
-    participant App as HyperDX UI
-    participant API as HyperDX API
-    participant CH as ClickHouse
-    participant Engine as DFE engine
+  accTitle: L4 Detail -- Search to rule
+  accDescr: The analyst refines a search. The UI asks the API to export it, and the API reads column metadata from ClickHouse and returns the rendered SQL. The UI posts the raw SQL to create-rule, the API forwards it to the engine as the caller, and the engine's answer comes back to the UI.
+  participant User as Analyst
+  participant App as HyperDX UI
+  participant API as HyperDX API
+  participant CH as ClickHouse
+  participant Engine as DFE engine
 
-    User->>App: refine a search
-    App->>API: POST /dfe/export-sql
-    API->>CH: fetch column metadata
-    API-->>App: sql, rawSql, config, source
-    App->>API: POST /dfe/create-rule with rawSql
-    API->>Engine: POST /api/v1/rules/from-hyperdx
-    Engine-->>API: rule id, or 422
-    API-->>App: engine status and body
+  User->>App: refine a search
+  App->>API: POST /dfe/export-sql
+  API->>CH: fetch column metadata
+  API-->>App: sql, rawSql, config, source
+  App->>API: POST /dfe/create-rule with rawSql
+  API->>Engine: POST /api/v1/rules/from-hyperdx
+  Engine-->>API: rule id, or 422
+  API-->>App: engine status and body
 ```
 
 _Figure 1. L4 Detail -- Search to rule. Dashed arrows are answers._ Up:
