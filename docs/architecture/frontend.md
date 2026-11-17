@@ -1,11 +1,15 @@
-# Frontend
+# HyperDX UI
 
-> **Scope.** This describes UPSTREAM HyperDX's frontend, which we do not modify,
-> as the DFE console frames it. It is here so the fork's own docs are readable
-> on their own. Upstream's [`agent_docs/`](../../agent_docs/) is the authority,
-> and anything specific to DFE is called out as such.
+The HyperDX UI is the search, charts and dashboards the DFE console frames, and
+is one part of [dfe-hyperdx](../architecture.md).
 
-## Structure
+| Fact      | Value                                                                                |
+| --------- | ------------------------------------------------------------------------------------ |
+| Repo      | `hyperi-io/dfe-hyperdx`, `packages/app`, our additions under `packages/app/src/dfe/` |
+| Image     | `ghcr.io/hyperi-io/dfe-hyperdx`, deployed by dfe-infra's chart                       |
+| Config    | `HYPERDX_APP_PORT`, 8080 by default                                                  |
+| Endpoints | the Next.js pages on port 8080, framed by the console with `?embed=1`                |
+| Metrics   | none of its own                                                                      |
 
 Charts build their SQL in the browser and send it through the API's ClickHouse
 proxy, and everything else goes through the API's REST routes.
@@ -56,21 +60,24 @@ config:
     .ui .label-icon{color:#D9480F}
     .ext .label-icon{color:#64748B}
 ---
-flowchart LR
+flowchart TB
   accTitle: L3 Components -- HyperDX UI
   accDescr: The DFE console frames the UI pages. Pages render charts through the browser ClickHouse client, which builds SQL with renderChartConfig, and load everything else through the API hooks. Both reach the HyperDX API.
   console("<b>DFE console</b><br/><span>dfe-ui</span>")
   subgraph app["HyperDX UI"]
+    direction LR
     pages("<b>Pages</b><br/><span>search, dashboards</span>")
     chc("<b>ClickHouse client</b><br/><span>renderChartConfig</span>")
     hooks("<b>API hooks</b><br/><span>ky, TanStack Query</span>")
+    pages --> chc
+    pages --> hooks
   end
   api[["<b>HyperDX API</b><br/><span>Express</span>"]]
   console -->|frames| pages
-  pages --> chc
-  pages --> hooks
   chc --> api
   hooks --> api
+  class console,api ui
+  class pages,chc,hooks part
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -82,13 +89,18 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class console,api ui
-  class pages,chc,hooks part
   style app fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 _Figure 1. L3 Components -- HyperDX UI._ Up:
-[L2 Services -- dfe-hyperdx](README.md#the-system).
+[L2 Services -- dfe-hyperdx](../architecture.md).
+
+> **Scope.** This describes UPSTREAM HyperDX's frontend, which we do not modify,
+> as the DFE console frames it. It is here so the fork's own docs are readable
+> on their own. Upstream's [`agent_docs/`](../../agent_docs/) is the authority,
+> and anything specific to DFE is called out as such.
+
+## Structure
 
 The DFE embed turns on four features, search, saved searches, the chart explorer
 and dashboards (`packages/app/src/dfe/embedFeatures.ts`). A direct visit to

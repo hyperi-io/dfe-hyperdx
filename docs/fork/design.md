@@ -80,22 +80,37 @@ config:
     .ui .label-icon{color:#D9480F}
     .ext .label-icon{color:#64748B}
 ---
-flowchart LR
+flowchart TB
   accTitle: L4 Detail -- The cheapest-edit ladder
   accDescr: If the change can live under dfe it goes there and costs nothing. If not and the upstream file can change by one token, the logic goes under dfe and the call site swaps one identifier. If not and it can be an addition next to a brace, append an else-if. Otherwise edit in place and catalogue it.
-  q1{"<b>Can it live<br/>under dfe/?</b>"}
-  q2{"<b>Can the upstream file<br/>change by ONE TOKEN?</b>"}
-  a1(["<b>Put it there,</b><br/><span>costs nothing</span>"])
-  q3{"<b>Can it be an<br/>ADDITION?</b>"}
-  a2(["<b>Logic in dfe/,</b><br/><span>swap the identifier</span>"])
-  a3(["<b>Append an else-if</b>"])
-  a4(["<b>Edit in place</b><br/><span>and CATALOGUE</span>"])
-  q1 -->|no| q2
-  q1 -->|yes| a1
-  q2 -->|no| q3
-  q2 -->|yes| a2
-  q3 -->|yes| a3
-  q3 -->|no| a4
+  subgraph ladder["Cheapest first"]
+    direction TB
+    subgraph s1["Step 1"]
+      direction LR
+      q1{"<b>Can it live<br/>under dfe/?</b>"}
+      a1(["<b>Put it there,</b><br/><span>costs nothing</span>"])
+      q1 -->|yes| a1
+    end
+    subgraph s2["Step 2"]
+      direction LR
+      q2{"<b>Can the upstream file<br/>change by ONE TOKEN?</b>"}
+      a2(["<b>Logic in dfe/,</b><br/><span>swap the identifier</span>"])
+      q2 -->|yes| a2
+    end
+    subgraph s3["Step 3"]
+      direction LR
+      q3{"<b>Can it be an<br/>ADDITION?</b>"}
+      a3(["<b>Append an else-if</b>"])
+      q3 -->|yes| a3
+    end
+    a4(["<b>Edit in place</b><br/><span>and CATALOGUE</span>"])
+    s1 -->|no| s2
+    s2 -->|no| s3
+    s3 -->|no| a4
+  end
+  class q1,q2,q3 decision
+  class a1,a2,a3 part
+  class a4 error
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -107,9 +122,10 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class q1,q2,q3 decision
-  class a1,a2,a3 part
-  class a4 error
+  style ladder fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style s1 fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style s2 fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style s3 fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 _Figure 1. L4 Detail -- The cheapest-edit ladder. Orange is the costliest rung._

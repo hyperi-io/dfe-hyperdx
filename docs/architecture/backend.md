@@ -1,11 +1,15 @@
-# Backend
+# HyperDX API
 
-> **Scope.** This describes UPSTREAM HyperDX's API, which we do not modify, and
-> where our `dfe/` layer sits in it. It is here so the fork's own docs are
-> readable on their own. Upstream's [`agent_docs/`](../../agent_docs/) is the
-> authority for upstream's parts.
+The HyperDX API answers the UI, verifies every session against the DFE engine
+and reads ClickHouse, and is one part of [dfe-hyperdx](../architecture.md).
 
-## Structure
+| Fact      | Value                                                                                                                                                   |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repo      | `hyperi-io/dfe-hyperdx`, `packages/api`, our additions under `packages/api/src/dfe/`                                                                    |
+| Image     | `ghcr.io/hyperi-io/dfe-hyperdx`, deployed by dfe-infra's chart                                                                                          |
+| Config    | `DFE_AUTH_MODE`, `MONGO_URI`, `HYPERDX_API_PORT` (8000 by default) and `DASHBOARD_PROVISIONER_DIR`                                                      |
+| Endpoints | REST routes, the ClickHouse proxy and `/mcp` on port 8000, and OpAMP on `OPAMP_PORT`. Health probes and `/metrics` mount before the identity middleware |
+| Metrics   | `/metrics` on the API port                                                                                                                              |
 
 With DFE auth on, application routes run after upstream's session middleware and
 our identity middleware. Health probes and `/metrics` mount before both.
@@ -56,7 +60,7 @@ config:
     .ui .label-icon{color:#D9480F}
     .ext .label-icon{color:#64748B}
 ---
-flowchart LR
+flowchart TB
   accTitle: L3 Components -- HyperDX API
   accDescr: The HyperDX UI calls the API. Inside, upstream's session middleware runs first, then the DFE identity middleware, then the internal routes or the ClickHouse proxy. The API asks the DFE engine about each session, keeps documents in DocumentDB and queries ClickHouse.
   app[["<b>HyperDX UI</b><br/><span>Next.js</span>"]]
@@ -66,13 +70,20 @@ flowchart LR
     identity --> routes("<b>Internal routes</b>")
     identity --> proxy[["<b>ClickHouse proxy</b>"]]
   end
-  engine("<b>DFE engine</b><br/><span>session and identity</span>")
-  ch[("<b>ClickHouse</b>")]
-  docdb[("<b>DocumentDB</b>")]
+  subgraph back["Behind the API"]
+    direction LR
+    engine("<b>DFE engine</b><br/><span>session and identity</span>")
+    ch[("<b>ClickHouse</b>")]
+    docdb[("<b>DocumentDB</b>")]
+  end
   app --> api
   api -->|sessions| engine
   api -->|queries| ch
   api -->|documents| docdb
+  class app ui
+  class session,identity,routes,proxy part
+  class engine control
+  class ch,docdb store
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -84,17 +95,21 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class app ui
-  class session,identity,routes,proxy part
-  class engine control
-  class ch,docdb store
   style api fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style back fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 _Figure 1. L3 Components -- HyperDX API._ Up:
-[L2 Services -- dfe-hyperdx](README.md#the-system). Down:
+[L2 Services -- dfe-hyperdx](../architecture.md). Down:
 [L4 Detail -- Engine token check](oidc-authentication.md#the-flow),
 [L4 Detail -- Query read path](data-flow.md#read-path).
+
+> **Scope.** This describes UPSTREAM HyperDX's API, which we do not modify, and
+> where our `dfe/` layer sits in it. It is here so the fork's own docs are
+> readable on their own. Upstream's [`agent_docs/`](../../agent_docs/) is the
+> authority for upstream's parts.
+
+## Structure
 
 | Part             | What it is                                                                                                                                             |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |

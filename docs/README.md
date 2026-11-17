@@ -7,7 +7,7 @@ Four questions bring people here, and they are answered in different places:
 
 | Question | Start at |
 | --- | --- |
-| **What does our fork do differently?** | [architecture/](architecture/README.md) |
+| **What does our fork do differently?** | [architecture.md](architecture.md) |
 | **How do we maintain the fork?** | [fork/](fork/README.md) |
 | How do I run it locally? | [development/](development/README.md) |
 | Why was it built this way? | [decisions/](decisions/README.md) |
@@ -81,6 +81,8 @@ flowchart LR
     ad ~~~ rootmd ~~~ code
   end
   ours ~~~ theirs
+  class d,dfe,tools,wf part
+  class ad,rootmd,code ext
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -92,8 +94,8 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class d,dfe,tools,wf part
-  class ad,rootmd,code ext
+  style ours fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style theirs fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 *Figure 1. L4 Detail -- Ours and upstream's files. Dashed boxes are upstream's.* Up: [dfe-hyperdx](../README.md).

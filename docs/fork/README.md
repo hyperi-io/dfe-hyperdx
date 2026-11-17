@@ -72,13 +72,14 @@ config:
     .ui .label-icon{color:#D9480F}
     .ext .label-icon{color:#64748B}
 ---
-flowchart LR
+flowchart TB
   accTitle: L4 Detail -- What an upstream merge takes
   accDescr: Our dfe directories never conflict, catalogued in-place edits conflict and rerere replays them, the security layer is stripped before the merge and rebuilt after, and the rest of the tree is taken whole from upstream. The build and tests after the merge are the proof.
   subgraph ours["What we own"]
+    direction LR
     dfedir("<b>packages/**/dfe/**</b>")
     inplace("<b>In-place edits</b><br/><span>.fork-surface</span>")
-    temp("<b>security/overrides.yaml</b><br/><span>security/patches/</span>")
+    temp("<b>Security layer</b><br/><span>overrides, patches</span>")
   end
   rest("<b>Upstream's tree</b>")
   merge("<b>Upstream merge</b>")
@@ -88,6 +89,10 @@ flowchart LR
   temp -->|stripped first| merge
   rest -->|taken whole| merge
   merge --> gate
+  ours ~~~ rest
+  class dfedir,temp,merge,gate part
+  class inplace error
+  class rest ext
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -99,9 +104,7 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class dfedir,temp,merge,gate part
-  class inplace error
-  class rest ext
+  style ours fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 *Figure 1. L4 Detail -- What an upstream merge takes. The orange box is the one that costs us on a sync.* Up: [dfe-hyperdx documentation](../README.md).

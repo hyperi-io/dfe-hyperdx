@@ -56,24 +56,38 @@ config:
     .ui .label-icon{color:#D9480F}
     .ext .label-icon{color:#64748B}
 ---
-flowchart LR
+flowchart TB
   accTitle: L4 Detail -- Telemetry write path
   accDescr: Applications send OTLP and Fluentd input and browsers send rrweb events to the collector receivers. Processors transform and batch them, and the routing connector writes rrweb events to hyperdx_sessions and everything else to the OTel tables.
-  subgraph sources["Sources"]
-    otlp("<b>Apps</b><br/><span>OTLP</span>")
-    fluent("<b>Apps</b><br/><span>Fluentd</span>")
-    rrweb("<b>Browsers</b><br/><span>rrweb</span>")
+  subgraph path["Write path"]
+    direction TB
+    subgraph sources["Sources"]
+      direction LR
+      otlp("<b>Apps</b><br/><span>OTLP</span>")
+      fluent("<b>Apps</b><br/><span>Fluentd</span>")
+      rrweb("<b>Browsers</b><br/><span>rrweb</span>")
+      otlp ~~~ fluent ~~~ rrweb
+    end
+    subgraph collect["Collector"]
+      direction LR
+      receivers("<b>Receivers</b>")
+      processors("<b>Processors</b><br/><span>transform and batch</span>")
+      receivers --> processors
+    end
+    subgraph route["Routing connector"]
+      direction LR
+      routing{"<b>rr-web.event<br/>present?</b>"}
+      sessions[("<b>hyperdx_sessions</b>")]
+      otel[("<b>otel_logs, traces, metrics</b>")]
+      routing -->|yes| sessions
+      routing -->|no| otel
+    end
+    sources --> collect --> route
   end
-  receivers("<b>Receivers</b>")
-  processors("<b>Processors</b><br/><span>transform and batch</span>")
-  routing{"<b>rr-web.event<br/>present?</b>"}
-  sessions[("<b>hyperdx_sessions</b>")]
-  otel[("<b>otel_logs, traces, metrics</b>")]
-  sources --> receivers
-  receivers --> processors
-  processors --> routing
-  routing -->|yes| sessions
-  routing -->|no| otel
+  class otlp,fluent,rrweb ext
+  class receivers,processors part
+  class routing decision
+  class sessions,otel store
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -85,10 +99,10 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class otlp,fluent,rrweb ext
-  class receivers,processors part
-  class routing decision
-  class sessions,otel store
+  style path fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style sources fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style collect fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style route fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 _Figure 1. L4 Detail -- Telemetry write path. Dashed boxes are external._ Up:
@@ -229,20 +243,31 @@ config:
     .ui .label-icon{color:#D9480F}
     .ext .label-icon{color:#64748B}
 ---
-flowchart LR
+flowchart TB
   accTitle: L4 Detail -- Upstream alert evaluation
   accDescr: The alert checker loads active alerts from DocumentDB, builds each one's query, runs it on ClickHouse and compares the result with the threshold. A triggered alert sends a webhook and records history, and an alert within its threshold records history alone.
-  alerts[("<b>Alerts</b><br/><span>DocumentDB</span>")]
-  build("<b>Load and build query</b>")
-  query("<b>Query</b><br/><span>ClickHouse</span>")
-  check{"<b>Threshold<br/>crossed?</b>"}
-  fire(["<b>Send webhook, record history</b>"])
-  record(["<b>Record history</b>"])
-  alerts --> build
-  build --> query
-  query --> check
-  check -->|yes| fire
-  check -->|no| record
+  subgraph cycle["Alert check"]
+    direction TB
+    subgraph ev["Evaluate"]
+      direction LR
+      alerts[("<b>Alerts</b><br/><span>DocumentDB</span>")]
+      build("<b>Load and build query</b>")
+      query("<b>Query</b><br/><span>ClickHouse</span>")
+      alerts --> build --> query
+    end
+    subgraph res["Compare"]
+      direction LR
+      check{"<b>Threshold<br/>crossed?</b>"}
+      fire(["<b>Send webhook, record history</b>"])
+      record(["<b>Record history</b>"])
+      check -->|yes| fire
+      check -->|no| record
+    end
+    ev --> res
+  end
+  class alerts store
+  class build,query,fire,record part
+  class check decision
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -254,9 +279,9 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class alerts store
-  class build,query,fire,record part
-  class check decision
+  style cycle fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style ev fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style res fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 _Figure 3. L4 Detail -- Upstream alert evaluation._ Up:
