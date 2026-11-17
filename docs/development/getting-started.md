@@ -79,22 +79,26 @@ config:
     .ui .label-icon{color:#D9480F}
     .ext .label-icon{color:#64748B}
 ---
-flowchart LR
+flowchart TB
   accTitle: L4 Detail -- Local dev with dev:dfe
   accDescr: The Next.js app proxies API calls to the local API. The API keeps documents in DocumentDB running in Docker, fetches the engine's JWKS in oidc-proxy mode, and reads ClickHouse when DEFAULT_CONNECTIONS names one.
   subgraph local["Local processes"]
+    direction LR
     app("<b>Next.js app</b>")
     api("<b>API</b>")
+    app -->|api proxy| api
   end
   subgraph docker["Docker"]
     docdb[("<b>DocumentDB</b>")]
   end
   engine("<b>dfe-engine</b><br/><span>:8003</span>")
   ch[("<b>ClickHouse</b>")]
-  app -->|api proxy| api
   api -->|documents| docdb
   api -.->|JWKS| engine
   api -.->|queries| ch
+  class app,api ui
+  class docdb,ch store
+  class engine control
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -106,9 +110,8 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class app,api ui
-  class docdb,ch store
-  class engine control
+  style local fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style docker fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 _Figure 1. L4 Detail -- Local dev with dev:dfe. Dotted arrows depend on settings

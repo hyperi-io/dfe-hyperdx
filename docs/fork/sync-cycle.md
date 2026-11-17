@@ -62,26 +62,31 @@ config:
     .ui .label-icon{color:#D9480F}
     .ext .label-icon{color:#64748B}
 ---
-flowchart LR
+flowchart TB
   accTitle: L4 Detail -- Permanent and temporary content
   accDescr: Permanent content, the DFE features, the dfe directories and the catalogued in-place edits, is carried as merged history and git rerere replays its resolutions. Temporary content, the dependency pins and code patches, is declared, stripped before a merge and rebuilt after.
-  subgraph temporary["TEMPORARY, upstream will fix"]
-    direction LR
-    pins("<b>Dependency pins</b><br/><span>security/overrides.yaml</span>")
-    patches("<b>Code fixes</b><br/><span>security/patches/</span>")
-    pins ~~~ patches
+  subgraph content["What a merge carries"]
+    direction TB
+    subgraph temporary["TEMPORARY, upstream will fix"]
+      direction LR
+      pins("<b>Dependency pins</b><br/><span>security/overrides.yaml</span>")
+      patches("<b>Code fixes</b><br/><span>security/patches/</span>")
+      pins ~~~ patches
+    end
+    gen("<b>Strip before merge,</b><br/><span>rebuild after</span>")
+    subgraph permanent["PERMANENT, survives every update"]
+      direction LR
+      feat("<b>DFE features</b>")
+      dfedir("<b>packages/**/dfe/**</b>")
+      inplace("<b>In-place edits</b><br/><span>.fork-surface</span>")
+      feat ~~~ dfedir ~~~ inplace
+    end
+    rerere("<b>git rerere replays</b><br/><span>our resolutions</span>")
+    temporary -->|declared| gen
+    gen ~~~ permanent
+    permanent -->|merged history| rerere
   end
-  subgraph permanent["PERMANENT, survives every update"]
-    direction LR
-    feat("<b>DFE features</b>")
-    dfedir("<b>packages/**/dfe/**</b>")
-    inplace("<b>In-place edits</b><br/><span>.fork-surface</span>")
-    feat ~~~ dfedir ~~~ inplace
-  end
-  gen("<b>Strip before merge,</b><br/><span>rebuild after</span>")
-  rerere("<b>git rerere replays</b><br/><span>our resolutions</span>")
-  temporary -->|declared| gen
-  permanent -->|merged history| rerere
+  class feat,dfedir,inplace,pins,patches,rerere,gen part
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -93,7 +98,9 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class feat,dfedir,inplace,pins,patches,rerere,gen part
+  style content fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style temporary fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style permanent fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 _Figure 1. L4 Detail -- Permanent and temporary content._ Up:
@@ -174,14 +181,31 @@ flowchart TB
   accTitle: L4 Detail -- The sync cycle
   accDescr: Merge runs four steps, unapply the security layer, git merge with rerere replaying, apply the layer and set the pin. Prove runs four more, yarn install to re-derive the lock, verify the invariants, build and test, and triage for a human.
   subgraph merge["1 Merge"]
-    direction LR
-    strip("<b>1. --unapply</b>") --> gitmerge("<b>2. git merge</b>") --> apply("<b>3. --apply</b>") --> pin("<b>4. --set pin</b>")
+    direction TB
+    subgraph m1["Steps 1 and 2"]
+      direction LR
+      strip("<b>1. --unapply</b>") --> gitmerge("<b>2. git merge</b>")
+    end
+    subgraph m2["Steps 3 and 4"]
+      direction LR
+      apply("<b>3. --apply</b>") --> pin("<b>4. --set pin</b>")
+    end
+    m1 --> m2
   end
   subgraph prove["2 Prove"]
-    direction LR
-    install("<b>5. yarn install</b>") --> verify("<b>6. --verify</b>") --> gate("<b>7. build + test</b>") --> triage("<b>8. triage</b>")
+    direction TB
+    subgraph p1["Steps 5 and 6"]
+      direction LR
+      install("<b>5. yarn install</b>") --> verify("<b>6. --verify</b>")
+    end
+    subgraph p2["Steps 7 and 8"]
+      direction LR
+      gate("<b>7. build + test</b>") --> triage("<b>8. triage</b>")
+    end
+    p1 --> p2
   end
   merge --> prove
+  class strip,gitmerge,apply,pin,install,verify,gate,triage part
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -193,7 +217,12 @@ flowchart TB
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class strip,gitmerge,apply,pin,install,verify,gate,triage part
+  style merge fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style m1 fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style m2 fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style prove fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style p1 fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style p2 fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 _Figure 2. L4 Detail -- The sync cycle. Read each stage left to right, then
@@ -423,6 +452,8 @@ flowchart LR
   stale --> q
   q -->|fixed| drop
   q -->|moved| rederive
+  class stale,drop,rederive part
+  class q decision
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -434,8 +465,6 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class stale,drop,rederive part
-  class q decision
 ```
 
 _Figure 3. L4 Detail -- A patch that stops applying._ Up: [The fork](README.md).

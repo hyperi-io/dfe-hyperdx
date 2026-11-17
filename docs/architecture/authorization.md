@@ -58,18 +58,25 @@ config:
     .ui .label-icon{color:#D9480F}
     .ext .label-icon{color:#64748B}
 ---
-flowchart LR
+flowchart TB
   accTitle: L4 Detail -- Authorization layers
   accDescr: A signed-in request reaches the HyperDX API. The API asks the DFE engine which team the session is on, scopes every DocumentDB query by that team, and queries ClickHouse as the team's own ClickHouse user, whose GRANTs decide what it reads.
   user("<b>Signed-in user</b>")
   api("<b>HyperDX API</b>")
-  engine("<b>DFE engine</b><br/><span>session and identity</span>")
-  docdb[("<b>DocumentDB</b>")]
-  ch[("<b>ClickHouse</b><br/><span>GRANTs</span>")]
+  subgraph back["Behind the API"]
+    direction LR
+    engine("<b>DFE engine</b><br/><span>session and identity</span>")
+    docdb[("<b>DocumentDB</b>")]
+    ch[("<b>ClickHouse</b><br/><span>GRANTs</span>")]
+  end
   user -->|engine token| api
   api -->|which team| engine
   api -->|team scoped| docdb
   api -->|team's user| ch
+  class user ext
+  class api ui
+  class engine control
+  class docdb,ch store
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -81,10 +88,7 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class user ext
-  class api ui
-  class engine control
-  class docdb,ch store
+  style back fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 _Figure 1. L4 Detail -- Authorization layers. The dashed box is outside

@@ -56,27 +56,33 @@ config:
     .ui .label-icon{color:#D9480F}
     .ext .label-icon{color:#64748B}
 ---
-flowchart LR
+flowchart TB
   accTitle: L4 Detail -- Sources and tables
   accDescr: A connection holds the ClickHouse login. Log, trace, session and metric sources each read their own table through it.
   conn("<b>Connection</b><br/><span>host, user, password</span>")
-  subgraph sources["Sources"]
-    srclog("<b>Log source</b>")
-    srctrace("<b>Trace source</b>")
-    srcsession("<b>Session source</b>")
-    srcmetric("<b>Metric source</b>")
-  end
-  subgraph tables["ClickHouse tables"]
-    logs[("<b>otel_logs</b>")]
-    traces[("<b>otel_traces</b>")]
-    sessions[("<b>hyperdx_sessions</b>")]
-    metrics[("<b>otel_metrics_*</b>")]
+  subgraph sources["Sources and their tables"]
+    direction TB
+    subgraph p1["Logs"]
+      direction LR
+      srclog("<b>Log source</b>") -->|reads| logs[("<b>otel_logs</b>")]
+    end
+    subgraph p2["Traces"]
+      direction LR
+      srctrace("<b>Trace source</b>") -->|reads| traces[("<b>otel_traces</b>")]
+    end
+    subgraph p3["Sessions"]
+      direction LR
+      srcsession("<b>Session source</b>") -->|reads| sessions[("<b>hyperdx_sessions</b>")]
+    end
+    subgraph p4["Metrics"]
+      direction LR
+      srcmetric("<b>Metric source</b>") -->|reads| metrics[("<b>otel_metrics_*</b>")]
+    end
+    p1 ~~~ p2 ~~~ p3 ~~~ p4
   end
   conn -->|login| sources
-  srclog -->|reads| logs
-  srctrace -->|reads| traces
-  srcsession -->|reads| sessions
-  srcmetric -->|reads| metrics
+  class conn,srclog,srctrace,srcsession,srcmetric part
+  class logs,traces,sessions,metrics store
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -88,8 +94,11 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class conn,srclog,srctrace,srcsession,srcmetric part
-  class logs,traces,sessions,metrics store
+  style sources fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style p1 fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style p2 fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style p3 fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style p4 fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 _Figure 1. L4 Detail -- Sources and tables._ Up: [Architecture](README.md).

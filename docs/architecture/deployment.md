@@ -66,6 +66,8 @@ flowchart LR
   end
   docdb[("<b>DocumentDB</b><br/><span>PostgreSQL 18</span>")]
   app -->|mongodb://| docdb
+  class models,sessions part
+  class docdb store
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -77,8 +79,6 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class models,sessions part
-  class docdb store
   style app fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
@@ -160,11 +160,14 @@ config:
     .ui .label-icon{color:#D9480F}
     .ext .label-icon{color:#64748B}
 ---
-flowchart LR
+flowchart TB
   accTitle: L4 Detail -- Compose services
   accDescr: Instrumented applications send OTLP to the otel-collector, which writes ClickHouse. Users reach the app container, which queries ClickHouse and keeps its documents in DocumentDB.
-  senders("<b>Instrumented applications</b>")
-  users("<b>Users</b>")
+  subgraph clients["Clients"]
+    direction LR
+    senders("<b>Instrumented applications</b>")
+    users("<b>Users</b>")
+  end
   otel("<b>otel-collector</b>")
   app("<b>app</b><br/><span>UI, API, OpAMP</span>")
   ch[("<b>ClickHouse</b>")]
@@ -174,6 +177,10 @@ flowchart LR
   otel -->|writes| ch
   app -->|queries| ch
   app -->|documents| docdb
+  class senders,users ext
+  class otel part
+  class app ui
+  class ch,docdb store
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -185,10 +192,7 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class senders,users ext
-  class otel part
-  class app ui
-  class ch,docdb store
+  style clients fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 _Figure 2. L4 Detail -- Compose services. Dashed boxes are external._ Up:

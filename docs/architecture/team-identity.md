@@ -86,6 +86,9 @@ flowchart LR
   held -->|team's user| carry
   held -->|other user| refuse
   held -->|none| seed
+  class request,carry,seed part
+  class held decision
+  class refuse error
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -97,9 +100,6 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class request,carry,seed part
-  class held decision
-  class refuse error
 ```
 
 _Figure 1. L4 Detail -- Team connection check._ Up:
@@ -154,23 +154,33 @@ config:
     .ui .label-icon{color:#D9480F}
     .ext .label-icon{color:#64748B}
 ---
-flowchart LR
+flowchart TB
   accTitle: L4 Detail -- Seeding a team connection
   accDescr: A request takes the team's seed claim if it is free and asks the engine for the caller's connection. The team's own user creates the connection and its sources. An engine 401 or 403, or another ClickHouse user, is refused with 403. Any other answer lets the request in and retries later. A request that finds the claim held waits for that seed, then carries on if the connection exists or retries later.
   claim{"<b>Seed claim<br/>free?</b>"}
-  ask{"<b>Engine<br/>answer?</b>"}
-  wait("<b>Wait up to 30 seconds</b>")
-  create(["<b>Create connection and sources</b>"])
-  refuse(["<b>Reject, 403</b>"])
+  subgraph free["Claim free"]
+    direction LR
+    ask{"<b>Engine<br/>answer?</b>"}
+    create(["<b>Create connection and sources</b>"])
+    refuse(["<b>Reject, 403</b>"])
+    ask -->|team's user| create
+    ask -->|refused| refuse
+  end
+  subgraph held["Claim held"]
+    direction LR
+    wait("<b>Wait up to 30 seconds</b>")
+    carry(["<b>Carry on</b>"])
+    wait -->|seeded| carry
+  end
   later(["<b>Let in, retry later</b>"])
-  carry(["<b>Carry on</b>"])
-  claim -->|free| ask
-  claim -->|held| wait
-  ask -->|team's user| create
-  ask -->|refused| refuse
+  claim -->|free| free
+  claim -->|held| held
+  free ~~~ held
   ask -.->|no answer| later
   wait -.->|not seeded| later
-  wait -->|seeded| carry
+  class claim,ask decision
+  class wait,create,later,carry part
+  class refuse error
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -182,9 +192,8 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class claim,ask decision
-  class wait,create,later,carry part
-  class refuse error
+  style free fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style held fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 _Figure 2. L4 Detail -- Seeding a team connection. Dotted arrows let the request

@@ -149,14 +149,17 @@ config:
     .ui .label-icon{color:#D9480F}
     .ext .label-icon{color:#64748B}
 ---
-flowchart LR
+flowchart TB
   accTitle: L4 Detail -- Identity mode
   accDescr: At start the API reads DFE_AUTH_MODE. oidc-proxy verifies the engine token, header-dev trusts identity headers unverified, and unset leaves upstream auth alone. Both DFE paths find or create the user and team.
   start(["<b>API starts</b>"])
   mode{"<b>DFE_AUTH_MODE?</b>"}
-  jwt("<b>Verify engine</b><br/><span>ES384 token</span>")
-  hdr("<b>Trust identity</b><br/><span>headers</span>")
-  off(["<b>Upstream auth only</b>"])
+  subgraph modes["Modes"]
+    direction LR
+    jwt("<b>Verify engine</b><br/><span>ES384 token</span>")
+    hdr("<b>Trust identity</b><br/><span>headers</span>")
+    off(["<b>Upstream auth only</b>"])
+  end
   resolve(["<b>Find or create</b><br/><span>user and team</span>"])
   start --> mode
   mode -->|oidc-proxy| jwt
@@ -164,6 +167,8 @@ flowchart LR
   mode -->|unset| off
   jwt --> resolve
   hdr --> resolve
+  class start,jwt,hdr,off,resolve part
+  class mode decision
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -175,8 +180,7 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class start,jwt,hdr,off,resolve part
-  class mode decision
+  style modes fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 _Figure 2. L4 Detail -- Identity mode._ Up:

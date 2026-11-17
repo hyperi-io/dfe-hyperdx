@@ -59,13 +59,16 @@ config:
     .ui .label-icon{color:#D9480F}
     .ext .label-icon{color:#64748B}
 ---
-flowchart LR
+flowchart TB
   accTitle: L4 Detail -- Three ways out of the fork
   accDescr: From forked and syncing, A stays forked and keeps syncing, B lets upstream absorb our delta and ends as a plain dependency, and C stops merging and copies the code into DFE, ending with us owning an observability platform.
   now(["<b>Forked,</b><br/><span>syncing</span>"])
-  a("<b>A. Stay forked,</b><br/><span>keep syncing</span>")
-  b("<b>B. De-fork,</b><br/><span>upstream absorbs our delta</span>")
-  c("<b>C. Hard fork,</b><br/><span>stop merging</span>")
+  subgraph ways["Three ways out"]
+    direction LR
+    a("<b>A. Stay forked,</b><br/><span>keep syncing</span>")
+    b("<b>B. De-fork,</b><br/><span>upstream absorbs our delta</span>")
+    c("<b>C. Hard fork,</b><br/><span>stop merging</span>")
+  end
   done(["<b>Plain dependency</b>"])
   own(["<b>We own an observability platform</b>"])
   now --> a
@@ -73,6 +76,8 @@ flowchart LR
   now --> c
   b -->|best outcome| done
   c -->|expected exit| own
+  class now,a,b,done part
+  class c,own error
   classDef ext fill:#F4F6F8,stroke:#94A3B8,stroke-width:1.5px,stroke-dasharray:5 4,color:#0F172A
   classDef ingest fill:#FFFFFF,stroke:#0E8A7D,stroke-width:3px,color:#0F172A
   classDef xform fill:#FFFFFF,stroke:#7B4FB0,stroke-width:3px,color:#0F172A
@@ -84,8 +89,7 @@ flowchart LR
   classDef error fill:#FFFFFF,stroke:#C2410C,stroke-width:3px,color:#0F172A
   classDef control fill:#FFFFFF,stroke:#334155,stroke-width:3px,color:#0F172A
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
-  class now,a,b,done part
-  class c,own error
+  style ways fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 _Figure 1. L4 Detail -- Three ways out of the fork. Orange is the expensive way
