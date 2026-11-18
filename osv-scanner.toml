@@ -182,6 +182,10 @@ id = "GHSA-mfr8-8qww-v76h"
 reason = "next 16.4.3: the leak needs a 'use cache' function called through unstable_cache(), and no workspace source uses either, nor enables cacheComponents or dynamicIO."
 
 [[IgnoredVulns]]
+id = "GHSA-vc7v-qv4w-wrv8"
+reason = "next 16.4.3: the leak needs nested 'use cache' functions under Cache Components, and no workspace source uses 'use cache' or enables cacheComponents."
+
+[[IgnoredVulns]]
 id = "GHSA-hrvq-x7jp-36xv"
 reason = "nx: root devDependency, not in the image; nx migrate runs only when someone invokes it."
 
