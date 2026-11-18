@@ -630,6 +630,16 @@ expects undeclared static-filter keys to persist is skipped by name in
 - **`DBSearchPage.tsx`** gives the live tail refresh interval select an
   `aria-label` matching its tooltip, one added line, so screen readers and
   Playwright can name it. `forkDeltas.test.ts` pins the line.
+- `packages/common-utils/src/dfe/rowLimitRejected.ts` - a role can constrain
+  `max_rows_to_read` so a query user cannot lift it, and HyperDX sends the
+  setting (`'0'` or the team's value) on its metadata and filter queries. The
+  server answers `SETTING_CONSTRAINT_VIOLATION` (code 452). Upstream's client
+  retries without the setting only on `READONLY`, so those queries failed.
+  **`clickhouse/index.ts` (catalogued)** replaces the three-line condition in
+  `BaseClickhouseClient.query` with one call and adds the import. The retry also
+  no longer depends on the client's flag being unset, so a query already in
+  flight when a sibling's refusal set it still retries. Queries then run under
+  the role's own limit. `dfe/__tests__/rowLimitRejected.test.ts` covers it.
 
 ## Config and bootstrap
 

@@ -124,6 +124,9 @@ packages/app/tsconfig.build.json
 packages/common-utils/CHANGELOG.md
 packages/common-utils/README.md
 packages/common-utils/package.json
+# One import and one call: the retry on a refused max_rows_to_read comes from
+# dfe/rowLimitRejected.ts - see docs/fork/what-we-changed.md.
+packages/common-utils/src/clickhouse/index.ts
 packages/common-utils/src/core/metadata.ts
 packages/common-utils/src/core/renderChartConfig.ts
 # One import and one wrapped call: range() takes its operand from

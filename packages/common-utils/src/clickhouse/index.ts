@@ -30,6 +30,7 @@ import {
   restoreReplacements,
   splitAndTrimWithBracket,
 } from '@/core/utils';
+import { dfeIsRowLimitRejected } from '@/dfe/rowLimitRejected';
 import { isBuilderChartConfig } from '@/guards';
 import { ChartConfigWithOptDateRange, QuerySettings } from '@/types';
 
@@ -713,11 +714,7 @@ export abstract class BaseClickhouseClient {
         const res = await this.__query(props);
         return res;
       } catch (error: any) {
-        if (
-          !this.maxRowReadOnly &&
-          error.type === 'READONLY' &&
-          error.message.includes('max_rows_to_read')
-        ) {
+        if (dfeIsRowLimitRejected(error, attempts)) {
           // Indicate that the CH instance does not accept the max_rows_to_read setting
           this.maxRowReadOnly = true;
         } else {
