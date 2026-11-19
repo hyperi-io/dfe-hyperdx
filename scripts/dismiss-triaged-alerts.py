@@ -306,7 +306,12 @@ VERDICTS: dict[str, tuple[str, str]] = {
         "RE-CHECK EVERY SYNC - a merge dragging it below 10.3.1 makes this a "
         "real unauthenticated SSRF.",
     ),
-    "fast-xml-parser": ("not_used", "Upstream already pins ^4.5.6."),
+    "fast-xml-parser": (
+        "not_used",
+        "Only @aws-sdk/client-sts 3.279.0 (via mongodb) pulls it, and that "
+        "constructs XMLParser only. The advisories here are in XMLBuilder or "
+        "need stopNodes, and no source imports XMLBuilder.",
+    ),
     # Medium or low with no reachable sink.
     "hono": (
         "not_used",
