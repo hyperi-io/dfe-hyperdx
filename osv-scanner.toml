@@ -123,7 +123,7 @@ reason = "esbuild 0.27.4: tsx's dev server on Windows, not in the image."
 
 [[IgnoredVulns]]
 id = "GHSA-gh4j-gqv2-49f6"
-reason = "fast-xml-parser: the flaw is in XMLBuilder, and the only shipped parent, @aws-sdk/client-sts, uses the parser."
+reason = "fast-xml-parser 4.5.6: the flaw is in XMLBuilder. The only parent is @aws-sdk/client-sts 3.279.0, under mongodb, which only constructs XMLParser (dist-cjs/protocols/Aws_query.js:1043), and no workspace source imports XMLBuilder."
 
 [[IgnoredVulns]]
 id = "GHSA-474x-hrwr-fgx4"
