@@ -80,6 +80,7 @@ build:
   enabled: false
 release:
   enabled: true
+  candidates: true
   destinations:
     npm: false
   container:
