@@ -117,6 +117,8 @@ flowchart LR
   classDef part fill:#FFFFFF,stroke:#94A3B8,stroke-width:1.5px,color:#0F172A
   class dfedirs,theme,tools part
   class surface error
+  style additive fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
+  style inplace fill:none,stroke:#0072B2,stroke-width:1.5px,stroke-dasharray:6 4
 ```
 
 _Figure 1. L4 Detail -- Where our code lives. Orange is the conflict surface._
