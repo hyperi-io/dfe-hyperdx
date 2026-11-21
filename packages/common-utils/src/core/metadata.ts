@@ -181,7 +181,7 @@ const partitionKeyCoversTimestamp = (
 
 const quoteJsonPathSegment = (segment: string): string => {
   const unquoted = unquoteIdentifier(segment);
-  return `\`${unquoted.replace(/\\/g, '\\\\').replace(/`/g, '``')}\``;
+  return `\`${unquoted.replace(/`/g, '``')}\``;
 };
 
 /**
