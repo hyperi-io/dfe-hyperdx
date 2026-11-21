@@ -127,7 +127,7 @@ export function ShippedDashboardTitle({ name }: { name: string }) {
         leftSection={<IconLock size={12} />}
         style={{ flexShrink: 0 }}
       >
-        Shipped with DFE -- read-only. Duplicate to edit.
+        Shipped with DFE, read-only. Duplicate to edit.
       </Badge>
     </Group>
   );

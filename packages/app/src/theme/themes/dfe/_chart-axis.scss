@@ -1,0 +1,21 @@
+/* A time chart centres its first and last x-axis labels on the plot's edges,
+   so the chart's margin clips half of each ("ov 21" for "Nov 21"). The first
+   label starts at its tick, the last ends at its own, and a lone label stays
+   centred. */
+.recharts-xAxis-tick-labels
+  .recharts-cartesian-axis-tick-label:first-child
+  .recharts-cartesian-axis-tick-value {
+  text-anchor: start;
+}
+
+.recharts-xAxis-tick-labels
+  .recharts-cartesian-axis-tick-label:last-child
+  .recharts-cartesian-axis-tick-value {
+  text-anchor: end;
+}
+
+.recharts-xAxis-tick-labels
+  .recharts-cartesian-axis-tick-label:only-child
+  .recharts-cartesian-axis-tick-value {
+  text-anchor: middle;
+}
