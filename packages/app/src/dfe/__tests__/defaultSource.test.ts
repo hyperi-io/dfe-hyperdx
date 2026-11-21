@@ -42,13 +42,32 @@ describe('dfePreferredSourceId', () => {
   });
 });
 
+const WITH_ALL_SOURCES = [
+  {
+    id: 'all-id',
+    kind: SourceKind.Log,
+    name: 'all_sources',
+    disabled: false,
+  },
+  ...WITH_MAIN,
+];
+
 /**
- * The embed opens on the landing every record falls into. Opening on detections
- * showed a fresh tester an empty window on a deployment that had data.
+ * The embed opens on the source that holds every record. Opening on detections,
+ * or on a landing table every record had been routed out of, showed a fresh
+ * tester an empty window on a deployment that had data.
  */
 describe('dfePreferredSourceId in the embed', () => {
-  it('prefers main over hunts', () => {
+  it('prefers all_sources over main, which holds only what no source claimed', () => {
+    expect(dfePreferredSourceId(WITH_ALL_SOURCES, true)).toBe('all-id');
+  });
+
+  it('prefers main over hunts when there is no all_sources', () => {
     expect(dfePreferredSourceId(WITH_MAIN, true)).toBe('main-id');
+  });
+
+  it('leaves the standalone page on hunts when all_sources exists', () => {
+    expect(dfePreferredSourceId(WITH_ALL_SOURCES, false)).toBe('hunts-id');
   });
 
   it('falls back to hunts when the deployment has no main', () => {
