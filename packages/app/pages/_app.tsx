@@ -13,6 +13,7 @@ import {
 } from '@tanstack/react-query';
 
 import { usePageTitle } from '@/brand';
+import { CrtOverlay } from '@/components/CrtOverlay';
 import { MANTINE_FONT_MAP } from '@/config/fonts';
 import { isBlockedRoute } from '@/dfe/embedFeatures';
 import { useEmbedColorScheme } from '@/dfe/EmbedThemeSync';
@@ -24,6 +25,7 @@ import {
   SystemColorSchemeScript,
   useContentFontSize,
   useResolvedColorScheme,
+  useUserPreferences,
 } from '@/useUserPreferences';
 
 import '@mantine/core/styles.css';
@@ -83,6 +85,7 @@ function AppContent({
   const resolvedColorScheme = useResolvedColorScheme();
   // In embed mode, dfe-ui owns light/dark; otherwise use hyperdx's own resolution.
   const colorScheme = useEmbedColorScheme(resolvedColorScheme);
+  const { userPreferences } = useUserPreferences();
   const { base: contentFontSize, compact: compactContentFontSize } =
     useContentFontSize();
 
@@ -121,6 +124,7 @@ function AppContent({
       <ConfirmProvider>
         {getLayout(<Component {...pageProps} />)}
       </ConfirmProvider>
+      {userPreferences.crtMode && <CrtOverlay />}
     </ThemeWrapper>
   );
 }

@@ -482,7 +482,7 @@ function OnboardingModalComponent({
             const promqlSource = await createSourceMutation.mutateAsync({
               source: {
                 kind: SourceKind.Promql,
-                name: 'PromQL',
+                name: 'Time Series',
                 connection: connectionId,
                 from: timeSeriesTable,
                 timestampValueExpression: PROMQL_TIMESTAMP_EXPRESSION,

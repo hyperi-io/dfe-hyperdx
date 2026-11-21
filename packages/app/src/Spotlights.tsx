@@ -2,28 +2,35 @@ import * as React from 'react';
 import { useRouter } from 'next/router';
 import { Spotlight, SpotlightActionData } from '@mantine/spotlight';
 import {
+  IconActivityHeartbeat,
+  IconBell,
   IconChartLine,
+  IconDeviceLaptop,
   IconGridDots,
+  IconHelpCircle,
   IconLayout,
   IconLogs,
   IconSearch,
 } from '@tabler/icons-react';
 
 import { dfePresetDashboards } from './dfe/presetDashboards';
+import { dfeSpotlightActions } from './dfe/spotlightActions';
 import { useBrandDisplayName, useLogomark } from './brand';
 import { IS_K8S_DASHBOARD_ENABLED } from './config';
 import { useDashboards } from './dashboard';
 import { useSavedSearches } from './savedSearch';
+import { useSettingsSpotlightActions } from './spotlightSettingsActions';
 
 import '@mantine/spotlight/styles.css';
 
 export const useSpotlightActions = () => {
   const router = useRouter();
-  const _brandName = useBrandDisplayName();
-  const _logomark = useLogomark({ size: 16 });
+  const brandName = useBrandDisplayName();
+  const logomark = useLogomark({ size: 16 });
 
   const { data: logViewsData } = useSavedSearches();
   const { data: dashboardsData } = useDashboards();
+  const settingsActions = useSettingsSpotlightActions();
 
   const actions = React.useMemo<SpotlightActionData[]>(() => {
     const logViews = logViewsData ?? [];
@@ -136,76 +143,74 @@ export const useSpotlightActions = () => {
           router.push('/dashboards');
         },
       },
-      // {
-      //   id: 'sessions',
-      //   group: 'Menu',
-      //   leftSection: <IconDeviceLaptop size={16} />,
-      //   label: 'Client Sessions',
-      //   description: 'View client sessions',
-      //   keywords: ['browser', 'web'],
-      //   onClick: () => {
-      //     router.push('/sessions');
-      //   },
-      // },
-      // {
-      //   id: 'alerts',
-      //   group: 'Menu',
-      //   leftSection: <IconBell size={16} />,
-      //   label: 'Alerts',
-      //   description: 'View and manage alerts',
-      //   onClick: () => {
-      //     router.push('/alerts');
-      //   },
-      // },
-      // {
-      //   id: 'service-health',
-      //   group: 'Menu',
-      //   label: 'Service Health',
-      //   leftSection: <IconActivityHeartbeat size={16} />,
-      //   description: 'HTTP, Database and Infrastructure metrics',
-      //   onClick: () => {
-      //     router.push('/services');
-      //   },
-      // },
-      // {
-      //   id: 'team-settings',
-      //   group: 'Menu',
-      //   leftSection: <IconSettings size={16} />,
-      //   label: 'Team Settings',
-
-      //   onClick: () => {
-      //     router.push('/team');
-      //   },
-      // },
-      // {
-      //   id: 'documentation',
-      //   group: 'Menu',
-      //   leftSection: <IconHelpCircle size={16} />,
-      //   label: 'Documentation',
-      //   keywords: ['help', 'docs'],
-      //   onClick: () => {
-      //     router.push(
-      //       'https://clickhouse.com/docs/use-cases/observability/clickstack',
-      //     );
-      //   },
-      // },
-      // {
-      //   id: 'cloud',
-      //   group: 'Menu',
-      //   leftSection: logomark,
-      //   label: `${brandName} Cloud`,
-      //   description: `Ready to use ${brandName} Cloud? Get started for free.`,
-      //   keywords: ['account', 'profile'],
-      //   onClick: () => {
-      //     router.push(
-      //       'https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started#deploy-with-clickhouse-cloud',
-      //     );
-      //   },
-      // },
+      {
+        id: 'sessions',
+        group: 'Menu',
+        leftSection: <IconDeviceLaptop size={16} />,
+        label: 'Client Sessions',
+        description: 'View client sessions',
+        keywords: ['browser', 'web'],
+        onClick: () => {
+          router.push('/sessions');
+        },
+      },
+      {
+        id: 'alerts',
+        group: 'Menu',
+        leftSection: <IconBell size={16} />,
+        label: 'Alerts',
+        description: 'View and manage alerts',
+        onClick: () => {
+          router.push('/alerts');
+        },
+      },
+      {
+        id: 'service-health',
+        group: 'Menu',
+        label: 'Service Health',
+        leftSection: <IconActivityHeartbeat size={16} />,
+        description: 'HTTP, Database and Infrastructure metrics',
+        onClick: () => {
+          router.push('/services');
+        },
+      },
+      {
+        id: 'documentation',
+        group: 'Menu',
+        leftSection: <IconHelpCircle size={16} />,
+        label: 'Documentation',
+        keywords: ['help', 'docs'],
+        onClick: () => {
+          router.push(
+            'https://clickhouse.com/docs/use-cases/observability/clickstack',
+          );
+        },
+      },
+      {
+        id: 'cloud',
+        group: 'Menu',
+        leftSection: logomark,
+        label: `${brandName} Cloud`,
+        description: `Ready to use ${brandName} Cloud? Get started for free.`,
+        keywords: ['account', 'profile'],
+        onClick: () => {
+          router.push(
+            'https://clickhouse.com/docs/use-cases/observability/clickstack/getting-started#deploy-with-clickhouse-cloud',
+          );
+        },
+      },
+      ...settingsActions,
     );
 
-    return logViewActions;
-  }, [logViewsData, dashboardsData, router]);
+    return dfeSpotlightActions(logViewActions);
+  }, [
+    brandName,
+    logomark,
+    logViewsData,
+    dashboardsData,
+    router,
+    settingsActions,
+  ]);
 
   return { actions };
 };
