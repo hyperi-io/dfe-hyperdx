@@ -14,6 +14,13 @@ import { join } from 'node:path';
 import express from 'express';
 import request from 'supertest';
 
+// These cases are about the ready flag, so Mongo reads as connected. The probe
+// against a real connection is in readyz-mongo.test.ts and readyz-mongo.int.test.ts.
+jest.mock('@/utils/readiness', () => ({
+  isMongoConnected: () => true,
+  mongoReadyStateName: () => 'connected',
+}));
+
 import { isReady, livez, readyz, setReady } from '@/dfe/observability/health';
 import {
   cgroupBytes,

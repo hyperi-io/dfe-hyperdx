@@ -1,13 +1,13 @@
 // The DFE health probes, for the Node/Express API side of the stack.
 //
 // This is scalo's health contract expressed in Express, so the hyperdx fork
-// probes the same way the Rust services do: same paths, same bodies, same
-// semantics.
+// probes the same way the Rust services do: same paths and same bodies. Readiness
+// also waits on Mongo, which this API cannot serve a request without.
 //
-// | Endpoint | Semantics         | Fails when         | K8s action        |
-// |----------|-------------------|--------------------|-------------------|
-// | /livez   | process alive     | never              | kill + restart    |
-// | /readyz  | ready for traffic | ready flag cleared | pull from Service |
+// | Endpoint | Semantics         | Fails when                          | K8s action        |
+// |----------|-------------------|-------------------------------------|-------------------|
+// | /livez   | process alive     | never                               | kill + restart    |
+// | /readyz  | ready for traffic | drain, or Mongo is not connected    | pull from Service |
 //
 // Those two are the whole surface. There are no aliases and no startup route: a
 // second path meaning the same thing eventually stops meaning the same thing, and
@@ -32,6 +32,8 @@
 // while the app is face down. Keep them ahead of the auth stack in api-app.ts.
 
 import type { Request, Response } from 'express';
+
+import { isMongoConnected, mongoReadyStateName } from '@/utils/readiness';
 
 type HealthBody = { status: string };
 
@@ -66,16 +68,27 @@ export function livez(_req: Request, res: Response): void {
 /**
  * Readiness: should this pod take traffic?
  *
- * Deliberately does NOT probe a downstream dependency. The API must still serve
- * its own error states when a backend is down; gating on a backend would pull
- * every API pod from the Service the moment that backend blipped, turning one
- * degraded dependency into a total outage -- and would deadlock a cold start where
- * the app and its dependencies come up together. Readiness flips only on an
- * explicit drain (setReady(false) on SIGTERM).
+ * Fails while MongoDB is not connected: sessions, teams, sources and
+ * dashboards are all Mongo-backed, so a pod without it answers every request
+ * with an error. The pod leaves the Service and stays up, since liveness never
+ * looks at Mongo and a restart would not bring it back. The API retries the
+ * initial connection until it succeeds, so a cold start where Mongo comes up
+ * second turns ready on its own.
+ *
+ * Deliberately does NOT probe ClickHouse or any other backend. The API must
+ * still serve its own error states when one is down, and gating on it would
+ * pull every API pod from the Service the moment that backend blipped. The ready
+ * flag also clears on an explicit drain (setReady(false) on SIGTERM).
  */
 export function readyz(_req: Request, res: Response): void {
   if (!ready) {
     res.status(UNAVAILABLE).json({ status: 'not_ready' } satisfies HealthBody);
+    return;
+  }
+  if (!isMongoConnected()) {
+    res
+      .status(UNAVAILABLE)
+      .json({ status: 'not_ready', mongo: mongoReadyStateName() });
     return;
   }
   res.status(OK).json({ status: 'ready' } satisfies HealthBody);
