@@ -454,8 +454,8 @@ expects undeclared static-filter keys to persist is skipped by name in
   it.
 - `packages/app/src/dfe/defaultSource.ts` - which source `/search` opens on
   cold. The embed opens on `all_sources`, the Merge table over the landing table
-  and every source's own table, because a first Observe load that shows an
-  empty window reads as a broken deployment and `main` alone is empty once every
+  and every source's own table, because a first Observe load that shows an empty
+  window reads as a broken deployment and `main` alone is empty once every
   record is routed to a source of its own. A deployment with no `all_sources`
   opens on `main`. A standalone page opens on `hunts`, since an analyst working
   the console directly is working detections. All are matched by NAME, which is
@@ -569,9 +569,9 @@ expects undeclared static-filter keys to persist is skipped by name in
   is the way back - it clears the team's tombstones and reprovisions inside the
   request, driven from `app/src/dfe/components/RestoreShippedDashboards/`, which
   shows an icon in place of its label below the `sm` breakpoint so the page
-  title keeps its room in the header. Team
-  membership authorises all three until the engine issues a role claim - see the
-  role-claim and cross-site notes under Authorization for what gates them now.
+  title keeps its room in the header. Team membership authorises all three until
+  the engine issues a role claim - see the role-claim and cross-site notes under
+  Authorization for what gates them now.
 - **`packages/api/src/tasks/provisionDashboards/index.ts` - an edit to a
   pristine upstream file** (catalogued in `.fork-surface`). `syncDashboards`
   wrote tiles verbatim, so a file naming a source by name stored a name where an
