@@ -36,6 +36,7 @@ quality:
     - .github/actions/e2e-setup/action.yml
     - .github/actions/e2e-teardown/action.yml
     - .github/scripts/__tests__/release-notes.test.mjs
+    - .github/scripts/code-review/__tests__/review-comments.test.mjs
     - .github/scripts/release-notes.mjs
     - .github/workflows/docker-build.yml
     - .github/workflows/release-reminder.yml
