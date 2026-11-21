@@ -40,43 +40,7 @@
 #   `--check` tells you when. Delete the entry, delete the resolutions line,
 #   run `yarn install` to re-resolve, done.
 
-overrides:
-  - package: follow-redirects
-    range: '^1.16.2'
-    advisory: GHSA-mrwp-f3q8-3g9p
-    severity: high
-    vector: >-
-      No live vector. It is pinned because the vulnerable copy ships and the fix
-      is one generated line. packages/api/package.json:32 declares
-      @slack/webhook, whose axios 1.20.0 resolves follow-redirects into the
-      production focus. GHSA-mrwp-f3q8-3g9p (a cross-realm sensitiveHeaders
-      array is discarded), GHSA-q3jh-wrc6-jgq8 (array-form headers) and
-      GHSA-8r9p-f939-6h3c (sensitiveHeaders escaping) all need follow-redirects
-      to follow a cross-origin redirect. @slack/webhook's IncomingWebhook.js:26
-      sets maxRedirects to 0, so axios takes the native http transport
-      (lib/adapters/http.js:1051) and follow-redirects follows nothing. Nothing
-      in packages/*/src sets sensitiveHeaders. nx's exact 1.16.0 pin, dev only,
-      moves with it.
-    upstream: none
-    added: 2026-10-21
-  - package: body-parser
-    range: '^1.20.9'
-    advisory: GHSA-27r3-jxmh-p828
-    severity: high
-    vector: >-
-      express 4.22.1 declares body-parser ~1.20.3 and resolves 1.20.6. On a
-      request carrying Content-Encoding, body-parser pipes the body into a
-      decompression stream and leaves it piped with no error listener once the
-      body is read, so trailing bytes after a valid frame reach the finished
-      decoder and its error ends the process (body-parser lib/read.js:151-188).
-      The three parsers at packages/api/src/api-app.ts:78-80 run before routing
-      and before the engine token check, so any caller that reaches the API can
-      do it unauthenticated. 1.20.9 detaches and destroys the stream and adds an
-      error listener. The pin also covers the OpAMP raw parser (opamp/app.ts:15)
-      and the PromQL urlencoded parser (routers/api/prometheus.ts:56), which
-      stay inflating.
-    upstream: none
-    added: 2026-10-28
+overrides: []
 # Example of the shape (keep commented - an empty register is the goal state):
 #
 #   - package: some-parser
