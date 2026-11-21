@@ -110,10 +110,6 @@ id = "GHSA-8cw4-87c7-c6xx"
 reason = "csv-parse: csv under @changesets/cli, not in the image."
 
 [[IgnoredVulns]]
-id = "GHSA-gcqx-w48m-w2h4"
-reason = "deepmerge 4.3.1: no fixed release. jest-config and Storybook's fork-ts-checker-webpack-plugin, both devDependencies, not in the image."
-
-[[IgnoredVulns]]
 id = "GHSA-848j-6mx2-7j84"
 reason = "elliptic: no fixed release. browserify-sign and create-ecdh under Storybook, not in the image."
 
@@ -184,6 +180,22 @@ reason = "next 16.4.3: the leak needs a 'use cache' function called through unst
 [[IgnoredVulns]]
 id = "GHSA-vc7v-qv4w-wrv8"
 reason = "next 16.4.3: the leak needs nested 'use cache' functions under Cache Components, and no workspace source uses 'use cache' or enables cacheComponents."
+
+[[IgnoredVulns]]
+id = "GHSA-f3mh-rxg3-f5g2"
+reason = "next 16.4.3: the header leak needs a cookie set through NextResponse on an Edge runtime route, and no workspace route declares the edge runtime."
+
+[[IgnoredVulns]]
+id = "GHSA-pc58-hwjq-p385"
+reason = "next 16.4.3: the desync needs an App Router route handler or the fetch cache returning a fetched response, and the app is Pages Router only, with /api proxied by http-proxy-middleware."
+
+[[IgnoredVulns]]
+id = "GHSA-rhh4-g77r-r9qj"
+reason = "next 16.4.3: the key collision needs binary arguments to a 'use cache' function, and no workspace source uses 'use cache'."
+
+[[IgnoredVulns]]
+id = "GHSA-vvgp-ww4w-46vf"
+reason = "next 16.4.3: the shell poisoning needs cacheComponents: true, and next.config.mjs does not enable it."
 
 [[IgnoredVulns]]
 id = "GHSA-hrvq-x7jp-36xv"
