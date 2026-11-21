@@ -143,6 +143,12 @@ describe('Spotlights.tsx - no preset dashboards in the command palette', () => {
       'dfePresetDashboards(presetDashboards).forEach(',
     );
   });
+
+  it('routes the menu entries through the fork, which drops blocked pages', () => {
+    expect(read('src/Spotlights.tsx')).toContain(
+      'return dfeSpotlightActions(logViewActions);',
+    );
+  });
 });
 
 describe('layout.tsx and AppNav.tsx - chromeless embed', () => {

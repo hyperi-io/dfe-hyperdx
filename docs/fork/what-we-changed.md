@@ -608,10 +608,11 @@ expects undeclared static-filter keys to persist is skipped by name in
   inside the list, so a preset upstream adds to it is dropped with the rest.
   `forkDeltas.test.ts` pins the swap and
   `dfe/__tests__/spotlightPresets.test.ts` asserts the rendered palette offers
-  no preset. The same file's Menu entries for Client Sessions, Alerts, Service
-  Health and Team Settings are commented out because this fork blocks or does
-  not ship those pages, and so are the Documentation and Cloud entries, which
-  link to ClickStack.
+  no preset. The same file returns its list through `dfeSpotlightActions` from
+  `dfe/spotlightActions.ts`, which drops the Client Sessions, Alerts, Service
+  Health and Team settings entries, because this fork blocks or does not ship
+  those pages, and the Documentation and Cloud entries, which link to
+  ClickStack. Upstream's list stays as written.
 
 - `packages/app/src/dfe/apiErrorDetail.ts` - a ky `beforeError` hook. ky names a
   failed request "Request failed with status code 400 Bad Request", and the

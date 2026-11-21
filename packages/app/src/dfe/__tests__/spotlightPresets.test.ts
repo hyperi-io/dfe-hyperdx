@@ -36,6 +36,16 @@ describe('command palette - preset dashboards', () => {
     expect(ids().filter(id => id?.startsWith('preset-'))).toEqual([]);
   });
 
+  it('offers no entry for a blocked page or a ClickStack link', () => {
+    expect(ids()).not.toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(
+          /^(sessions|alerts|service-health|team-settings|documentation|cloud)$/,
+        ),
+      ]),
+    );
+  });
+
   it('still offers the menu entries', () => {
     expect(ids()).toEqual(
       expect.arrayContaining(['search', 'chart-explorer', 'new-dashboard']),

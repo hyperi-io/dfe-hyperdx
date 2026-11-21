@@ -35,7 +35,10 @@ import OnboardingChecklist from '@/OnboardingChecklist';
 import { useSavedSearches } from '@/savedSearch';
 import { getTimeZoneShortName } from '@/timeZone';
 import { useDisplayTimeZone } from '@/useDisplayTimeZone';
-import { UserPreferencesModal } from '@/UserPreferencesModal';
+import {
+  UserPreferencesModal,
+  useUserPreferencesModal,
+} from '@/UserPreferencesModal';
 
 import {
   AppNavCloudBanner,
@@ -286,10 +289,11 @@ export default function AppNav({ fixed = false }: { fixed?: boolean }) {
     [query.dashboardId],
   );
 
-  const [
-    UserPreferencesOpen,
-    { close: closeUserPreferences, open: openUserPreferences },
-  ] = useDisclosure(false);
+  const {
+    opened: UserPreferencesOpen,
+    close: closeUserPreferences,
+    open: openUserPreferences,
+  } = useUserPreferencesModal();
 
   const timeZone = useDisplayTimeZone();
   const timeZoneShortName = timeZone && getTimeZoneShortName(timeZone);

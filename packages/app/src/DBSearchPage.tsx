@@ -40,6 +40,7 @@ import {
 import {
   BuilderChartConfigWithDateRange,
   ChartConfigWithDateRange,
+  ConditionFilter,
   DisplayType,
   Filter,
   isPersistableUserId,
@@ -101,6 +102,13 @@ import ResourceTerraformPopover from '@/components/Iac/ResourceTerraformPopover'
 import { InlineNameInput } from '@/components/InlineNameInput/InlineNameInput';
 import { InputControlled } from '@/components/InputControlled';
 import OnboardingModal from '@/components/OnboardingModal';
+import {
+  isPatternFilter,
+  parsePatternFilter,
+  PatternFilter,
+  PatternFilterAction,
+  withPatternFilter,
+} from '@/components/Patterns/patternFilter';
 import {
   isCustomSearchGroupBy,
   resolveSearchGroupBy,
@@ -1146,6 +1154,36 @@ function DBSearchPageContent() {
     }
   }, [analysisMode, setIsLive]);
 
+  // Event deltas only apply to trace sources that expose a duration. Mirrors
+  // the "Event Deltas" tab visibility so the two never disagree.
+  const searchedSourceSupportsDelta =
+    searchedSource?.kind === SourceKind.Trace &&
+    !!searchedSource.durationExpression;
+
+  // Switching to a source that can't do deltas (e.g. a log source) while in
+  // delta mode would otherwise leave an empty panel. Fall back to the results
+  // table and tell the user why.
+  useEffect(() => {
+    if (
+      analysisMode === 'delta' &&
+      searchedSource != null &&
+      !searchedSourceSupportsDelta
+    ) {
+      setAnalysisMode('results');
+      notifications.show({
+        id: 'delta-mode-unsupported-source',
+        color: 'yellow',
+        message:
+          'Event deltas are only available for trace sources. Switched to the results table.',
+      });
+    }
+  }, [
+    analysisMode,
+    searchedSource,
+    searchedSourceSupportsDelta,
+    setAnalysisMode,
+  ]);
+
   const [isFilterSidebarCollapsed, setIsFilterSidebarCollapsed] =
     useLocalStorage<boolean>('isFilterSidebarCollapsed', false);
   // Compact open state stays out of `isFilterSidebarCollapsed`. Writing that
@@ -1476,7 +1514,36 @@ function DBSearchPageContent() {
     onFilterChange: handleSetFilters,
     dateTimeColumns,
     knownColumns,
+    isPreservedFilter: isPatternFilter,
   });
+
+  const patternFilters = useMemo(
+    () =>
+      (filters ?? []).flatMap(filter => {
+        const parsed = parsePatternFilter(filter);
+        return parsed ? [parsed] : [];
+      }),
+    [filters],
+  );
+  const removePatternFilter = useCallback(
+    (removed: PatternFilter) =>
+      handleSetFilters(
+        (filters ?? []).filter(
+          f => f.type !== 'sql' || f.condition !== removed.condition,
+        ),
+      ),
+    [filters, handleSetFilters],
+  );
+  // Showing matches switches to the results view.
+  const addPatternFilter = useCallback(
+    (added: ConditionFilter, action: PatternFilterAction) => {
+      handleSetFilters(withPatternFilter(filters ?? [], added));
+      if (action === 'include') {
+        setAnalysisMode('results');
+      }
+    },
+    [filters, handleSetFilters, setAnalysisMode],
+  );
 
   useEffect(() => {
     // If the user changes the source dropdown, reset the select and orderby fields
@@ -2370,7 +2437,7 @@ function DBSearchPageContent() {
   return (
     <Flex
       direction="column"
-      h="100vh"
+      h="var(--app-viewport-height)"
       style={{ overflow: 'hidden' }}
       data-testid="search-page"
     >
@@ -2653,6 +2720,8 @@ function DBSearchPageContent() {
           searchFilters={searchFilters}
           chartConfig={filtersChartConfig}
           dateTimeColumns={dateTimeColumns}
+          patternFilters={patternFilters}
+          onRemovePatternFilter={removePatternFilter}
           mt={6}
         />
       </form>
@@ -2705,11 +2774,7 @@ function DBSearchPageContent() {
                     setAnalysisMode={setAnalysisMode}
                     chartConfig={filtersChartConfig}
                     sourceId={inputSourceObj?.id}
-                    showDelta={
-                      !!(searchedSource?.kind === SourceKind.Trace
-                        ? searchedSource.durationExpression
-                        : undefined)
-                    }
+                    showDelta={searchedSourceSupportsDelta}
                     onColumnToggle={toggleColumn}
                     displayedColumns={displayedColumns}
                     onCollapse={isCompact ? undefined : collapseFilters}
@@ -2794,6 +2859,7 @@ function DBSearchPageContent() {
                         draftPatternColumn={draftPatternColumn}
                         onDraftPatternColumnChange={setDraftPatternColumn}
                         onSubmit={onSubmit}
+                        onPatternFilter={addPatternFilter}
                         totalCountConfig={totalCountConfig}
                         totalCountQueryKeyPrefix={QUERY_KEY_PREFIX}
                       />
