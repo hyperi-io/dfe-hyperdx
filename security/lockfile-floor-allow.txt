@@ -1,0 +1,4 @@
+# Downgrades scripts/lockfile-floor.py accepts, one per line: <package> <reason>.
+# Delete a line once the package is back at or above main's version.
+@hono/node-server Upstream's resolution "^1.19.13" (package.json) caps it below main's 2.1.6. The only parent, @modelcontextprotocol/sdk, imports getRequestListener and never serveStatic, where GHSA-rmxm-3fg6-px4f sits.
+rimraf Main's 5.x line had one parent, gaxios 7.1.3, which now resolves to 7.3.1 and does not depend on rimraf.
