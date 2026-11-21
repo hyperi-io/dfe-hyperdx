@@ -6,7 +6,7 @@
 //
 // This is a NEW file - it does not modify any upstream HyperDX files.
 
-import { Button, Tooltip } from '@mantine/core';
+import { ActionIcon, Button, Tooltip } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconRestore } from '@tabler/icons-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -15,6 +15,9 @@ import { hdxServer } from '@/api';
 import { QueryClientOnly } from '@/dfe/QueryClientOnly';
 
 type RestoreResponse = { cleared: number; reprovisioned: boolean };
+
+const RESTORE_LABEL = 'Restore shipped';
+const RESTORE_HINT = 'Bring back any shipped dashboard this team deleted';
 
 export default function RestoreShippedDashboards() {
   return (
@@ -52,20 +55,35 @@ function RestoreButton() {
     },
   });
 
+  // Below the sm breakpoint the label goes, so the page title keeps its room in
+  // the header.
   return (
-    <Tooltip
-      label="Bring back any shipped dashboard this team deleted"
-      withArrow
-    >
-      <Button
-        variant="secondary"
-        leftSection={<IconRestore size={16} />}
-        loading={restore.isPending}
-        onClick={() => restore.mutate()}
-        data-testid="restore-shipped-dashboards-button"
-      >
-        Restore shipped
-      </Button>
-    </Tooltip>
+    <>
+      <Tooltip label={RESTORE_HINT} withArrow>
+        <Button
+          visibleFrom="sm"
+          variant="secondary"
+          leftSection={<IconRestore size={16} />}
+          loading={restore.isPending}
+          onClick={() => restore.mutate()}
+          data-testid="restore-shipped-dashboards-button"
+        >
+          {RESTORE_LABEL}
+        </Button>
+      </Tooltip>
+      <Tooltip label={RESTORE_HINT} withArrow>
+        <ActionIcon
+          hiddenFrom="sm"
+          variant="secondary"
+          size={36}
+          aria-label={RESTORE_LABEL}
+          loading={restore.isPending}
+          onClick={() => restore.mutate()}
+          data-testid="restore-shipped-dashboards-icon-button"
+        >
+          <IconRestore size={16} />
+        </ActionIcon>
+      </Tooltip>
+    </>
   );
 }

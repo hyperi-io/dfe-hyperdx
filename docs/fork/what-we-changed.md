@@ -453,12 +453,14 @@ expects undeclared static-filter keys to persist is skipped by name in
   read by `src/dfe/brand.tsx` (see Branding below), and a deployment never sets
   it.
 - `packages/app/src/dfe/defaultSource.ts` - which source `/search` opens on
-  cold. The embed opens on `main`, the landing every record falls into, because
-  a first Observe load that shows an empty window reads as a broken deployment.
-  A standalone page opens on `hunts`, since an analyst working the console
-  directly is working detections. Both are matched by NAME, which is the
-  contract - the console never sees a HyperDX id - and both are overridable per
-  deployment (`NEXT_PUBLIC_DFE_EMBED_DEFAULT_SOURCE`,
+  cold. The embed opens on `all_sources`, the Merge table over the landing table
+  and every source's own table, because a first Observe load that shows an empty
+  window reads as a broken deployment and `main` alone is empty once every
+  record is routed to a source of its own. A deployment with no `all_sources`
+  opens on `main`. A standalone page opens on `hunts`, since an analyst working
+  the console directly is working detections. All are matched by NAME, which is
+  the contract - the console never sees a HyperDX id - and the first two are
+  overridable per deployment (`NEXT_PUBLIC_DFE_EMBED_DEFAULT_SOURCE`,
   `NEXT_PUBLIC_DFE_DEFAULT_SOURCE`). Embed mode is read from the same
   `isEmbedChrome()` the rest of the chromeless path uses, through a default
   parameter, so the resolver stays directly testable. **`DBSearchPage.tsx`
@@ -565,9 +567,11 @@ expects undeclared static-filter keys to persist is skipped by name in
   tick AND an upgrade that ships a newer version of that dashboard.
   `dfe/routers/shipped-dashboards.ts` (`POST /dfe/dashboards/restore-shipped`)
   is the way back - it clears the team's tombstones and reprovisions inside the
-  request, driven from `app/src/dfe/components/RestoreShippedDashboards/`. Team
-  membership authorises all three until the engine issues a role claim - see the
-  role-claim and cross-site notes under Authorization for what gates them now.
+  request, driven from `app/src/dfe/components/RestoreShippedDashboards/`, which
+  shows an icon in place of its label below the `sm` breakpoint so the page
+  title keeps its room in the header. Team membership authorises all three until
+  the engine issues a role claim - see the role-claim and cross-site notes under
+  Authorization for what gates them now.
 - **`packages/api/src/tasks/provisionDashboards/index.ts` - an edit to a
   pristine upstream file** (catalogued in `.fork-surface`). `syncDashboards`
   wrote tiles verbatim, so a file naming a source by name stored a name where an
@@ -669,6 +673,11 @@ expects undeclared static-filter keys to persist is skipped by name in
   `/favicons/clickstack/*`. `dfe/__tests__/dfeTheme.test.ts` pins all four.
 - `packages/app/src/dfe/components/**` - LandingPage, CreateRuleFromSearch and
   RestoreShippedDashboards
+- `packages/app/src/theme/themes/dfe/_chart-axis.scss` - anchors a time chart's
+  first x-axis label at its tick and the last one back from its own. Recharts
+  centres both on the plot's edges, where the chart margin clips half of each
+  ("ov 21" for "Nov 21"). It is `@use`d from `_tokens.scss`, which upstream's
+  `_base-tokens.scss` already emits, so no upstream file carries it.
 - Search language defaults to SQL, not upstream's Lucene (an explicit user
   selection still wins). One function: `getStoredLanguage()` in
   `components/SearchInput/SearchWhereInput.tsx` returns `'sql'` instead of null

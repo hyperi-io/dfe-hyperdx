@@ -4,6 +4,8 @@
 
 /* The console's only palette: theme/_base-tokens.scss uses this file in place of upstream's. */
 
+@use './chart-axis';
+
 @mixin base-tokens {
   /* hyperi-graphics brand SSoT navy (hyperi.tokens.json); matches the logo SVGs */
   --color-brand-dark: #000647;
