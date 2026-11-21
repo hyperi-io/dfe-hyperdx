@@ -12760,7 +12760,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"body-parser@npm:^1.20.9":
+"body-parser@npm:~1.20.5":
   version: 1.20.9
   resolution: "body-parser@npm:1.20.9"
   dependencies:
