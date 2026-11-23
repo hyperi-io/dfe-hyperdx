@@ -8,6 +8,7 @@ import { timeBucketByGranularity, toStartOfInterval } from '@/ChartUtils';
 import { useConfigWithAdditionalSelect } from '@/components/DBRowTable';
 import { DRAIN_EXTRA_DELIMITERS } from '@/components/Patterns/drainDelimiters';
 import { reconstructTemplate } from '@/components/Patterns/reconstructTemplate';
+import { dfePatternBody } from '@/dfe/patternBody';
 import { useQueriedChartConfig } from '@/hooks/useChartConfig';
 import { getFirstTimestampValueExpression } from '@/source';
 
@@ -182,7 +183,7 @@ function usePatterns({
 
       const logs =
         sampleRows?.data.map(row => {
-          return stripAnsi(row[PATTERN_COLUMN_ALIAS] as string);
+          return stripAnsi(dfePatternBody(row[PATTERN_COLUMN_ALIAS]));
         }) ?? [];
 
       // patternId -> count, {bucket:count}, pattern
@@ -299,7 +300,7 @@ export function useGroupedPatterns({
       const lastRow = rows.at(-1);
       const reconstructedPattern = lastRow
         ? reconstructTemplate(
-            stripAnsi((lastRow[PATTERN_COLUMN_ALIAS] ?? '') as string),
+            stripAnsi(dfePatternBody(lastRow[PATTERN_COLUMN_ALIAS])),
             (lastRow.__hdx_pattern ?? '') as string,
           )
         : undefined;

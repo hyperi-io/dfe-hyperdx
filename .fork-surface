@@ -112,6 +112,8 @@ packages/app/src/config.ts
 # One line: the four font loaders come from dfe/fonts.ts, vendored, not
 # next/font/google - see docs/fork/what-we-changed.md.
 packages/app/src/fonts.ts
+# Two call sites pass the body column through dfe/patternBody.ts, since a JSON body arrives as an object - see docs/fork/what-we-changed.md.
+packages/app/src/hooks/usePatterns.tsx
 packages/app/src/hooks/useRowWhere.tsx
 packages/app/src/layout.tsx
 packages/app/src/theme/_base-tokens.scss
