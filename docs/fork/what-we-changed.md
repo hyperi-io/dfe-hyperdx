@@ -358,6 +358,13 @@ expects undeclared static-filter keys to persist is skipped by name in
   message, so they buried the fields holding data. Upstream's "Hide blank
   values" menu item turns it off, and a browser that already stored the option
   keeps its choice. `dfe/__tests__/DBRowJsonViewer.hideBlanks.test.tsx` pins it.
+- `packages/app/src/dfe/patternBody.ts` - the text Event Patterns mines from a
+  row. A source whose body column is a native ClickHouse `JSON` (every DFE
+  source's `_json`) returns an object per row, and drain3 failed on it with
+  `AttributeError: strip`. **`hooks/usePatterns.tsx` (catalogued)** passes the
+  body through `dfePatternBody` at its two `stripAnsi` calls and adds one
+  import: a string stays as it is, null becomes `''`, anything else is
+  `JSON.stringify`. `dfe/__tests__/patternBody.test.ts` pins it.
 - `packages/common-utils/src/dfe/jsonPath.ts` - native ClickHouse JSON for
   charts and filters. A JSON sub-path is `Dynamic`, which ClickHouse refuses in
   `IN`, aggregates, `GROUP BY` and `ORDER BY`, so it needs an explicit coercion.
