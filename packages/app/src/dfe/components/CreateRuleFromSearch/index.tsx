@@ -29,17 +29,41 @@ type CreatedRule = {
   sql_errors?: unknown[];
 };
 
-// The engine's `message` says why it refused; ky's own names only the status.
-async function engineReason(err: HTTPError): Promise<string> {
+// `detail` is a string, or for a rejected request a list of `{ msg }`.
+function detailText(detail: unknown): string {
+  if (typeof detail === 'string') {
+    return detail;
+  }
+  if (!Array.isArray(detail)) {
+    return '';
+  }
+  return detail
+    .flatMap(item =>
+      item != null && typeof item === 'object' && typeof item.msg === 'string'
+        ? [item.msg]
+        : [],
+    )
+    .join('; ');
+}
+
+// The engine says why it refused in `message` or `detail`; ky's own names only
+// the status.
+export async function engineReason(err: {
+  message: string;
+  response: { clone: () => { json: () => Promise<unknown> } };
+}): Promise<string> {
   try {
     const body: unknown = await err.response.clone().json();
-    if (
-      body != null &&
-      typeof body === 'object' &&
-      'message' in body &&
-      typeof body.message === 'string'
-    ) {
-      return body.message;
+    if (body != null && typeof body === 'object') {
+      const message =
+        'message' in body && typeof body.message === 'string'
+          ? body.message
+          : '';
+      const reason =
+        message || ('detail' in body ? detailText(body.detail) : '');
+      if (reason) {
+        return reason;
+      }
     }
   } catch {
     // A body that is not JSON carries no reason to show.
