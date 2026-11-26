@@ -71,11 +71,23 @@ export async function engineReason(err: {
   return err.message;
 }
 
+// chartConfig follows the source picker behind a debounce, so for a moment it
+// still describes the previous source. The rule is only created from a config
+// that matches the source on screen.
+export function isChartConfigStale(
+  chartConfig: Pick<ChartConfig, 'source'> | null,
+  sourceId?: string,
+): boolean {
+  return !!sourceId && chartConfig?.source !== sourceId;
+}
+
 export function CreateRuleFromSearch({
   chartConfig,
   savedSearchName,
+  sourceId,
 }: {
   chartConfig: ChartConfig | null;
+  sourceId?: string;
   savedSearchName?: string | null;
 }) {
   // Deliberately plain useState rather than react-query's useMutation. This
@@ -153,7 +165,7 @@ export function CreateRuleFromSearch({
       size="xs"
       onClick={onClick}
       loading={isPending}
-      disabled={!chartConfig}
+      disabled={!chartConfig || isChartConfigStale(chartConfig, sourceId)}
       style={{ flexShrink: 0 }}
       {...writeActionProps}
     >

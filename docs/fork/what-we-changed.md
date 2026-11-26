@@ -345,7 +345,10 @@ expects undeclared static-filter keys to persist is skipped by name in
   `useMutation`: this component is injected into upstream's `DBSearchPage`,
   whose pristine tests render that page behind a PARTIAL `@tanstack/react-query`
   mock. Pulling a second hook out of that module makes upstream's tests explode.
-  Keep our delta invisible to them.
+  Keep our delta invisible to them. **`DBSearchPage.tsx`** passes it the source
+  picker's value as `sourceId`, one added line, because `chartConfig` follows
+  the picker behind a 1 s debounce. The button stays disabled until the two
+  match, so Create Rule exports the source on screen.
 - `packages/app/src/dfe/clickhouseJsonPath.ts` - native ClickHouse JSON columns.
   `col['k']` on a JSON column is `arrayElement`, which ClickHouse rejects, so we
   emit `JSONExtractString`. A JSON sub-path yields `Dynamic`, which
