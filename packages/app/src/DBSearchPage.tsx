@@ -2623,6 +2623,7 @@ function DBSearchPageContent() {
             <CreateRuleFromSearch
               savedSearchName={savedSearch?.name}
               chartConfig={chartConfig}
+              sourceId={inputSource}
             />
             {isCompact && (
               <Button
