@@ -71,9 +71,9 @@ app.use('/dfe', router);
 const RULE_BODY = { rawSql: 'SELECT 1', savedSearchName: 'noisy logins' };
 
 /** A create-rule POST shaped the way the console sends it. */
-function createRule() {
+function createRule(query = '') {
   return request(app)
-    .post('/dfe/create-rule')
+    .post(`/dfe/create-rule${query}`)
     .set('X-Requested-With', 'dfe-console');
 }
 
@@ -163,6 +163,22 @@ describe('POST /dfe/create-rule status mapping', () => {
       raw_sql: 'SELECT 1',
       saved_search_name: 'noisy logins',
     });
+  });
+
+  it.each([
+    ['a dry run asks the engine to write nothing', '?dry_run=true', '?dry_run=true'],
+    ['a plain create has no query', '', ''],
+    ['any other value is not a dry run', '?dry_run=1', ''],
+  ])('%s', async (_name, sent, query) => {
+    engineReplies(200, { id: 'rule-1', display_name: 'noisy logins' });
+
+    await createRule(sent).send(RULE_BODY);
+
+    const [url, init] = jest.mocked(global.fetch).mock.calls[0];
+    expect(String(url)).toBe(
+      `http://engine.test:8000/api/v1/rules/from-hyperdx${query}`,
+    );
+    expect(JSON.parse(String(init?.body))).toMatchObject({ raw_sql: 'SELECT 1' });
   });
 });
 

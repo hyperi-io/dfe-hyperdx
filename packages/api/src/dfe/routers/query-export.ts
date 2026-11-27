@@ -190,6 +190,9 @@ router.post(
  *   - hunt_name?: string
  *   - source?: string
  *
+ * Query:
+ *   - dry_run=true: every check a save runs, answers 200, writes nothing
+ *
  * Response: the engine's RuleFromHyperdxResponse JSON, including the new rule id.
  */
 router.post(
@@ -213,22 +216,26 @@ router.post(
       }
 
       const { rawSql, savedSearchName, severity, hunt_name, source } = req.body;
+      const dryRun = req.query.dry_run === 'true';
 
-      const engineResp = await fetch(`${origin}/api/v1/rules/from-hyperdx`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
+      const engineResp = await fetch(
+        `${origin}/api/v1/rules/from-hyperdx${dryRun ? '?dry_run=true' : ''}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            raw_sql: rawSql,
+            saved_search_name: savedSearchName,
+            severity,
+            hunt_name,
+            source,
+          }),
+          signal: AbortSignal.timeout(DFE_ENGINE_TIMEOUT_MS),
         },
-        body: JSON.stringify({
-          raw_sql: rawSql,
-          saved_search_name: savedSearchName,
-          severity,
-          hunt_name,
-          source,
-        }),
-        signal: AbortSignal.timeout(DFE_ENGINE_TIMEOUT_MS),
-      });
+      );
 
       // Forward the engine's status and JSON body verbatim so RBAC failures
       // (403 for org_viewer / missing rule:write) and validation errors reach

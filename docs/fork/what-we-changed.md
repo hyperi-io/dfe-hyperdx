@@ -348,7 +348,14 @@ expects undeclared static-filter keys to persist is skipped by name in
   Keep our delta invisible to them. **`DBSearchPage.tsx`** passes it the source
   picker's value as `sourceId`, one added line, because `chartConfig` follows
   the picker behind a 1 s debounce. The button stays disabled until the two
-  match, so Create Rule exports the source on screen.
+  match, so Create Rule exports the source on screen. The component also asks
+  the engine whether the search would make a valid rule before Create can be
+  pressed (`dfe/useRuleCheck.ts`, a dry run of `create-rule`). A refusal shows
+  beside the button in plain words and keeps Create off. For the engine's
+  `rule_empty_filter` the words are fixed and list the time bounds it dropped,
+  and any other code shows the engine's `detail`. The fork decides nothing about
+  what a valid rule is, and the engine stays the one judge. No upstream file
+  changes, so `.fork-surface` is untouched.
 - `packages/app/src/dfe/clickhouseJsonPath.ts` - native ClickHouse JSON columns.
   `col['k']` on a JSON column is `arrayElement`, which ClickHouse rejects, so we
   emit `JSONExtractString`. A JSON sub-path yields `Dynamic`, which
