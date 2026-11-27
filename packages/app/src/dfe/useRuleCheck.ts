@@ -6,10 +6,9 @@
  * `@tanstack/react-query` mock.
  */
 import { useEffect, useState } from 'react';
-import { HTTPError } from 'ky';
 import { ChartConfig } from '@hyperdx/common-utils/dist/types';
 
-import { parseRefusal, RuleCheck } from '@/dfe/ruleCheck';
+import { errorResponse, parseRefusal, RuleCheck } from '@/dfe/ruleCheck';
 import { exportSql, validateRule } from '@/dfe/ruleRequests';
 
 // chartConfig already follows the search bar behind a debounce, so this only
@@ -33,14 +32,12 @@ async function check(
     await validateRule(rawSql, savedSearchName);
     return { state: 'valid' };
   } catch (err) {
-    if (
-      err instanceof HTTPError &&
-      (err.response.status === 404 || err.response.status === 405)
-    ) {
+    const response = errorResponse(err);
+    if (response?.status === 404 || response?.status === 405) {
       engineValidates = false;
-    } else if (err instanceof HTTPError && err.response.status === 422) {
+    } else if (response?.status === 422) {
       try {
-        const refusal = parseRefusal(await err.response.clone().json());
+        const refusal = parseRefusal(await response.clone().json());
         if (refusal) {
           return { state: 'refused', refusal };
         }

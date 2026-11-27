@@ -4,7 +4,10 @@
  * button off and is explained when asked, any other answer leaves the button on,
  * and the create route is called only by a click on Create Rule.
  */
-import { ChartConfig } from '@hyperdx/common-utils/dist/types';
+import {
+  ChartConfig,
+  ChartConfigWithDateRange,
+} from '@hyperdx/common-utils/dist/types';
 import { MantineProvider } from '@mantine/core';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent, { UserEvent } from '@testing-library/user-event';
@@ -19,25 +22,16 @@ jest.mock('@mantine/notifications', () => ({
   notifications: { show: jest.fn() },
 }));
 jest.mock('@/config', () => ({ DFE_UI_BASE_URL: 'http://dfe-ui.test' }));
-jest.mock('ky', () => ({
-  HTTPError: class HTTPError extends Error {
-    constructor(public response: { status: number; clone: () => unknown }) {
-      super('http error');
-    }
-  },
-}));
-
-import { HTTPError } from 'ky';
-
 const hdxServerMock = hdxServer as unknown as jest.Mock;
 const CONFIG = { source: 's1', select: '_timestamp,_json' } as ChartConfig;
 
 const refusedWith = (status: number, body: unknown) => {
+  // The shape of a ky HTTPError, which the code reads without its class.
   const response = {
     status,
     clone: () => ({ json: () => Promise.resolve(body) }),
   };
-  return new (HTTPError as unknown as new (r: unknown) => Error)(response);
+  return Object.assign(new Error('http error'), { response });
 };
 
 /** Route each call by its path, as the page's server would. */
@@ -256,6 +250,10 @@ describe('Create Rule pre-check', () => {
   );
 
   it('closes the explanation on a time-range change the check ignores', async () => {
+    const rangedConfig: ChartConfigWithDateRange = {
+      ...CONFIG,
+      dateRange: [new Date(0), new Date(1000)],
+    };
     emptyFilter();
     const user = userEvent.setup();
     const { rerender } = renderButton();
@@ -264,15 +262,7 @@ describe('Create Rule pre-check', () => {
     await screen.findByTestId('create-rule-precheck');
     rerender(
       <MantineProvider>
-        <CreateRuleFromSearch
-          chartConfig={
-            {
-              ...CONFIG,
-              dateRange: [new Date(0), new Date(1000)],
-            } as ChartConfig
-          }
-          sourceId="s1"
-        />
+        <CreateRuleFromSearch chartConfig={rangedConfig} sourceId="s1" />
       </MantineProvider>,
     );
 

@@ -1,4 +1,9 @@
-import { parseRefusal, refusalCopy, RULE_EMPTY_FILTER } from '@/dfe/ruleCheck';
+import {
+  errorResponse,
+  parseRefusal,
+  refusalCopy,
+  RULE_EMPTY_FILTER,
+} from '@/dfe/ruleCheck';
 
 describe('parseRefusal', () => {
   it.each([
@@ -80,5 +85,27 @@ describe('refusalCopy', () => {
       explanation: '',
       bounds: [],
     });
+  });
+});
+
+describe('errorResponse', () => {
+  const clone = () => ({ json: () => Promise.resolve({}) });
+
+  it('reads the response of an error that carries one, with no HTTPError class', () => {
+    const err = Object.assign(new Error('x'), {
+      response: { status: 422, clone },
+    });
+
+    expect(errorResponse(err)?.status).toBe(422);
+  });
+
+  it.each([
+    ['a plain error', new Error('x')],
+    ['a string', 'x'],
+    ['null', null],
+    ['a response with no status', { response: { clone } }],
+    ['a response with no clone', { response: { status: 500 } }],
+  ])('finds none in %s', (_name, err) => {
+    expect(errorResponse(err)).toBeUndefined();
   });
 });

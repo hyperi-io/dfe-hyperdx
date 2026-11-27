@@ -66,3 +66,26 @@ export function refusalCopy(refusal: Refusal): {
   }
   return { summary: refusal.detail, explanation: '', bounds: [] };
 }
+
+/** The part of a ky HTTPError's response this reads. */
+export type ErrorResponse = {
+  status: number;
+  clone: () => { json: () => Promise<unknown> };
+};
+
+/**
+ * The response a failed request carries, or undefined for any other error.
+ *
+ * It reads the shape, not `instanceof HTTPError`: upstream's tests map `ky` to a
+ * stub with no HTTPError class, and `instanceof undefined` throws.
+ */
+export function errorResponse(err: unknown): ErrorResponse | undefined {
+  if (!isRecord(err) || !isRecord(err.response)) {
+    return undefined;
+  }
+  const { status, clone } = err.response;
+  if (typeof status !== 'number' || typeof clone !== 'function') {
+    return undefined;
+  }
+  return { status, clone: () => clone.call(err.response) };
+}

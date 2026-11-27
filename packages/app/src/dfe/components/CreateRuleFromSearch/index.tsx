@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useId, useState } from 'react';
-import { HTTPError } from 'ky';
 import { ChartConfig } from '@hyperdx/common-utils/dist/types';
 import {
   Button,
@@ -14,7 +13,7 @@ import { notifications } from '@mantine/notifications';
 
 import { DFE_UI_BASE_URL } from '@/config';
 import { useDfeWriteActionProps } from '@/dfe/readOnlySession';
-import { refusalCopy } from '@/dfe/ruleCheck';
+import { errorResponse, refusalCopy } from '@/dfe/ruleCheck';
 import { createRule, exportSql } from '@/dfe/ruleRequests';
 import { useRuleCheck } from '@/dfe/useRuleCheck';
 
@@ -119,14 +118,15 @@ export function CreateRuleFromSearch({
       // Open the created rule in the DFE UI.
       window.open(`${DFE_UI_BASE_URL}/rules/${rule.id}`, '_blank');
     } catch (err) {
-      if (err instanceof HTTPError && err.response.status === 403) {
+      const response = errorResponse(err);
+      if (response?.status === 403) {
         notifications.show({
           color: 'red',
           title: 'Permission denied',
           message: 'You do not have permission to create rules.',
           autoClose: 5000,
         });
-      } else if (err instanceof HTTPError && err.response.status === 502) {
+      } else if (response?.status === 502) {
         // The route reports every engine-credential failure as 502 so it never
         // trips the app's redirect-to-login on 401.
         notifications.show({
@@ -141,8 +141,8 @@ export function CreateRuleFromSearch({
           color: 'red',
           title: 'Failed to create rule',
           message:
-            err instanceof HTTPError
-              ? await engineReason(err)
+            response && err instanceof Error
+              ? await engineReason({ message: err.message, response })
               : err instanceof Error
                 ? err.message
                 : String(err),
