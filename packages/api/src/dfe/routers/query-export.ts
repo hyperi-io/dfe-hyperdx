@@ -39,8 +39,8 @@ const exportSqlBodySchema = z.object({
 
 // The expanded rule input the UI hands us -- the same fields CreateRuleFromSearch
 // gathered for export-sql, i.e. the rendered rawSql plus the saved-search metadata.
-// Field names mirror what the UI holds (camelCase); we translate to the engine's
-// snake_case RuleFromHyperdxRequest below.
+// Field names mirror what the UI holds (camelCase), and forwardToEngine
+// translates them to the engine's snake_case RuleFromHyperdxRequest.
 const createRuleBodySchema = z.object({
   rawSql: z.string().min(1),
   savedSearchName: z.string().optional(),
@@ -77,8 +77,9 @@ function limitExportBody(req: Request, res: Response, next: NextFunction) {
  *
  * Response:
  *   - sql: string (formatted, executable SQL)
+ *   - rawSql: string (the same query unformatted, which create-rule takes)
  *   - config: SavedChartConfig (original config, for structured consumption)
- *   - source: { name, kind, tableName, connection }
+ *   - source: { name, kind, from, connection }
  */
 router.post(
   '/export-sql',
@@ -125,7 +126,7 @@ router.post(
       const metadata = getMetadata(clickhouseClient);
       const querySettings = source.querySettings;
 
-      // renderChartConfig requires connection and from; both come from the
+      // renderChartConfig needs connection and from, and both come from the
       // resolved source, so the rule scans the table the view searched.
       const fullConfig = {
         ...chartConfig,
@@ -233,8 +234,8 @@ function forwardToEngine(enginePath: string, label: string) {
         );
       }
 
-      // An engine 401 becomes 502 for the same reason a missing token does; the
-      // engine's status is kept in the body so the cause is not lost.
+      // An engine 401 becomes 502 for the same reason a missing token does, and
+      // the engine's status is kept in the body so the cause is not lost.
       if (engineResp.status === 401) {
         return res.status(502).json({
           error: 'The DFE engine rejected this session credential',
@@ -260,7 +261,7 @@ function forwardToEngine(enginePath: string, label: string) {
  * Request body:
  *   - rawSql: string (the expanded ClickHouse SELECT)
  *   - savedSearchName?: string
- *   - severity?: string (low|medium|high|critical; engine defaults to medium)
+ *   - severity?: string (low|medium|high|critical, engine defaults to medium)
  *   - hunt_name?: string
  *   - source?: string
  *

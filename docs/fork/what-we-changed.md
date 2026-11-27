@@ -256,21 +256,23 @@ and HyperDX routes check team membership alone. `dfeIdentityMiddleware` runs the
 gate once the identity is known, so it covers every route, ones upstream adds
 included. A `viewer` gets 403 on any non-read request outside the query proxy,
 PromQL, the chart assistant, its favourites and profile, and the
-engine-authorised SQL export and rule creation.
+engine-authorised SQL export, rule pre-check and rule creation.
 
 **A read-only session is not offered Save, Update or Create Rule
 (`dfe/routers/session-role.ts`, `dfe/readOnlySession.ts`).** `GET /dfe/session`
 answers `{ role, readOnly }` from the same `req.dfeRole` the gate above reads,
-and `useDfeWriteActionProps` hides the three buttons with `display: none` when
-`readOnly` is true. A deployment outside DFE mode has no route, and an answer
-the page cannot get reads as "not read-only", so upstream's page is unchanged
-there. The hook uses plain state, not react-query, because upstream's tests
-render the search page behind a partial react-query mock. The server still
-refuses the writes: this only stops the page offering a button that answers 403.
-The only upstream delta is **`DBSearchPage.tsx`** (one import, one hook call,
-and one spread on each of the Save and Update buttons). The route is mounted by
-`shipped-dashboards.ts`, so `api-app.ts` is untouched. `CreateRuleFromSearch` is
-ours and takes the same hook. `dfe/__tests__/readOnlySession.test.tsx` pins the
+and `useDfeWriteActionProps` hides Save and Update with `display: none` when
+`readOnly` is true. Create Rule hides itself the same way from
+`useDfeReadOnlyAnswer`, which is undefined until the answer arrives, so it
+checks a search only for a session known to be writable. A deployment outside
+DFE mode has no route, and an answer the page cannot get reads as "not
+read-only", so upstream's page is unchanged there. The hook uses plain state,
+not react-query, because upstream's tests render the search page behind a
+partial react-query mock. The server still refuses the writes: this only stops
+the page offering a button that answers 403. The only upstream delta is
+**`DBSearchPage.tsx`** (one import, one hook call, and one spread on each of the
+Save and Update buttons). The route is mounted by `shipped-dashboards.ts`, so
+`api-app.ts` is untouched. `dfe/__tests__/readOnlySession.test.tsx` pins the
 wiring.
 
 **Restore refuses a simple request (`dfe/middleware/cross-site.ts`).** A form
@@ -355,10 +357,10 @@ expects undeclared static-filter keys to persist is skipped by name in
   explained on hover and focus, and in full on click. For the engine's
   `rule_empty_filter` the words are fixed and list the time bounds it dropped,
   and any other code shows the engine's `detail`. A 404 or 405 means an older
-  engine, so the check stops and Create stays on. `/dfe/create-rule` is called
-  only by a click. The fork decides nothing about what a valid rule is, and the
-  engine stays the one judge. No upstream file changes, so `.fork-surface` is
-  untouched.
+  engine, so the check stops and Create stays on. A read-only session gets
+  neither the button nor the check. `/dfe/create-rule` is called only by a
+  click. The fork decides nothing about what a valid rule is, and the engine
+  stays the one judge. The pre-check itself changes no upstream file.
 - `packages/app/src/dfe/clickhouseJsonPath.ts` - native ClickHouse JSON columns.
   `col['k']` on a JSON column is `arrayElement`, which ClickHouse rejects, so we
   emit `JSONExtractString`. A JSON sub-path yields `Dynamic`, which

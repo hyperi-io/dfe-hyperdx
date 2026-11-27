@@ -9,6 +9,7 @@ import {
   unquoteIdentifier,
 } from '@hyperdx/common-utils/dist/core/metadata';
 import { splitAndTrimWithBracket } from '@hyperdx/common-utils/dist/core/utils';
+import { quoteJsonSegment } from '@hyperdx/common-utils/dist/dfe/jsonPath';
 import {
   CATEGORICAL_PALETTE_TOKENS,
   ChartPaletteToken,
@@ -1181,12 +1182,7 @@ export const mergePath = (
   }
   if (jsonColumns.includes(key)) {
     return `${key}.${rest
-      .map(v =>
-        v
-          .split('.')
-          .map(v => (v.startsWith('`') && v.endsWith('`') ? v : `\`${v}\``))
-          .join('.'),
-      )
+      .map(v => v.split('.').map(quoteJsonSegment).join('.'))
       .join('.')}`;
   }
   if (mapColumns.includes(key)) {

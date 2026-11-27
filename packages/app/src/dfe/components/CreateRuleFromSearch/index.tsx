@@ -12,7 +12,7 @@ import {
 import { notifications } from '@mantine/notifications';
 
 import { DFE_UI_BASE_URL } from '@/config';
-import { useDfeWriteActionProps } from '@/dfe/readOnlySession';
+import { useDfeReadOnlyAnswer } from '@/dfe/readOnlySession';
 import { errorResponse, refusalCopy } from '@/dfe/ruleCheck';
 import { createRule, exportSql } from '@/dfe/ruleRequests';
 import { useRuleCheck } from '@/dfe/useRuleCheck';
@@ -34,8 +34,8 @@ function detailText(detail: unknown): string {
     .join('; ');
 }
 
-// The engine says why it refused in `message` or `detail`; ky's own names only
-// the status.
+// The engine says why it refused in `message` or `detail`, where ky's own names
+// only the status.
 export async function engineReason(err: {
   message: string;
   response: { clone: () => { json: () => Promise<unknown> } };
@@ -78,12 +78,13 @@ export function CreateRuleFromSearch({
   sourceId?: string;
   savedSearchName?: string | null;
 }) {
-  // Deliberately plain useState rather than react-query's useMutation. This
-  // component is injected into upstream's DBSearchPage, and upstream tests
-  // render that page behind a PARTIAL `@tanstack/react-query` mock - pulling a
-  // second hook out of that module makes their pristine tests explode. Owning
-  // the one-shot request state here keeps our delta invisible to them.
+  // Plain state, not useMutation: upstream's DBSearchPage tests mock react-query
+  // partially, see docs/architecture/query-to-rule-pipeline.md.
   const [isPending, setIsPending] = useState(false);
+  // A read-only session cannot create a rule, so the action is not drawn for it,
+  // and a search is checked only once the session is known to be writable.
+  const readOnly = useDfeReadOnlyAnswer();
+  const writeActionProps = readOnly ? { display: 'none' as const } : {};
   // The engine is asked before Create is pressed. A refusal turns the button
   // off and is explained on hover and focus, and in full when it is clicked.
   // Nothing shows until the user acts, because a time-only search is the
@@ -91,7 +92,7 @@ export function CreateRuleFromSearch({
   const check = useRuleCheck(
     chartConfig,
     savedSearchName,
-    !isChartConfigStale(chartConfig, sourceId),
+    readOnly === false && !isChartConfigStale(chartConfig, sourceId),
   );
   const refusal = check.state === 'refused' ? check.refusal : undefined;
   const copy = refusal ? refusalCopy(refusal) : undefined;
@@ -101,13 +102,11 @@ export function CreateRuleFromSearch({
   const searchKey = JSON.stringify(chartConfig);
   useEffect(() => setOpen(false), [refusal, searchKey]);
   const hintId = useId();
-  // A read-only session cannot create a rule, so the action is not drawn for it.
-  const writeActionProps = useDfeWriteActionProps();
 
   const onClick = useCallback(async () => {
     setIsPending(true);
     try {
-      // Render the search to a concrete ClickHouse SELECT server-side; the
+      // Render the search to a concrete ClickHouse SELECT server-side, since the
       // engine's from-hyperdx endpoint takes the expanded raw SQL.
       const { rawSql } = await exportSql(chartConfig);
 

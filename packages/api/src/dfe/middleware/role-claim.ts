@@ -69,13 +69,13 @@ const READ_ONLY_ROLE = 'viewer';
 const READ_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 // The writes a read-only session keeps: running a query, the caller's own
-// favourites and profile, and the rule export the engine authorises itself.
-// Anything else, a route upstream adds included, is refused.
+// favourites and profile, and the rule export and pre-check the engine
+// authorises itself. Anything else, a route upstream adds included, is refused.
 const READ_ONLY_ALLOWED: readonly RegExp[] = [
   /^\/clickhouse-proxy(\/|$)/i,
   /^\/v1\/prometheus\//i,
   /^\/ai\/assistant\/?$/i,
-  /^\/dfe\/(export-sql|create-rule)\/?$/i,
+  /^\/dfe\/(export-sql|create-rule|validate-rule)\/?$/i,
   /^\/favorites(\/|$)/i,
   /^\/me(\/|$)/i,
 ];

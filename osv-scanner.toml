@@ -6,8 +6,8 @@
 #
 # Every entry is graded against what the root Dockerfile ships - the api
 # production focus, Next's standalone trace and the app's browser bundle - for
-# @hyperdx/app@2.41.0. Re-grade them on each sync and delete any id the scanner
-# no longer reports.
+# the upstream release in .upstream-version. Re-grade them on each sync and
+# delete any id the scanner no longer reports.
 
 [[IgnoredVulns]]
 id = "GHSA-rmxm-3fg6-px4f"

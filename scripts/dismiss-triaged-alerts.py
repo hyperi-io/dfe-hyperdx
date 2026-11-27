@@ -49,7 +49,7 @@ DOC = "docs/fork/security-sync.md"
 COMMENT_LIMIT = 280
 
 ABSENT = (
-    "Not in the shipped image. The root Dockerfile:87 installs the api's "
+    "Not in the shipped image. The root Dockerfile installs the api's "
     "production tree with yarn workspaces focus @hyperdx/api --production, and "
     "this one is not in it."
 )

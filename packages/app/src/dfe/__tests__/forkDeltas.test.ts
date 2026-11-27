@@ -178,6 +178,14 @@ describe('DBSearchPage.tsx - the live tail interval select has a name', () => {
   });
 });
 
+describe('DBSearchPage.tsx - Create Rule exports the source on screen', () => {
+  it('passes the source picker value to the button', () => {
+    expect(read('src/DBSearchPage.tsx')).toMatch(
+      /<CreateRuleFromSearch\s+savedSearchName=\{savedSearch\?\.name\}\s+chartConfig=\{chartConfig\}\s+sourceId=\{inputSource\}/,
+    );
+  });
+});
+
 describe('DBSearchPage.tsx - no source admin actions in the picker', () => {
   it('spreads the fork props after the upstream ones so they win', () => {
     const page = read('src/DBSearchPage.tsx');
