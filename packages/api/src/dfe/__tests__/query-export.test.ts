@@ -38,8 +38,8 @@ jest.mock('@hyperdx/common-utils/dist/core/metadata', () => ({
 jest.mock('@hyperdx/common-utils/dist/core/renderChartConfig', () => ({
   renderChartConfig: jest.fn(async () => ({ sql: 'SELECT 1', params: {} })),
 }));
-jest.mock('@hyperdx/common-utils/dist/clickhouse', () => ({
-  parameterizedQueryToSql: jest.fn(() => 'SELECT 1'),
+jest.mock('@hyperdx/common-utils/dist/dfe/parameterizedQuery', () => ({
+  dfeParameterizedQueryToSql: jest.fn(() => 'SELECT 1'),
 }));
 jest.mock('@hyperdx/common-utils/dist/sqlFormatter', () => ({
   format: jest.fn((sql: string) => sql),
@@ -71,9 +71,15 @@ app.use('/dfe', router);
 const RULE_BODY = { rawSql: 'SELECT 1', savedSearchName: 'noisy logins' };
 
 /** A create-rule POST shaped the way the console sends it. */
-function createRule() {
+function createRule(query = '') {
   return request(app)
-    .post('/dfe/create-rule')
+    .post(`/dfe/create-rule${query}`)
+    .set('X-Requested-With', 'dfe-console');
+}
+
+function validateRule() {
+  return request(app)
+    .post('/dfe/validate-rule')
     .set('X-Requested-With', 'dfe-console');
 }
 
@@ -163,6 +169,56 @@ describe('POST /dfe/create-rule status mapping', () => {
       raw_sql: 'SELECT 1',
       saved_search_name: 'noisy logins',
     });
+  });
+
+  it('always creates on the create route, whatever the query says', async () => {
+    engineReplies(201, { id: 'rule-1', display_name: 'noisy logins' });
+
+    await createRule('?dry_run=true').send(RULE_BODY);
+
+    const [url] = jest.mocked(global.fetch).mock.calls[0];
+    expect(String(url)).toBe(
+      'http://engine.test:8000/api/v1/rules/from-hyperdx',
+    );
+  });
+});
+
+describe('POST /dfe/validate-rule', () => {
+  it('asks the engine route that writes nothing, with the same body', async () => {
+    engineReplies(200, { valid: true });
+
+    const res = await validateRule().send(RULE_BODY);
+
+    expect(res.status).toBe(200);
+    const [url, init] = jest.mocked(global.fetch).mock.calls[0];
+    expect(String(url)).toBe(
+      'http://engine.test:8000/api/v1/rules/from-hyperdx/validate',
+    );
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      raw_sql: 'SELECT 1',
+      saved_search_name: 'noisy logins',
+    });
+  });
+
+  it.each([
+    [422, { code: 'rule_empty_filter', dropped_bounds: ['a < now()'] }],
+    [404, { detail: 'Not Found' }],
+    [405, { detail: 'Method Not Allowed' }],
+  ])('forwards an engine %s verbatim', async (status, body) => {
+    engineReplies(status, body);
+
+    const res = await validateRule().send(RULE_BODY);
+
+    expect(res.status).toBe(status);
+    expect(res.body).toEqual(body);
+  });
+
+  it('answers 502, not 401, when the engine rejects the session', async () => {
+    engineReplies(401, { detail: 'no' });
+
+    const res = await validateRule().send(RULE_BODY);
+
+    expect(res.status).toBe(502);
   });
 });
 

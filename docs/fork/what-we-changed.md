@@ -348,7 +348,17 @@ expects undeclared static-filter keys to persist is skipped by name in
   Keep our delta invisible to them. **`DBSearchPage.tsx`** passes it the source
   picker's value as `sourceId`, one added line, because `chartConfig` follows
   the picker behind a 1 s debounce. The button stays disabled until the two
-  match, so Create Rule exports the source on screen.
+  match, so Create Rule exports the source on screen. The component also asks
+  the engine whether the search would make a valid rule before Create can be
+  pressed (`dfe/useRuleCheck.ts`, through `/dfe/validate-rule`, which forwards
+  to the engine route that writes nothing). A refusal turns Create off and is
+  explained on hover and focus, and in full on click. For the engine's
+  `rule_empty_filter` the words are fixed and list the time bounds it dropped,
+  and any other code shows the engine's `detail`. A 404 or 405 means an older
+  engine, so the check stops and Create stays on. `/dfe/create-rule` is called
+  only by a click. The fork decides nothing about what a valid rule is, and the
+  engine stays the one judge. No upstream file changes, so `.fork-surface` is
+  untouched.
 - `packages/app/src/dfe/clickhouseJsonPath.ts` - native ClickHouse JSON columns.
   `col['k']` on a JSON column is `arrayElement`, which ClickHouse rejects, so we
   emit `JSONExtractString`. A JSON sub-path yields `Dynamic`, which
@@ -647,6 +657,14 @@ expects undeclared static-filter keys to persist is skipped by name in
 - **`DBSearchPage.tsx`** gives the live tail refresh interval select an
   `aria-label` matching its tooltip, one added line, so screen readers and
   Playwright can name it. `forkDeltas.test.ts` pins the line.
+- `packages/common-utils/src/dfe/parameterizedQuery.ts` -
+  `parameterizedQueryToSql` inlines an `{name:Identifier}` as the bare value, so
+  an own-table source such as `ingest-edge` exported as `FROM dfe.ingest-edge`,
+  which ClickHouse cannot parse, and Create Rule on that source failed with
+  a 422. `dfeParameterizedQueryToSql` quotes each identifier with
+  `quoteIdentifierIfNeeded` and then calls upstream's function. It is a new file
+  with upstream's signature, and `dfe/routers/query-export.ts` swaps the one
+  identifier. `dfe/__tests__/parameterizedQuery.test.ts` pins it.
 - `packages/common-utils/src/dfe/rowLimitRejected.ts` - a role can constrain
   `max_rows_to_read` so a query user cannot lift it, and HyperDX sends the
   setting (`'0'` or the team's value) on its metadata and filter queries. The
