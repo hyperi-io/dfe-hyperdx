@@ -35,10 +35,13 @@ const refusedWith = (status: number, body: unknown) => {
 };
 
 /** Route each call by its path, as the page's server would. */
-function engineAnswers(validate: () => Promise<unknown>, readOnly = false) {
+function engineAnswers(
+  validate: () => Promise<unknown>,
+  session: () => Promise<unknown> = () => Promise.resolve({ readOnly: false }),
+) {
   hdxServerMock.mockImplementation((path: string) => {
     if (path === 'dfe/session') {
-      return { json: () => Promise.resolve({ readOnly }) };
+      return { json: session };
     }
     if (path === 'dfe/export-sql') {
       return { json: () => Promise.resolve({ rawSql: 'SELECT 1' }) };
@@ -75,30 +78,52 @@ describe('Create Rule pre-check', () => {
     renderButton();
 
     const button = screen.getByTestId('create-rule-from-search-button');
+    await waitFor(() => expect(validateCalls()).toHaveLength(1));
     await waitFor(() => expect(button).toBeEnabled());
-    expect(validateCalls()).toHaveLength(1);
     expect(createCalls()).toHaveLength(0);
     expect(screen.queryByTestId('create-rule-precheck')).toBeNull();
   });
 
-  it('asks nothing for a read-only session, which is not offered Create', async () => {
+  it('asks nothing before the session answers, or after it says read-only', async () => {
     jest.useFakeTimers();
     try {
-      engineAnswers(() => Promise.resolve({ valid: true }), true);
+      let answerSession: (body: unknown) => void = () => undefined;
+      const session = new Promise(resolve => {
+        answerSession = resolve;
+      });
+      engineAnswers(
+        () => Promise.resolve({ valid: true }),
+        () => session,
+      );
+      const asked = () => [...callsTo('dfe/export-sql'), ...validateCalls()];
 
       renderButton();
 
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(asked()).toHaveLength(0);
+      answerSession({ readOnly: true });
       await waitFor(() =>
         expect(
           screen.getByTestId('create-rule-from-search-button'),
         ).not.toBeVisible(),
       );
       await jest.advanceTimersByTimeAsync(1000);
-      expect(callsTo('dfe/export-sql')).toHaveLength(0);
-      expect(validateCalls()).toHaveLength(0);
+      expect(asked()).toHaveLength(0);
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('asks the engine when the session lookup fails, as outside DFE', async () => {
+    engineAnswers(
+      () => Promise.resolve({ valid: true }),
+      () => Promise.reject(new Error('HTTP 404')),
+    );
+
+    renderButton();
+
+    await waitFor(() => expect(validateCalls()).toHaveLength(1));
+    expect(screen.getByTestId('create-rule-from-search-button')).toBeVisible();
   });
 
   const emptyFilter = () =>

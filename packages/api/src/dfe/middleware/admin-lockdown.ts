@@ -1,12 +1,9 @@
-// DFE admin-surface lockdown.
+// DFE admin-surface lockdown: connections, sources, team, members, API keys,
+// webhooks, the /alerts routes, /api/v2 and MCP answer 403 to anyone but the
+// engine's service identity, and nothing changes when DFE auth is off.
 //
-// HyperDX is embedded-only and driven entirely by the engine. A human uses it
-// for search, saved searches, dashboards and charts - nothing else. Every
-// administrative surface (connections, sources, team, members, API keys,
-// webhooks, alerts, the external /api/v2, and MCP) is reachable ONLY by the
-// engine's service identity. These middlewares 403 any non-service principal on
-// those surfaces, and are a no-op when DFE auth is off so upstream behaviour and
-// tests are unchanged.
+// A dashboard save still upserts the alert each tile carries in `config.alert`,
+// so any member who may write a dashboard can create an alert.
 //
 // Two of them open a narrow, secret-free read instead of refusing outright,
 // because the console loads that read on every page.

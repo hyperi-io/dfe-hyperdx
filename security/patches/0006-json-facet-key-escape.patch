@@ -1,0 +1,75 @@
+# advisory: none - SQL injection through JSON facet key quoting, found in review
+# severity: high
+# vector:   a JSON key is telemetry, so whoever can send to dfe-receiver picks
+#           it, and every signed-in member loads facets for keys they did not
+#           write. mergePath wrapped each JSON segment in backticks without
+#           escaping, and passed a segment already in backticks through raw. A
+#           key holding a backtick closes the identifier early, and the rest of
+#           the key lands raw in getKeyValues' groupUniqArray(N)(...), whose
+#           "(" check skips re-quoting, so it runs as the team's ClickHouse
+#           user. mergePath now quotes each segment with quoteJsonSegment
+#           (dfe/jsonPath.ts), the escape patch 0005 gives quoteJsonPathSegment,
+#           and the facet render unescapes a quoted segment before quoting it
+#           again, so a key holding a backtick or a backslash, or named like
+#           a type hint, still finds its values
+#           (dfe/__tests__/facetKeyQuoting.int.test.ts).
+# upstream: none - still present on hyperdxio/hyperdx main
+# added:    2026-11-28
+diff --git a/packages/app/src/utils.ts b/packages/app/src/utils.ts
+index 7cdbf972c..c5e53b1aa 100644
+--- a/packages/app/src/utils.ts
++++ b/packages/app/src/utils.ts
+@@ -9,6 +9,7 @@ import {
+   unquoteIdentifier,
+ } from '@hyperdx/common-utils/dist/core/metadata';
+ import { splitAndTrimWithBracket } from '@hyperdx/common-utils/dist/core/utils';
++import { quoteJsonSegment } from '@hyperdx/common-utils/dist/dfe/jsonPath';
+ import {
+   CATEGORICAL_PALETTE_TOKENS,
+   ChartPaletteToken,
+@@ -1181,12 +1182,7 @@ export const mergePath = (
+   }
+   if (jsonColumns.includes(key)) {
+     return `${key}.${rest
+-      .map(v =>
+-        v
+-          .split('.')
+-          .map(v => (v.startsWith('`') && v.endsWith('`') ? v : `\`${v}\``))
+-          .join('.'),
+-      )
++      .map(v => v.split('.').map(quoteJsonSegment).join('.'))
+       .join('.')}`;
+   }
+   if (mapColumns.includes(key)) {
+diff --git a/packages/common-utils/src/core/metadata.ts b/packages/common-utils/src/core/metadata.ts
+index 3125e57ce..ab75f381b 100644
+--- a/packages/common-utils/src/core/metadata.ts
++++ b/packages/common-utils/src/core/metadata.ts
+@@ -22,7 +22,7 @@ import {
+   renderWhereExpressionStr,
+   timeFilterExpr,
+ } from '@/core/renderChartConfig';
+-import { dfeJsonPathRoot } from '@/dfe/jsonPath';
++import { dfeJsonPathRoot, unquoteJsonSegment } from '@/dfe/jsonPath';
+ import {
+   FilterState,
+   filterStateToPredicate,
+@@ -496,7 +496,17 @@ export class Metadata {
+     }
+ 
+     const column = unquoteIdentifier(keyExpression.slice(0, dotIdx));
+-    const jsonPath = keyExpression.slice(dotIdx + 1);
++    // mergePath escapes a quoted segment and renderJsonStringSubcolumn escapes
++    // it again, so it is unescaped here and stays quoted.
++    const jsonPath = keyExpression
++      .slice(dotIdx + 1)
++      .split('.')
++      .map(segment =>
++        segment.length >= 2 && segment.startsWith('`') && segment.endsWith('`')
++          ? `\`${unquoteJsonSegment(segment)}\``
++          : segment,
++      )
++      .join('.');
+     const columnMeta = await this.getColumn({
+       databaseName,
+       tableName,

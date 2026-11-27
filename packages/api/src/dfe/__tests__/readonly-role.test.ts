@@ -91,6 +91,7 @@ const KEPT: ReadonlyArray<[Method, string]> = [
   ['post', '/ai/assistant'],
   ['post', '/dfe/export-sql'],
   ['post', '/dfe/create-rule'],
+  ['post', '/dfe/validate-rule'],
   ['put', '/favorites'],
   ['delete', '/favorites/dashboard/507f1f77bcf86cd799439011'],
   ['post', '/me/onboarding/task'],

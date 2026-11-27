@@ -22,7 +22,7 @@ import {
   renderWhereExpressionStr,
   timeFilterExpr,
 } from '@/core/renderChartConfig';
-import { dfeJsonPathRoot } from '@/dfe/jsonPath';
+import { dfeJsonPathRoot, unquoteJsonSegment } from '@/dfe/jsonPath';
 import {
   FilterState,
   filterStateToPredicate,
@@ -496,7 +496,17 @@ export class Metadata {
     }
 
     const column = unquoteIdentifier(keyExpression.slice(0, dotIdx));
-    const jsonPath = keyExpression.slice(dotIdx + 1);
+    // mergePath escapes a quoted segment and renderJsonStringSubcolumn escapes
+    // it again, so it is unescaped here and stays quoted.
+    const jsonPath = keyExpression
+      .slice(dotIdx + 1)
+      .split('.')
+      .map(segment =>
+        segment.length >= 2 && segment.startsWith('`') && segment.endsWith('`')
+          ? `\`${unquoteJsonSegment(segment)}\``
+          : segment,
+      )
+      .join('.');
     const columnMeta = await this.getColumn({
       databaseName,
       tableName,

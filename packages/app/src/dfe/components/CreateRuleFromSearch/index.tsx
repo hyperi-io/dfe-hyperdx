@@ -12,7 +12,7 @@ import {
 import { notifications } from '@mantine/notifications';
 
 import { DFE_UI_BASE_URL } from '@/config';
-import { useDfeWriteActionProps } from '@/dfe/readOnlySession';
+import { useDfeReadOnlyAnswer } from '@/dfe/readOnlySession';
 import { errorResponse, refusalCopy } from '@/dfe/ruleCheck';
 import { createRule, exportSql } from '@/dfe/ruleRequests';
 import { useRuleCheck } from '@/dfe/useRuleCheck';
@@ -81,10 +81,10 @@ export function CreateRuleFromSearch({
   // Plain state, not useMutation: upstream's DBSearchPage tests mock react-query
   // partially, see docs/architecture/query-to-rule-pipeline.md.
   const [isPending, setIsPending] = useState(false);
-  // A read-only session cannot create a rule, so the action is not drawn for it
-  // and the engine is not asked about its searches.
-  const writeActionProps = useDfeWriteActionProps();
-  const canWrite = writeActionProps.display !== 'none';
+  // A read-only session cannot create a rule, so the action is not drawn for it,
+  // and a search is checked only once the session is known to be writable.
+  const readOnly = useDfeReadOnlyAnswer();
+  const writeActionProps = readOnly ? { display: 'none' as const } : {};
   // The engine is asked before Create is pressed. A refusal turns the button
   // off and is explained on hover and focus, and in full when it is clicked.
   // Nothing shows until the user acts, because a time-only search is the
@@ -92,7 +92,7 @@ export function CreateRuleFromSearch({
   const check = useRuleCheck(
     chartConfig,
     savedSearchName,
-    canWrite && !isChartConfigStale(chartConfig, sourceId),
+    readOnly === false && !isChartConfigStale(chartConfig, sourceId),
   );
   const refusal = check.state === 'refused' ? check.refusal : undefined;
   const copy = refusal ? refusalCopy(refusal) : undefined;

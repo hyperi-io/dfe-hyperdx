@@ -32,9 +32,9 @@ async function fetchReadOnly(): Promise<boolean> {
   }
 }
 
-/** True once the session is known to be read-only, false until then. */
-export function useDfeReadOnly(): boolean {
-  const [readOnly, setReadOnly] = useState(answered ?? false);
+/** Whether the session is read-only, undefined until the answer arrives. */
+export function useDfeReadOnlyAnswer(): boolean | undefined {
+  const [readOnly, setReadOnly] = useState(answered);
 
   useEffect(() => {
     let live = true;
@@ -49,6 +49,11 @@ export function useDfeReadOnly(): boolean {
   }, []);
 
   return readOnly;
+}
+
+/** True once the session is known to be read-only, false until then. */
+export function useDfeReadOnly(): boolean {
+  return useDfeReadOnlyAnswer() ?? false;
 }
 
 /** Style props that take a write action off the page for a read-only session. */
