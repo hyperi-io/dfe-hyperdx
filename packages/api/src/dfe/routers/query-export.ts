@@ -4,10 +4,10 @@
 //
 // This is a NEW file -- it does not modify any upstream HyperDX files.
 
-import { parameterizedQueryToSql } from '@hyperdx/common-utils/dist/clickhouse';
 import { ClickhouseClient } from '@hyperdx/common-utils/dist/clickhouse/node';
 import { getMetadata } from '@hyperdx/common-utils/dist/core/metadata';
 import { renderChartConfig } from '@hyperdx/common-utils/dist/core/renderChartConfig';
+import { dfeParameterizedQueryToSql } from '@hyperdx/common-utils/dist/dfe/parameterizedQuery';
 import { format } from '@hyperdx/common-utils/dist/sqlFormatter';
 import {
   ChartConfigWithOptDateRange,
@@ -146,7 +146,7 @@ router.post(
       );
 
       // Format the SQL for readability
-      const rawSql = parameterizedQueryToSql(chSql);
+      const rawSql = dfeParameterizedQueryToSql(chSql);
       let formattedSql: string;
       try {
         formattedSql = format(rawSql);

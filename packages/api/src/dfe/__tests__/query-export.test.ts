@@ -38,8 +38,8 @@ jest.mock('@hyperdx/common-utils/dist/core/metadata', () => ({
 jest.mock('@hyperdx/common-utils/dist/core/renderChartConfig', () => ({
   renderChartConfig: jest.fn(async () => ({ sql: 'SELECT 1', params: {} })),
 }));
-jest.mock('@hyperdx/common-utils/dist/clickhouse', () => ({
-  parameterizedQueryToSql: jest.fn(() => 'SELECT 1'),
+jest.mock('@hyperdx/common-utils/dist/dfe/parameterizedQuery', () => ({
+  dfeParameterizedQueryToSql: jest.fn(() => 'SELECT 1'),
 }));
 jest.mock('@hyperdx/common-utils/dist/sqlFormatter', () => ({
   format: jest.fn((sql: string) => sql),

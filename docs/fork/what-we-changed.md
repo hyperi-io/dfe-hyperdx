@@ -647,6 +647,13 @@ expects undeclared static-filter keys to persist is skipped by name in
 - **`DBSearchPage.tsx`** gives the live tail refresh interval select an
   `aria-label` matching its tooltip, one added line, so screen readers and
   Playwright can name it. `forkDeltas.test.ts` pins the line.
+- `packages/common-utils/src/dfe/parameterizedQuery.ts` - `parameterizedQueryToSql`
+  inlines an `{name:Identifier}` as the bare value, so an own-table source such
+  as `ingest-edge` exported as `FROM dfe.ingest-edge`, which ClickHouse cannot
+  parse, and Create Rule on that source failed with a 422. `dfeParameterizedQueryToSql`
+  quotes each identifier with `quoteIdentifierIfNeeded` and then calls upstream's
+  function. It is a new file with upstream's signature, and `dfe/routers/query-export.ts`
+  swaps the one identifier. `dfe/__tests__/parameterizedQuery.test.ts` pins it.
 - `packages/common-utils/src/dfe/rowLimitRejected.ts` - a role can constrain
   `max_rows_to_read` so a query user cannot lift it, and HyperDX sends the
   setting (`'0'` or the team's value) on its metadata and filter queries. The
