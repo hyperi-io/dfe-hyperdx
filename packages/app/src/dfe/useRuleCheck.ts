@@ -10,32 +10,35 @@ import { HTTPError } from 'ky';
 import { ChartConfig } from '@hyperdx/common-utils/dist/types';
 
 import { parseRefusal, RuleCheck } from '@/dfe/ruleCheck';
-import { dryRunRule, exportSql } from '@/dfe/ruleRequests';
+import { exportSql, validateRule } from '@/dfe/ruleRequests';
 
 // chartConfig already follows the search bar behind a debounce, so this only
 // absorbs the source picker settling.
 const CHECK_DELAY_MS = 300;
 
-// An engine that predates the dry run ignores it and saves the rule, so the
-// first 201 ends the pre-check for the session rather than saving one per edit.
-let engineHonoursDryRun = true;
+// An engine that predates the validate route answers 404 or 405. The check then
+// never runs again for the session and Create stays on. The check calls only the
+// route that writes nothing, so an older engine is never asked to create a rule.
+let engineValidates = true;
 
 async function check(
   chartConfig: ChartConfig,
   savedSearchName: string | null | undefined,
 ): Promise<RuleCheck> {
-  if (!engineHonoursDryRun) {
+  if (!engineValidates) {
     return { state: 'unavailable' };
   }
   try {
     const { rawSql } = await exportSql(chartConfig);
-    if ((await dryRunRule(rawSql, savedSearchName)) !== 200) {
-      engineHonoursDryRun = false;
-      return { state: 'unavailable' };
-    }
+    await validateRule(rawSql, savedSearchName);
     return { state: 'valid' };
   } catch (err) {
-    if (err instanceof HTTPError && err.response.status === 422) {
+    if (
+      err instanceof HTTPError &&
+      (err.response.status === 404 || err.response.status === 405)
+    ) {
+      engineValidates = false;
+    } else if (err instanceof HTTPError && err.response.status === 422) {
       try {
         const refusal = parseRefusal(await err.response.clone().json());
         if (refusal) {
@@ -84,7 +87,7 @@ export function useRuleCheck(
   return result;
 }
 
-/** Test seam: forget that an engine ignored the dry run. */
+/** Test seam: forget that an engine had no validate route. */
 export function resetRuleCheck(): void {
-  engineHonoursDryRun = true;
+  engineValidates = true;
 }

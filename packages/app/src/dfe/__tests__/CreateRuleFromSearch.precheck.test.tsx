@@ -1,7 +1,8 @@
 /**
  * The engine is asked whether the search makes a valid rule before Create Rule
- * can be pressed. A refusal is shown in plain words with the button off, any
- * other answer leaves the button on, and no rule is written by the question.
+ * can be pressed, through the route that writes nothing. A refusal turns the
+ * button off and is explained when asked, any other answer leaves the button on,
+ * and the create route is called only by a click on Create Rule.
  */
 import { ChartConfig } from '@hyperdx/common-utils/dist/types';
 import { MantineProvider } from '@mantine/core';
@@ -40,10 +41,7 @@ const refusedWith = (status: number, body: unknown) => {
 };
 
 /** Route each call by its path, as the page's server would. */
-function engineAnswers(
-  createRule: () => Promise<unknown>,
-  status: number = 200,
-) {
+function engineAnswers(validate: () => Promise<unknown>) {
   hdxServerMock.mockImplementation((path: string) => {
     if (path === 'dfe/session') {
       return { json: () => Promise.resolve({ readOnly: false }) };
@@ -51,11 +49,10 @@ function engineAnswers(
     if (path === 'dfe/export-sql') {
       return { json: () => Promise.resolve({ rawSql: 'SELECT 1' }) };
     }
-    // Awaiting the call gives the status and rejects on a refusal, as ky does.
-    const answer = createRule();
-    const awaited = answer.then(() => ({ status }));
-    awaited.catch(() => undefined);
-    return Object.assign(awaited, { json: () => answer });
+    const answer =
+      path === 'dfe/validate-rule' ? validate() : Promise.resolve({});
+    answer.catch(() => undefined);
+    return { json: () => answer };
   });
 }
 
@@ -66,8 +63,10 @@ const renderButton = () =>
     </MantineProvider>,
   );
 
-const createCalls = () =>
-  hdxServerMock.mock.calls.filter(([path]) => path === 'dfe/create-rule');
+const callsTo = (route: string) =>
+  hdxServerMock.mock.calls.filter(([path]) => path === route);
+const validateCalls = () => callsTo('dfe/validate-rule');
+const createCalls = () => callsTo('dfe/create-rule');
 
 beforeEach(() => {
   resetReadOnlyAnswer();
@@ -76,15 +75,15 @@ beforeEach(() => {
 });
 
 describe('Create Rule pre-check', () => {
-  it('asks the engine with a dry run and enables Create for a valid search', async () => {
-    engineAnswers(() => Promise.resolve({ id: 'r', display_name: 'R' }));
+  it('asks the validate route and enables Create for a valid search', async () => {
+    engineAnswers(() => Promise.resolve({ valid: true }));
 
     renderButton();
 
     const button = screen.getByTestId('create-rule-from-search-button');
     await waitFor(() => expect(button).toBeEnabled());
-    expect(createCalls()).toHaveLength(1);
-    expect(createCalls()[0][1].searchParams).toEqual({ dry_run: 'true' });
+    expect(validateCalls()).toHaveLength(1);
+    expect(createCalls()).toHaveLength(0);
     expect(screen.queryByTestId('create-rule-precheck')).toBeNull();
   });
 
@@ -144,11 +143,9 @@ describe('Create Rule pre-check', () => {
     const message = await screen.findByTestId('create-rule-precheck');
     expect(message).toHaveTextContent('This search only filters on time.');
     expect(message).toHaveTextContent('The hunt sets its own time window.');
-    expect(message).toHaveTextContent(
-      'Left out of the rule, because the hunt sets its own time window:',
-    );
+    expect(message).toHaveTextContent('Left out of the rule:');
     expect(message).toHaveTextContent('_timestamp_load < now()');
-    expect(createCalls().every(([, init]) => init.searchParams)).toBe(true);
+    expect(createCalls()).toHaveLength(0);
   });
 
   it.each([
@@ -207,7 +204,7 @@ describe('Create Rule pre-check', () => {
     expect(await screen.findByTestId('create-rule-precheck')).toHaveTextContent(
       'unknown column nosuchcol',
     );
-    expect(createCalls().every(([, init]) => init.searchParams)).toBe(true);
+    expect(createCalls()).toHaveLength(0);
   });
 
   it.each([
@@ -218,7 +215,7 @@ describe('Create Rule pre-check', () => {
 
     renderButton();
 
-    await waitFor(() => expect(createCalls()).toHaveLength(1));
+    await waitFor(() => expect(validateCalls()).toHaveLength(1));
     await waitFor(() =>
       expect(
         screen.getByTestId('create-rule-from-search-button'),
@@ -227,30 +224,61 @@ describe('Create Rule pre-check', () => {
     expect(screen.queryByTestId('create-rule-precheck')).toBeNull();
   });
 
-  it('leaves Create on, and stops asking, when the engine saved the rule instead', async () => {
-    engineAnswers(() => Promise.resolve({ id: 'r', display_name: 'R' }), 201);
+  it.each([404, 405])(
+    'leaves Create on, and stops asking, when the engine answers %s',
+    async status => {
+      engineAnswers(() => Promise.reject(refusedWith(status, {})));
 
+      const { rerender } = renderButton();
+
+      await waitFor(() => expect(validateCalls()).toHaveLength(1));
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('create-rule-from-search-button'),
+        ).toBeEnabled(),
+      );
+      rerender(
+        <MantineProvider>
+          <CreateRuleFromSearch
+            chartConfig={{ ...CONFIG, select: '_json' } as ChartConfig}
+            sourceId="s1"
+          />
+        </MantineProvider>,
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('create-rule-from-search-button'),
+        ).toBeEnabled(),
+      );
+      expect(validateCalls()).toHaveLength(1);
+      expect(createCalls()).toHaveLength(0);
+    },
+  );
+
+  it('closes the explanation on a time-range change the check ignores', async () => {
+    emptyFilter();
+    const user = userEvent.setup();
     const { rerender } = renderButton();
 
-    await waitFor(() => expect(createCalls()).toHaveLength(1));
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('create-rule-from-search-button'),
-      ).toBeEnabled(),
-    );
+    await user.click(await refusedButton());
+    await screen.findByTestId('create-rule-precheck');
     rerender(
       <MantineProvider>
         <CreateRuleFromSearch
-          chartConfig={{ ...CONFIG, select: '_json' } as ChartConfig}
+          chartConfig={
+            {
+              ...CONFIG,
+              dateRange: [new Date(0), new Date(1000)],
+            } as ChartConfig
+          }
           sourceId="s1"
         />
       </MantineProvider>,
     );
+
     await waitFor(() =>
-      expect(
-        screen.getByTestId('create-rule-from-search-button'),
-      ).toBeEnabled(),
+      expect(screen.queryByTestId('create-rule-precheck')).toBeNull(),
     );
-    expect(createCalls()).toHaveLength(1);
+    expect(validateCalls()).toHaveLength(1);
   });
 });

@@ -97,8 +97,10 @@ export function CreateRuleFromSearch({
   const refusal = check.state === 'refused' ? check.refusal : undefined;
   const copy = refusal ? refusalCopy(refusal) : undefined;
   const [open, setOpen] = useState(false);
-  // A changed search gives a new answer, so the explanation closes with it.
-  useEffect(() => setOpen(false), [refusal]);
+  // The explanation closes on any change to the search, the time range
+  // included, which the check itself ignores, and on a new answer.
+  const searchKey = JSON.stringify(chartConfig);
+  useEffect(() => setOpen(false), [refusal, searchKey]);
   const hintId = useId();
   // A read-only session cannot create a rule, so the action is not drawn for it.
   const writeActionProps = useDfeWriteActionProps();
@@ -215,8 +217,7 @@ export function CreateRuleFromSearch({
             {copy.bounds.length > 0 && (
               <Stack gap={4}>
                 <Text size="xs" c="dimmed">
-                  Left out of the rule, because the hunt sets its own time
-                  window:
+                  Left out of the rule:
                 </Text>
                 {copy.bounds.map(bound => (
                   <Code key={bound} block>

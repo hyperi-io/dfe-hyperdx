@@ -30,34 +30,36 @@ export const exportSql = (chartConfig: ChartConfig | null) =>
     json: { chartConfig },
   }).json<ExportedSql>();
 
-const createRuleCall = (
+const ruleCall = (
+  path: 'dfe/create-rule' | 'dfe/validate-rule',
   rawSql: string,
   savedSearchName: string | null | undefined,
-  searchParams?: Record<string, string>,
 ) =>
-  hdxServer(`dfe/create-rule`, {
+  hdxServer(path, {
     method: 'POST',
     headers: { 'X-Requested-With': 'dfe-console' },
-    searchParams,
     json: {
       rawSql,
       savedSearchName: savedSearchName ?? undefined,
     },
   });
 
-/** Ask the engine for a rule from that SELECT (rule:write enforced there). */
+/**
+ * Ask the engine for a rule from that SELECT (rule:write enforced there). Only
+ * a click on Create Rule calls this.
+ */
 export const createRule = (
   rawSql: string,
   savedSearchName: string | null | undefined,
-) => createRuleCall(rawSql, savedSearchName).json<CreatedRule>();
+) => ruleCall('dfe/create-rule', rawSql, savedSearchName).json<CreatedRule>();
 
 /**
- * Ask the engine whether that SELECT would make a rule, writing nothing. The
- * answer is the status: 200 when the engine honoured the dry run, 201 when an
- * engine that predates it saved a rule. A refusal is thrown as an HTTPError.
+ * Ask the engine whether that SELECT would make a rule, through the route that
+ * writes nothing. It resolves when the engine would save the rule and rejects
+ * with an HTTPError otherwise: 422 for a refusal, 404 or 405 from an engine
+ * that predates the route.
  */
-export const dryRunRule = async (
+export const validateRule = (
   rawSql: string,
   savedSearchName: string | null | undefined,
-) =>
-  (await createRuleCall(rawSql, savedSearchName, { dry_run: 'true' })).status;
+) => ruleCall('dfe/validate-rule', rawSql, savedSearchName).json<unknown>();

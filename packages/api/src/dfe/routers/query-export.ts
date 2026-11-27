@@ -174,32 +174,14 @@ router.post(
 );
 
 /**
- * POST /dfe/create-rule
- *
- * Creates a DFE hunt rule from an expanded HyperDX saved search by forwarding to
- * the engine's POST /api/v1/rules/from-hyperdx. The engine sanitises the SQL,
- * creates the rule, and returns its id. The route is a thin authenticated proxy:
- * it carries the caller's engine token so the engine's rule:write RBAC applies
- * (org_viewer lacks the grant -> 403), and forwards the engine's status + body
- * unchanged so that 403 (and any 4xx) surfaces to the client.
- *
- * Request body:
- *   - rawSql: string (the expanded ClickHouse SELECT)
- *   - savedSearchName?: string
- *   - severity?: string (low|medium|high|critical; engine defaults to medium)
- *   - hunt_name?: string
- *   - source?: string
- *
- * Query:
- *   - dry_run=true: every check a save runs, answers 200, writes nothing
- *
- * Response: the engine's RuleFromHyperdxResponse JSON, including the new rule id.
+ * Forward a search's SQL to one of the engine's from-hyperdx routes, carrying the
+ * caller's engine token so the engine's RBAC applies (org_viewer lacks the
+ * grant -> 403), and answer with the engine's status and body unchanged so that
+ * 403 (and any 4xx) surfaces to the client. The route is a thin proxy: the engine
+ * decides what a valid rule is.
  */
-router.post(
-  '/create-rule',
-  requireNonSimpleRequest,
-  validateRequest({ body: createRuleBodySchema }),
-  async (req, res, next) => {
+function forwardToEngine(enginePath: string, label: string) {
+  return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const token = extractToken(req);
       if (!token) {
@@ -216,26 +198,22 @@ router.post(
       }
 
       const { rawSql, savedSearchName, severity, hunt_name, source } = req.body;
-      const dryRun = req.query.dry_run === 'true';
 
-      const engineResp = await fetch(
-        `${origin}/api/v1/rules/from-hyperdx${dryRun ? '?dry_run=true' : ''}`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            raw_sql: rawSql,
-            saved_search_name: savedSearchName,
-            severity,
-            hunt_name,
-            source,
-          }),
-          signal: AbortSignal.timeout(DFE_ENGINE_TIMEOUT_MS),
+      const engineResp = await fetch(`${origin}${enginePath}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
-      );
+        body: JSON.stringify({
+          raw_sql: rawSql,
+          saved_search_name: savedSearchName,
+          severity,
+          hunt_name,
+          source,
+        }),
+        signal: AbortSignal.timeout(DFE_ENGINE_TIMEOUT_MS),
+      });
 
       // Forward the engine's status and JSON body verbatim so RBAC failures
       // (403 for org_viewer / missing rule:write) and validation errors reach
@@ -251,7 +229,7 @@ router.post(
       if (!engineResp.ok) {
         logger.warn(
           { status: engineResp.status },
-          'DFE: engine rule creation refused',
+          `DFE: engine ${label} refused`,
         );
       }
 
@@ -266,10 +244,48 @@ router.post(
 
       return res.status(engineResp.status).json(payload);
     } catch (err) {
-      logger.error({ err }, 'DFE: create-rule failed');
+      logger.error({ err }, `DFE: ${label} failed`);
       next(err);
     }
-  },
+  };
+}
+
+/**
+ * POST /dfe/create-rule
+ *
+ * Creates a DFE hunt rule from an expanded HyperDX saved search by forwarding to
+ * the engine's POST /api/v1/rules/from-hyperdx. The engine sanitises the SQL,
+ * creates the rule, and returns its id. Only a click on Create Rule calls this.
+ *
+ * Request body:
+ *   - rawSql: string (the expanded ClickHouse SELECT)
+ *   - savedSearchName?: string
+ *   - severity?: string (low|medium|high|critical; engine defaults to medium)
+ *   - hunt_name?: string
+ *   - source?: string
+ *
+ * Response: the engine's RuleFromHyperdxResponse JSON, including the new rule id.
+ */
+router.post(
+  '/create-rule',
+  requireNonSimpleRequest,
+  validateRequest({ body: createRuleBodySchema }),
+  forwardToEngine('/api/v1/rules/from-hyperdx', 'rule creation'),
+);
+
+/**
+ * POST /dfe/validate-rule
+ *
+ * Same body as create-rule, forwarded to the engine's non-mutating
+ * POST /api/v1/rules/from-hyperdx/validate. It runs the engine's checks and
+ * writes nothing. An engine without that route answers 404, forwarded as it is,
+ * which is how the caller learns the engine is older.
+ */
+router.post(
+  '/validate-rule',
+  requireNonSimpleRequest,
+  validateRequest({ body: createRuleBodySchema }),
+  forwardToEngine('/api/v1/rules/from-hyperdx/validate', 'rule validation'),
 );
 
 export default router;
