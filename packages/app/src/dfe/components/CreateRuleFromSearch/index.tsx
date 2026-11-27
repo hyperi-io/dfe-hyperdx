@@ -1,12 +1,20 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { HTTPError } from 'ky';
 import { ChartConfig } from '@hyperdx/common-utils/dist/types';
-import { Button, Code, Popover, Stack, Text } from '@mantine/core';
+import {
+  Button,
+  Code,
+  Popover,
+  Stack,
+  Text,
+  Tooltip,
+  VisuallyHidden,
+} from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 
 import { DFE_UI_BASE_URL } from '@/config';
 import { useDfeWriteActionProps } from '@/dfe/readOnlySession';
-import { Refusal, refusalCopy } from '@/dfe/ruleCheck';
+import { refusalCopy } from '@/dfe/ruleCheck';
 import { createRule, exportSql } from '@/dfe/ruleRequests';
 import { useRuleCheck } from '@/dfe/useRuleCheck';
 
@@ -77,17 +85,21 @@ export function CreateRuleFromSearch({
   // second hook out of that module makes their pristine tests explode. Owning
   // the one-shot request state here keeps our delta invisible to them.
   const [isPending, setIsPending] = useState(false);
-  // The engine is asked before Create is pressed, and a refusal is shown beside
-  // the button until the search changes. Closing it hides the words, not the
-  // refusal, so the button stays off.
+  // The engine is asked before Create is pressed. A refusal turns the button
+  // off and is explained on hover and focus, and in full when it is clicked.
+  // Nothing shows until the user acts, because a time-only search is the
+  // ordinary state of the page.
   const check = useRuleCheck(
     chartConfig,
     savedSearchName,
     !isChartConfigStale(chartConfig, sourceId),
   );
-  const [hidden, setHidden] = useState<Refusal>();
   const refusal = check.state === 'refused' ? check.refusal : undefined;
   const copy = refusal ? refusalCopy(refusal) : undefined;
+  const [open, setOpen] = useState(false);
+  // A changed search gives a new answer, so the explanation closes with it.
+  useEffect(() => setOpen(false), [refusal]);
+  const hintId = useId();
   // A read-only session cannot create a rule, so the action is not drawn for it.
   const writeActionProps = useDfeWriteActionProps();
 
@@ -142,31 +154,56 @@ export function CreateRuleFromSearch({
 
   return (
     <Popover
-      opened={refusal !== undefined && hidden !== refusal}
-      onClose={() => setHidden(refusal)}
+      opened={open && copy !== undefined}
+      // onDismiss is Escape or a click outside. onClose only reports the close.
+      onDismiss={() => setOpen(false)}
       position="bottom-end"
+      // Clear the search bar's second row (time range, refresh, Run).
+      offset={48}
       width={340}
-      withArrow
       shadow="md"
     >
       <Popover.Target>
-        <Button
-          data-testid="create-rule-from-search-button"
-          variant="secondary"
-          size="xs"
-          onClick={onClick}
-          loading={isPending}
-          disabled={
-            !chartConfig ||
-            isChartConfigStale(chartConfig, sourceId) ||
-            check.state === 'checking' ||
-            check.state === 'refused'
-          }
-          style={{ flexShrink: 0 }}
-          {...writeActionProps}
-        >
-          Create Rule
-        </Button>
+        <span style={{ display: 'inline-flex', flexShrink: 0 }}>
+          <Tooltip
+            label={copy?.summary}
+            disabled={copy === undefined || open}
+            events={{ hover: true, focus: true, touch: true }}
+            position="bottom-end"
+            // Below the second row of the search bar, as the explanation is.
+            offset={48}
+          >
+            <Button
+              data-testid="create-rule-from-search-button"
+              variant="secondary"
+              size="xs"
+              // A refused button stays focusable and says why, so it is
+              // aria-disabled rather than disabled.
+              onClick={copy ? () => setOpen(value => !value) : onClick}
+              loading={isPending}
+              disabled={
+                !chartConfig ||
+                isChartConfigStale(chartConfig, sourceId) ||
+                check.state === 'checking'
+              }
+              data-disabled={copy ? true : undefined}
+              aria-disabled={copy ? true : undefined}
+              aria-describedby={copy ? hintId : undefined}
+              aria-expanded={copy ? open : undefined}
+              // Focus stays on the button, so Escape is read here too.
+              onKeyDown={event => event.key === 'Escape' && setOpen(false)}
+              style={{ flexShrink: 0 }}
+              {...writeActionProps}
+            >
+              Create Rule
+            </Button>
+          </Tooltip>
+          {copy && (
+            <VisuallyHidden id={hintId} data-testid="create-rule-precheck-hint">
+              {`${copy.summary} ${copy.explanation}`.trim()}
+            </VisuallyHidden>
+          )}
+        </span>
       </Popover.Target>
       <Popover.Dropdown data-testid="create-rule-precheck" role="status">
         {copy && (
@@ -178,7 +215,8 @@ export function CreateRuleFromSearch({
             {copy.bounds.length > 0 && (
               <Stack gap={4}>
                 <Text size="xs" c="dimmed">
-                  Time bounds the hunt window replaces
+                  Left out of the rule, because the hunt sets its own time
+                  window:
                 </Text>
                 {copy.bounds.map(bound => (
                   <Code key={bound} block>

@@ -6,6 +6,7 @@
 import { ChartConfig } from '@hyperdx/common-utils/dist/types';
 import { MantineProvider } from '@mantine/core';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent, { UserEvent } from '@testing-library/user-event';
 
 import { hdxServer } from '@/api';
 import { CreateRuleFromSearch } from '@/dfe/components/CreateRuleFromSearch';
@@ -87,7 +88,7 @@ describe('Create Rule pre-check', () => {
     expect(screen.queryByTestId('create-rule-precheck')).toBeNull();
   });
 
-  it('shows a time-only search in plain words, lists the bounds and disables Create', async () => {
+  const emptyFilter = () =>
     engineAnswers(() =>
       Promise.reject(
         refusedWith(422, {
@@ -98,16 +99,98 @@ describe('Create Rule pre-check', () => {
       ),
     );
 
+  const refusedButton = async () => {
+    const button = screen.getByTestId('create-rule-from-search-button');
+    await screen.findByTestId('create-rule-precheck-hint');
+    return button;
+  };
+
+  it('shows nothing for a time-only search until the user acts', async () => {
+    emptyFilter();
+
     renderButton();
+
+    const button = await refusedButton();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByTestId('create-rule-precheck')).toBeNull();
+  });
+
+  it('ties a short explanation to the button for focus and hover', async () => {
+    emptyFilter();
+    const user = userEvent.setup();
+
+    renderButton();
+
+    const button = await refusedButton();
+    const hint = document.getElementById(
+      button.getAttribute('aria-describedby') ?? '',
+    );
+    expect(hint).toHaveTextContent('This search only filters on time.');
+    expect(hint).toHaveTextContent('The hunt sets its own time window.');
+    await user.hover(button);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'This search only filters on time.',
+    );
+  });
+
+  it('opens the full explanation on click, listing the bounds, and writes nothing', async () => {
+    emptyFilter();
+    const user = userEvent.setup();
+
+    renderButton();
+
+    await user.click(await refusedButton());
 
     const message = await screen.findByTestId('create-rule-precheck');
     expect(message).toHaveTextContent('This search only filters on time.');
     expect(message).toHaveTextContent('The hunt sets its own time window.');
+    expect(message).toHaveTextContent(
+      'Left out of the rule, because the hunt sets its own time window:',
+    );
     expect(message).toHaveTextContent('_timestamp_load < now()');
-    expect(screen.getByTestId('create-rule-from-search-button')).toBeDisabled();
+    expect(createCalls().every(([, init]) => init.searchParams)).toBe(true);
   });
 
-  it("shows the engine's detail for any other refusal", async () => {
+  it.each([
+    ['Escape', (user: UserEvent) => user.keyboard('{Escape}')],
+    ['an outside click', (user: UserEvent) => user.click(document.body)],
+  ])('closes the explanation on %s', async (_name, act) => {
+    emptyFilter();
+    const user = userEvent.setup();
+
+    renderButton();
+
+    await user.click(await refusedButton());
+    await screen.findByTestId('create-rule-precheck');
+    await act(user);
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('create-rule-precheck')).toBeNull(),
+    );
+  });
+
+  it('closes the explanation when the search changes', async () => {
+    emptyFilter();
+    const user = userEvent.setup();
+    const { rerender } = renderButton();
+
+    await user.click(await refusedButton());
+    await screen.findByTestId('create-rule-precheck');
+    rerender(
+      <MantineProvider>
+        <CreateRuleFromSearch
+          chartConfig={{ ...CONFIG, select: '_json' } as ChartConfig}
+          sourceId="s1"
+        />
+      </MantineProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('create-rule-precheck')).toBeNull(),
+    );
+  });
+
+  it("shows the engine's detail for any other refusal when opened", async () => {
     engineAnswers(() =>
       Promise.reject(
         refusedWith(422, {
@@ -116,13 +199,15 @@ describe('Create Rule pre-check', () => {
         }),
       ),
     );
+    const user = userEvent.setup();
 
     renderButton();
 
+    await user.click(await refusedButton());
     expect(await screen.findByTestId('create-rule-precheck')).toHaveTextContent(
       'unknown column nosuchcol',
     );
-    expect(screen.getByTestId('create-rule-from-search-button')).toBeDisabled();
+    expect(createCalls().every(([, init]) => init.searchParams)).toBe(true);
   });
 
   it.each([
