@@ -20,20 +20,20 @@ Three questions, in order. Most alerts die on the first one.
 ### 1. Is the package even in the image?
 
 The published image is the root `Dockerfile` (`.hyperi-ci.yaml`
-`release.container`), and `Dockerfile:87` installs its `node_modules`:
+`release.container`), and its `prod_deps` stage installs the `node_modules`:
 
 ```sh
 && rm -rf node_modules && yarn workspaces focus @hyperdx/api --production
 ```
 
 The image carries the api's PRODUCTION tree. Every devDependency and the cli and
-hdx-eval workspaces are gone. Three things ship beside it: Next's standalone
-trace (`Dockerfile:100`), which carries the server-side dependencies Next
-traces, sharp among them, `packages/common-utils/node_modules` from the full
-install (`Dockerfile:99`), and the base image's own npm with a global
-concurrently (`Dockerfile:127`). The 2026-10-01 section has the detail.
-`docker/hyperdx/Dockerfile:103` runs the same focus for upstream's image, which
-we do not publish.
+hdx-eval workspaces are gone. Three things ship beside it, each a line in the
+`app_tree` and `prod` stages: Next's standalone trace, which carries the
+server-side dependencies Next traces, sharp among them,
+`packages/common-utils/node_modules` from the full install, and the base image's
+own npm with a global concurrently. The 2026-10-01 section has the detail.
+`docker/hyperdx/Dockerfile` runs the same focus for upstream's image, which we
+do not publish.
 
 So `yarn.lock` proves nothing. Neither does GitHub's `scope` field - it reads
 the lockfile, not the image, and it will happily tell you a build tool is

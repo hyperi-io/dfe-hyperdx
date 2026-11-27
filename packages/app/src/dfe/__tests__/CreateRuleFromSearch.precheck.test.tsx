@@ -35,10 +35,10 @@ const refusedWith = (status: number, body: unknown) => {
 };
 
 /** Route each call by its path, as the page's server would. */
-function engineAnswers(validate: () => Promise<unknown>) {
+function engineAnswers(validate: () => Promise<unknown>, readOnly = false) {
   hdxServerMock.mockImplementation((path: string) => {
     if (path === 'dfe/session') {
-      return { json: () => Promise.resolve({ readOnly: false }) };
+      return { json: () => Promise.resolve({ readOnly }) };
     }
     if (path === 'dfe/export-sql') {
       return { json: () => Promise.resolve({ rawSql: 'SELECT 1' }) };
@@ -79,6 +79,26 @@ describe('Create Rule pre-check', () => {
     expect(validateCalls()).toHaveLength(1);
     expect(createCalls()).toHaveLength(0);
     expect(screen.queryByTestId('create-rule-precheck')).toBeNull();
+  });
+
+  it('asks nothing for a read-only session, which is not offered Create', async () => {
+    jest.useFakeTimers();
+    try {
+      engineAnswers(() => Promise.resolve({ valid: true }), true);
+
+      renderButton();
+
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('create-rule-from-search-button'),
+        ).not.toBeVisible(),
+      );
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(callsTo('dfe/export-sql')).toHaveLength(0);
+      expect(validateCalls()).toHaveLength(0);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   const emptyFilter = () =>

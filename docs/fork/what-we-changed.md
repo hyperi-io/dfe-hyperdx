@@ -355,10 +355,10 @@ expects undeclared static-filter keys to persist is skipped by name in
   explained on hover and focus, and in full on click. For the engine's
   `rule_empty_filter` the words are fixed and list the time bounds it dropped,
   and any other code shows the engine's `detail`. A 404 or 405 means an older
-  engine, so the check stops and Create stays on. `/dfe/create-rule` is called
-  only by a click. The fork decides nothing about what a valid rule is, and the
-  engine stays the one judge. No upstream file changes, so `.fork-surface` is
-  untouched.
+  engine, so the check stops and Create stays on. A read-only session gets
+  neither the button nor the check. `/dfe/create-rule` is called only by a
+  click. The fork decides nothing about what a valid rule is, and the engine
+  stays the one judge. The pre-check itself changes no upstream file.
 - `packages/app/src/dfe/clickhouseJsonPath.ts` - native ClickHouse JSON columns.
   `col['k']` on a JSON column is `arrayElement`, which ClickHouse rejects, so we
   emit `JSONExtractString`. A JSON sub-path yields `Dynamic`, which

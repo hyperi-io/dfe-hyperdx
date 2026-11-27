@@ -4,8 +4,10 @@
 analyst who has found the thing in HyperDX presses a button, and the engine gets
 the SQL that search runs and saves it as a rule a hunt can use.
 
-Two routes (`POST /dfe/export-sql`, `POST /dfe/create-rule`) and one button, all
-under `dfe/`. No upstream file is modified.
+Three routes (`POST /dfe/export-sql`, `POST /dfe/validate-rule`,
+`POST /dfe/create-rule`) and one button, all under `dfe/`. Two upstream files
+carry one mount each, `api-app.ts` for the routes and `DBSearchPage.tsx` for the
+button, both catalogued in [what-we-changed.md](../fork/what-we-changed.md).
 
 ---
 
@@ -96,9 +98,10 @@ and the engine rejects with 422, saving nothing, a rule it cannot compile or one
 that matches every event.
 
 The render is `renderChartConfig` (it needs ClickHouse column metadata, hence
-the client), then `parameterizedQueryToSql`, then `format`. A formatting failure
-is not fatal: it falls back to the raw SQL, because a valid query that reads
-badly beats no query at all.
+the client), then `dfeParameterizedQueryToSql`, which quotes an identifier such
+as `ingest-edge` where upstream inlines it bare, then `format`. A formatting
+failure falls back to the raw SQL, because a valid query that reads badly beats
+none.
 
 `packages/app/src/dfe/components/CreateRuleFromSearch/` exports the search,
 posts the `rawSql` to `/dfe/create-rule`, and opens the created rule at
@@ -107,11 +110,15 @@ user may not create rules, and an engine that rejects the session's token (which
 the route answers as 502, so the app does not redirect to a login) says the
 engine did not accept the session.
 
-It deliberately uses plain `useState` rather than react-query's `useMutation`.
-The component is injected into upstream's `DBSearchPage`, and upstream's tests
-render that page behind a PARTIAL `@tanstack/react-query` mock. Pulling a second
-hook out of that module makes their pristine tests explode. Our delta has to
-stay invisible to upstream's test suite.
+Before a click, the button posts the same `rawSql` to `/dfe/validate-rule`,
+which forwards it to the engine route that writes nothing,
+`POST /api/v1/rules/from-hyperdx/validate`. A 422 turns the button off and says
+why, and any other failure leaves it on. A 404 or 405, from an older engine,
+stops the check for the session. A read-only session gets no button and no
+check.
+
+It holds plain `useState`, not react-query's `useMutation`, because upstream's
+tests render `DBSearchPage` behind a PARTIAL `@tanstack/react-query` mock.
 
 Two things moved in 2.29 and the code guards for both:
 
